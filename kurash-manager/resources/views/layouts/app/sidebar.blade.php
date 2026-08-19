@@ -21,13 +21,13 @@
                         @if ($hasBrandLogo)
                             <img src="{{ asset($brandLogo) }}" alt="{{ config('branding.organisation') }}" class="size-[38px] object-contain">
                         @else
-                            <span class="grid size-[38px] place-items-center text-[11px] font-extrabold text-brand-700">
+                            <span class="grid size-[38px] place-items-center text-[11px] font-bold text-brand-700">
                                 {{ config('branding.short_name') }}
                             </span>
                         @endif
                     </span>
 
-                    <span class="text-[12.5px] font-extrabold uppercase leading-[1.25] text-ink">
+                    <span class="text-[12.5px] font-bold uppercase leading-[1.25] text-ink">
                         {{ config('branding.organisation') }}
                     </span>
                 </a>
@@ -125,11 +125,11 @@
             <flux:dropdown position="top" align="start" class="hidden lg:block">
                 <button type="button" data-test="sidebar-menu-button"
                         class="flex w-full items-center gap-2.5 px-5 py-3.5 text-start hover:bg-n-200">
-                    <span class="grid size-[30px] flex-none place-items-center bg-brand-500 text-[13px] font-extrabold text-white">
+                    <span class="grid size-[30px] flex-none place-items-center bg-brand-500 text-[13px] font-bold text-white">
                         {{ Str::upper(Str::substr(auth()->user()->name, 0, 1)) }}
                     </span>
                     <span class="min-w-0">
-                        <span class="block truncate text-[13px] font-extrabold leading-tight text-ink">{{ auth()->user()->name }}</span>
+                        <span class="block truncate text-[13px] font-bold leading-tight text-ink">{{ auth()->user()->name }}</span>
                         <span class="block truncate text-[11px] capitalize text-ink/55">{{ auth()->user()->role }}</span>
                     </span>
                 </button>

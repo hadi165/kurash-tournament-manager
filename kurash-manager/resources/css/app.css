@@ -9,6 +9,55 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   Source Sans 3, self-hosted.
+
+   Served from our own origin rather than a font CDN: a venue machine is often
+   on a locked-down or offline network mid-competition, and a UI that loses its
+   typeface at the scorers' table is a UI nobody trusts. Files come from the
+   official Adobe release (3.052R, WOFF2 package) and live in
+   public/fonts/source-sans-3/.
+
+   Four faces only — the weights the interface actually uses. Italic is loaded
+   for the regular weight alone, because it is used for asides and empty
+   states, never for bold running text.
+
+   Note the family tops out at 700: Source Sans 3 has no 800, so headings and
+   kickers are set at 700 rather than asking the browser to synthesise one.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-It.woff2') format('woff2');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-Semibold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    IKA brand tokens — Modernist direction.
 
    Two groups, split by whether they invert between themes:
@@ -71,9 +120,9 @@
 }
 
 @theme inline {
-    /* One family throughout, self-hosted through the Bunny plugin in
-       vite.config.js so a venue machine with no internet still renders it. */
-    --font-sans: 'Archivo', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji';
+    /* The platform face first, our self-hosted copy behind it: Windows renders
+       in Segoe UI, everything else falls to Source Sans 3, which we ship. */
+    --font-sans: "Segoe UI", "Segoe UI Variable", "Source Sans 3", system-ui, sans-serif;
 
     --color-ground: var(--ground);
     --color-surface: var(--surface);
@@ -178,10 +227,13 @@
     body {
         background: var(--ground);
         color: var(--ink);
+        font-family: var(--font-sans);
     }
 
+    /* 700, not 800: Source Sans 3 goes straight from Bold to Black, so asking
+       for 800 would have the browser synthesise a weight that does not exist. */
     h1, h2, h3, h4, h5, h6 {
-        font-weight: 800;
+        font-weight: 700;
         line-height: 1.12;
         letter-spacing: -0.015em;
     }
@@ -207,7 +259,7 @@
        stat captions, nav group headings. */
     .kicker {
         font-size: 10px;
-        font-weight: 800;
+        font-weight: 700;
         letter-spacing: 0.12em;
         text-transform: uppercase;
         line-height: 1.4;

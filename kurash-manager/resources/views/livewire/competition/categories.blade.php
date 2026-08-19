@@ -29,11 +29,11 @@
             {{-- Plain links, not wire:navigate: these are opened on a second
                  monitor and left there for the session. --}}
             <a href="{{ route('display.mats', $championship) }}" target="_blank"
-               class="px-2.5 py-1 text-xs font-extrabold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Mats') }}</a>
+               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Mats') }}</a>
             <a href="{{ route('display.fight-order', $championship) }}" target="_blank"
-               class="px-2.5 py-1 text-xs font-extrabold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Fight order') }}</a>
+               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Fight order') }}</a>
             <a href="{{ route('display.medals', $championship) }}" target="_blank"
-               class="px-2.5 py-1 text-xs font-extrabold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Medals') }}</a>
+               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Medals') }}</a>
 
             <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
 
@@ -43,7 +43,7 @@
                 type="button"
                 x-data
                 x-on:click="$flux.appearance = $flux.appearance === 'dark' ? 'light' : 'dark'"
-                class="border border-divider px-3 py-1 text-xs font-extrabold text-ink hover:bg-ink/7"
+                class="border border-divider px-3 py-1 text-xs font-bold text-ink hover:bg-ink/7"
             >
                 <span class="hidden dark:inline">{{ __('Light mode') }}</span>
                 <span class="dark:hidden">{{ __('Dark mode') }}</span>
@@ -67,7 +67,7 @@
                     </span>
                 @endif
 
-                <span class="text-[11px] font-extrabold uppercase leading-snug tracking-[0.14em] opacity-90">
+                <span class="text-[11px] font-bold uppercase leading-snug tracking-[0.14em] opacity-90">
                     {{ config('branding.organisation') }} · {{ __('Official Championship Console') }}
                 </span>
             </div>
@@ -84,7 +84,7 @@
                 ['value' => $totalWeights, 'label' => __('Weight classes')],
             ] as $stat)
                 <div>
-                    <div class="text-[42px] font-extrabold leading-none tabular-nums">{{ $stat['value'] }}</div>
+                    <div class="text-[42px] font-bold leading-none tabular-nums">{{ $stat['value'] }}</div>
                     <div class="kicker mt-1.5 opacity-85">{{ $stat['label'] }}</div>
                 </div>
             @endforeach
@@ -109,7 +109,7 @@
                     wire:navigate
                     @class([
                         '-mb-0.5 border-b-[3px] pb-[11px] pt-3.5 text-sm no-underline',
-                        'border-brand-500 font-extrabold text-ink' => $tab['active'],
+                        'border-brand-500 font-bold text-ink' => $tab['active'],
                         'border-transparent font-semibold text-ink/60 hover:text-ink' => ! $tab['active'],
                     ])
                 >{{ $tab['label'] }}</a>
@@ -118,7 +118,7 @@
 
         <div class="relative py-2" x-data="{ open: false }" x-on:click.outside="open = false" x-on:keydown.escape.window="open = false">
             <button type="button" x-on:click="open = ! open" :aria-expanded="open"
-                    class="px-1 text-[13px] font-extrabold text-brand-700 hover:bg-brand-500/10 dark:text-brand-400">
+                    class="px-1 text-[13px] font-bold text-brand-700 hover:bg-brand-500/10 dark:text-brand-400">
                 {{ __('Export') }} ▾
             </button>
 
@@ -133,9 +133,9 @@
                     </div>
                     <div class="flex gap-1 px-3 pb-2 pt-0.5">
                         <a href="{{ route($export['route'], ['championship' => $championship, 'format' => 'pdf']) }}"
-                           class="px-2.5 py-1 text-xs font-extrabold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
+                           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
                         <a href="{{ route($export['route'], ['championship' => $championship, 'format' => 'csv']) }}"
-                           class="px-2.5 py-1 text-xs font-extrabold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
+                           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
                     </div>
                 @endforeach
             </div>
@@ -277,8 +277,8 @@
                             class="block bg-surface px-4 py-3.5 no-underline hover:bg-n-200"
                         >
                             <div class="flex items-baseline justify-between gap-2">
-                                <span class="text-[22px] font-extrabold text-ink">{{ $weightCategory->label }}</span>
-                                <span class="text-xs font-extrabold text-info-500 tabular-nums">{{ $weightCategory->athletes_count }}</span>
+                                <span class="text-[22px] font-bold text-ink">{{ $weightCategory->label }}</span>
+                                <span class="text-xs font-bold text-info-500 tabular-nums">{{ $weightCategory->athletes_count }}</span>
                             </div>
 
                             <div class="mt-2.5 h-1 bg-ink/15">

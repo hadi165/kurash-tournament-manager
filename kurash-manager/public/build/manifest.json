@@ -1,34 +1,6 @@
 {
-  "_archivo-400-normal-Bl602Mgc.woff": {
-    "file": "assets/archivo-400-normal-Bl602Mgc.woff",
-    "src": "_archivo-400-normal-Bl602Mgc.woff"
-  },
-  "_archivo-400-normal-C81ewxNO.woff2": {
-    "file": "assets/archivo-400-normal-C81ewxNO.woff2",
-    "src": "_archivo-400-normal-C81ewxNO.woff2"
-  },
-  "_archivo-600-normal-3BBy0ZsW.woff2": {
-    "file": "assets/archivo-600-normal-3BBy0ZsW.woff2",
-    "src": "_archivo-600-normal-3BBy0ZsW.woff2"
-  },
-  "_archivo-600-normal-DwYieO8P.woff": {
-    "file": "assets/archivo-600-normal-DwYieO8P.woff",
-    "src": "_archivo-600-normal-DwYieO8P.woff"
-  },
-  "_archivo-800-normal-DZa_k145.woff": {
-    "file": "assets/archivo-800-normal-DZa_k145.woff",
-    "src": "_archivo-800-normal-DZa_k145.woff"
-  },
-  "_archivo-800-normal-cB6v3kRN.woff2": {
-    "file": "assets/archivo-800-normal-cB6v3kRN.woff2",
-    "src": "_archivo-800-normal-cB6v3kRN.woff2"
-  },
-  "_fonts-DbUN3iAJ.css": {
-    "file": "assets/fonts-DbUN3iAJ.css",
-    "src": "_fonts-DbUN3iAJ.css"
-  },
   "resources/css/app.css": {
-    "file": "assets/app-qkPEMF5y.css",
+    "file": "assets/app-DA3IPyny.css",
     "name": "app",
     "names": [
       "app.css"

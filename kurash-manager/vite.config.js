@@ -14,14 +14,12 @@ export default defineConfig({
                 'resources/js/passkeys.js',
             ],
             refresh: true,
-            // One family for the whole interface. Downloaded at build time and
-            // served from our own origin, so the venue machines never depend on
-            // reaching a font CDN mid-competition.
-            fonts: [
-                bunny('Archivo', {
-                    weights: [400, 600, 800],
-                }),
-            ],
+            // No plugin-managed webfonts. The interface prefers the platform
+            // face and falls back to Source Sans 3, whose WOFF2 files are
+            // committed under public/fonts and declared with @font-face in
+            // resources/css/app.css — nothing is fetched from a font CDN at
+            // build time or at run time.
+            fonts: [],
         }),
         tailwindcss(),
     ],

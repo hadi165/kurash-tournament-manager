@@ -14,7 +14,7 @@
     @if ($active) aria-current="page" @endif
     {{ $attributes->class([
         'block border-l-[3px] px-[17px] py-[7px] text-[13.5px] leading-snug no-underline transition-colors',
-        'border-brand-500 bg-brand-500/15 font-extrabold text-ink' => $active,
+        'border-brand-500 bg-brand-500/15 font-bold text-ink' => $active,
         'border-transparent font-semibold text-ink/85 hover:bg-n-200 hover:text-ink' => ! $active,
     ]) }}
 >{{ $slot }}</a>
