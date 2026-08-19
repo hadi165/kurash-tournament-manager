@@ -6,7 +6,7 @@
     type="button"
     x-data
     x-on:click="$flux.appearance = $flux.appearance === 'dark' ? 'light' : 'dark'"
-    {{ $attributes->class('border border-divider px-3 py-1 text-xs font-bold text-ink hover:bg-ink/7') }}
+    {{ $attributes->class('border border-line px-3 py-1 text-xs font-bold text-ink hover:bg-ink/7') }}
 >
     <span class="hidden dark:inline">{{ __('Light mode') }}</span>
     <span class="dark:hidden">{{ __('Dark mode') }}</span>

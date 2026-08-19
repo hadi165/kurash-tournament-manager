@@ -5,37 +5,41 @@
     </head>
     <body class="min-h-screen bg-ground text-ink">
         {{-- The Flux shell is kept for its mobile collapse behaviour; everything
-             inside it is the Modernist sidebar: 252px, a 2px right rule, and no
-             padding tricks — items sit flush to the left edge. --}}
-        <flux:sidebar sticky collapsible="mobile" class="w-[252px] border-e-2 border-divider bg-ground p-0">
-            <div class="flex items-center gap-2.5 px-5 py-4">
+             inside it is the soft sidebar: 264px, no background and no border,
+             so the column floats on the page ground rather than sitting in a
+             panel of its own. --}}
+        <flux:sidebar sticky collapsible="mobile" class="w-[264px] gap-1 border-none bg-transparent px-3 py-4">
+            <div class="flex items-center gap-2.5 px-2.5 pb-3.5 pt-2">
                 @php
                     $brandLogo = config('branding.logo');
                     $hasBrandLogo = $brandLogo && is_file(public_path($brandLogo));
                 @endphp
 
-                <a href="{{ route('dashboard') }}" wire:navigate class="flex items-center gap-2.5 no-underline">
+                <a href="{{ route('dashboard') }}" wire:navigate class="flex min-w-0 items-center gap-2.5 no-underline">
                     {{-- The logo always sits on a white chip and is never
                          recoloured: the artwork is the federation's. --}}
-                    <span class="flex-none bg-white p-1">
+                    <span class="flex-none rounded-md bg-white p-[5px] shadow-chip">
                         @if ($hasBrandLogo)
-                            <img src="{{ asset($brandLogo) }}" alt="{{ config('branding.organisation') }}" class="size-[38px] object-contain">
+                            <img src="{{ asset($brandLogo) }}" alt="{{ config('branding.organisation') }}" class="block size-8 object-contain">
                         @else
-                            <span class="grid size-[38px] place-items-center text-[11px] font-bold text-brand-700">
+                            <span class="grid size-8 place-items-center text-[11px] font-bold text-brand-deep">
                                 {{ config('branding.short_name') }}
                             </span>
                         @endif
                     </span>
 
-                    <span class="text-[12.5px] font-bold uppercase leading-[1.25] text-ink">
-                        {{ config('branding.organisation') }}
+                    <span class="min-w-0">
+                        <span class="block text-sm font-bold leading-tight text-ink">
+                            {{ config('branding.short_name') }} {{ __('Manager') }}
+                        </span>
+                        <span class="block truncate text-[11.5px] text-muted">
+                            {{ config('branding.organisation') }}
+                        </span>
                     </span>
                 </a>
 
                 <flux:sidebar.collapse class="ms-auto lg:hidden" />
             </div>
-
-            <div class="rule-2"></div>
 
             @php
                 // Specification §2.2 asks for one consistent left sidebar carrying
@@ -54,15 +58,15 @@
                     : ($current ? route('championships.show', $current) : null);
             @endphp
 
-            <nav class="flex flex-col py-3">
-                <div class="kicker px-5 pb-1 pt-2.5 text-ink/55">{{ __('Platform') }}</div>
+            <nav class="flex flex-col gap-1">
+                <div class="kicker px-3 pb-1.5 pt-2.5">{{ __('Platform') }}</div>
 
                 <x-nav-item :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                     {{ __('Dashboard') }}
                 </x-nav-item>
 
                 <x-nav-item :href="route('championships.index')" :active="request()->routeIs('championships.index')">
-                    {{ __('Championship Management') }}
+                    {{ __('Championships') }}
                 </x-nav-item>
 
                 <x-nav-item :href="route('archive.index')" :active="request()->routeIs('archive.*')">
@@ -70,7 +74,7 @@
                 </x-nav-item>
 
                 @if ($current)
-                    <div class="kicker px-5 pb-1 pt-[18px] text-ink/55">{{ Str::limit($current->title, 28) }}</div>
+                    <div class="kicker truncate px-3 pb-1.5 pt-4">{{ Str::limit($current->title, 28) }}</div>
 
                     <x-nav-item :href="route('championships.show', $current)" :active="request()->routeIs('championships.show')">
                         {{ __('Categories') }}
@@ -99,38 +103,35 @@
                     {{-- The specification lists Result and Medal Standing
                          separately; both are sections of this one screen. --}}
                     <x-nav-item :href="route('medals.index', $current)" :active="request()->routeIs('medals.*')">
-                        {{ __('Results & Medal Standing') }}
+                        {{ __('Results & Medals') }}
                     </x-nav-item>
                 @endif
             </nav>
 
             <flux:spacer />
 
-            <div class="py-2">
+            {{-- Not in the design, but the links have to stay reachable, so they
+                 sit as quiet meta text rather than as nav items competing with
+                 the workflow above. --}}
+            <div class="flex flex-wrap gap-x-3 gap-y-1 px-3 pb-2 text-[11.5px]">
                 <a href="https://github.com/hadi165/kurash-tournament-manager" target="_blank" rel="noopener"
-                   class="block px-5 py-1.5 text-[13px] font-semibold text-ink no-underline hover:bg-n-200">
-                    {{ __('Repository') }}
-                </a>
+                   class="text-muted no-underline hover:text-ink">{{ __('Repository') }}</a>
                 <a href="https://laravel.com/docs" target="_blank" rel="noopener"
-                   class="block px-5 py-1.5 text-[13px] font-semibold text-ink no-underline hover:bg-n-200">
-                    {{ __('Documentation') }}
-                </a>
+                   class="text-muted no-underline hover:text-ink">{{ __('Documentation') }}</a>
             </div>
 
-            <div class="rule-2"></div>
-
-            {{-- The user row is the specified design and also the account menu:
-                 settings and log out have to stay reachable, so the row itself
+            {{-- The user card is the specified design and also the account menu:
+                 settings and log out have to stay reachable, so the card itself
                  is the dropdown trigger rather than a decorative block. --}}
             <flux:dropdown position="top" align="start" class="hidden lg:block">
                 <button type="button" data-test="sidebar-menu-button"
-                        class="flex w-full items-center gap-2.5 px-5 py-3.5 text-start hover:bg-n-200">
-                    <span class="grid size-[30px] flex-none place-items-center bg-brand-500 text-[13px] font-bold text-white">
+                        class="flex w-full items-center gap-2.5 rounded-md bg-surface p-3 text-start shadow-chip transition-shadow hover:shadow-card">
+                    <span class="grid size-8 flex-none place-items-center rounded-full bg-brand text-[13px] font-bold text-white">
                         {{ Str::upper(Str::substr(auth()->user()->name, 0, 1)) }}
                     </span>
                     <span class="min-w-0">
-                        <span class="block truncate text-[13px] font-bold leading-tight text-ink">{{ auth()->user()->name }}</span>
-                        <span class="block truncate text-[11px] capitalize text-ink/55">{{ auth()->user()->role }}</span>
+                        <span class="block truncate text-[13.5px] font-semibold leading-tight text-ink">{{ auth()->user()->name }}</span>
+                        <span class="block truncate text-[11.5px] capitalize text-muted">{{ auth()->user()->role }}</span>
                     </span>
                 </button>
 

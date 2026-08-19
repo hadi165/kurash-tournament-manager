@@ -14,7 +14,7 @@
 
     {{-- Utility bar: breadcrumbs one side, the screens an official opens on a
          second monitor the other. --}}
-    <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-divider px-8 py-2.5">
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-line px-8 py-2.5">
         <div class="flex items-center gap-2 text-[13px]">
             <a href="{{ route('championships.index') }}" wire:navigate class="font-semibold text-brand-700 no-underline hover:underline dark:text-brand-400">
                 {{ __('Championships') }}
@@ -35,7 +35,7 @@
             <a href="{{ route('display.medals', $championship) }}" target="_blank"
                class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Medals') }}</a>
 
-            <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+            <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
 
             {{-- Flux owns the appearance setting; this is the same switch the
                  settings screen writes, surfaced where the design asks for it. --}}
@@ -43,7 +43,7 @@
                 type="button"
                 x-data
                 x-on:click="$flux.appearance = $flux.appearance === 'dark' ? 'light' : 'dark'"
-                class="border border-divider px-3 py-1 text-xs font-bold text-ink hover:bg-ink/7"
+                class="border border-line px-3 py-1 text-xs font-bold text-ink hover:bg-ink/7"
             >
                 <span class="hidden dark:inline">{{ __('Light mode') }}</span>
                 <span class="dark:hidden">{{ __('Dark mode') }}</span>
@@ -92,7 +92,7 @@
     </header>
 
     {{-- Section tabs + exports. --}}
-    <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-divider px-8">
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-line px-8">
         <div class="flex gap-7">
             @php
                 $tabs = [

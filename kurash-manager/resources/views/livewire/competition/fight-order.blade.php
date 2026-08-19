@@ -15,7 +15,7 @@
            class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
         <button type="button" onclick="window.print()"
                 class="px-2.5 py-1 text-xs font-bold text-brand-700 hover:bg-brand-500/10 dark:text-brand-400">{{ __('Print') }}</button>
-        <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+        <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
     </x-slot:actions>
 
     <div class="hidden print:block">
@@ -66,7 +66,7 @@
             @endif
 
             @if ($violations->isNotEmpty())
-                <div class="mt-4 flex flex-col gap-1 border border-divider p-3">
+                <div class="mt-4 flex flex-col gap-1 border border-line p-3">
                     <span class="text-sm font-bold">
                         {{ trans_choice(
                             '{1}:count bout gives less rest than requested.|[2,*]:count bouts give less rest than requested.',

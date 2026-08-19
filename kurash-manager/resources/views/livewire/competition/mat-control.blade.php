@@ -55,7 +55,7 @@
         <x-slot:actions>
             <a href="{{ route('display.scoreboard', $court) }}" target="_blank"
                class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Open scoreboard') }}</a>
-            <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+            <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
         </x-slot:actions>
 
         <x-competition.flash />

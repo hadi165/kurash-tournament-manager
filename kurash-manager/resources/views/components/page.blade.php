@@ -16,7 +16,7 @@
      to reach the full width of the column. --}}
 <div class="-m-6 flex flex-col lg:-m-8">
 
-    <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-divider px-8 py-2.5">
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b-2 border-line px-8 py-2.5">
         <div class="flex flex-wrap items-center gap-2 text-[13px]">
             @if ($breadcrumbs)
                 @foreach ($breadcrumbs as $i => $crumb)

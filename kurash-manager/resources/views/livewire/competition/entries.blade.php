@@ -128,7 +128,7 @@
                             <td>
                                 <span class="inline-flex items-center gap-2">
                                     <x-flag :noc="$row['noc']" :name="$row['name']" />
-                                    <span class="border border-divider px-1.5 py-px font-mono text-[11px]">{{ $row['noc'] }}</span>
+                                    <span class="border border-line px-1.5 py-px font-mono text-[11px]">{{ $row['noc'] }}</span>
                                 </span>
                             </td>
                             <td class="text-ink/55">{{ $row['name'] ?? '—' }}</td>

@@ -12,7 +12,7 @@
         'brand' => 'bg-brand-200 text-brand-800',
         'info' => 'bg-info-200 text-info-800',
         'danger' => 'bg-danger-200 text-danger-700',
-        'outline' => 'border border-divider text-ink/70',
+        'outline' => 'border border-line text-ink/70',
         default => 'bg-n-200 text-ink',
     };
 @endphp

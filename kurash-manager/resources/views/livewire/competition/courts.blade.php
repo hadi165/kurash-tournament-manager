@@ -17,7 +17,7 @@
         @if ($driver !== 'http')
             <span class="text-[13px] text-ink/55">{{ __('no real hardware is contacted') }}</span>
         @endif
-        <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+        <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
     </x-slot:actions>
 
     <x-competition.flash />

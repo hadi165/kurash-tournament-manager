@@ -18,7 +18,7 @@
         <a href="{{ route('exports.accreditation', $ageCategory->championship) }}"
            class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Whole championship') }}</a>
 
-        <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+        <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
     </x-slot:actions>
 
     <x-competition.flash />
@@ -122,7 +122,7 @@
                                      the flag: a code, not a word. --}}
                                 <span class="inline-flex items-center gap-2">
                                     <x-flag :noc="$athlete->noc_code" :name="$athlete->noc_name" />
-                                    <span class="border border-divider px-1.5 py-px font-mono text-[11px]">
+                                    <span class="border border-line px-1.5 py-px font-mono text-[11px]">
                                         {{ \App\Support\Noc::normalise($athlete->noc_code) }}
                                     </span>
                                 </span>
