@@ -47,15 +47,28 @@
                 // exist inside a championship, so the scoped group appears once one
                 // is in view and the top-level items stay put either way.
                 $current = \App\Support\CurrentChampionship::resolve();
-                $soleCategory = $current ? \App\Support\CurrentChampionship::soleCategory($current) : null;
 
-                $registrationRoute = $soleCategory
-                    ? route('athletes.index', $soleCategory)
-                    : ($current ? route('championships.show', $current) : null);
+                // Registration and the weigh-in form both work on one age
+                // category. One category — most championships — goes straight
+                // there; several open as a group listing them, because the
+                // choice is the thing standing between the click and the
+                // screen.
+                $ageCategories = $current ? $current->ageCategories()->get() : collect();
+                $soleCategory = $ageCategories->count() === 1 ? $ageCategories->first() : null;
 
-                $weighInRoute = $soleCategory
-                    ? route('weighin.index', $soleCategory)
-                    : ($current ? route('championships.show', $current) : null);
+                // Which one is open is read from the bound route model rather
+                // than from the id in the URL, so it cannot go stale if the
+                // route ever changes shape.
+                $boundCategory = request()->route('ageCategory');
+                $boundCategory = $boundCategory instanceof \App\Models\AgeCategory ? $boundCategory : null;
+
+                $categoryItems = fn (string $route) => $ageCategories
+                    ->map(fn ($category) => [
+                        'label' => $category->name,
+                        'href' => route($route, $category),
+                        'active' => $boundCategory?->is($category) ?? false,
+                    ])
+                    ->all();
             @endphp
 
             <nav class="flex flex-col gap-1">
@@ -80,13 +93,27 @@
                         {{ __('Categories') }}
                     </x-nav-item>
 
-                    <x-nav-item :href="$registrationRoute" :active="request()->routeIs('athletes.*')">
-                        {{ __('Athlete Registration') }}
-                    </x-nav-item>
+                    @if ($soleCategory)
+                        <x-nav-item :href="route('athletes.index', $soleCategory)" :active="request()->routeIs('athletes.*')">
+                            {{ __('Athlete Registration') }}
+                        </x-nav-item>
 
-                    <x-nav-item :href="$weighInRoute" :active="request()->routeIs('weighin.*')">
-                        {{ __('Weigh-in Form') }}
-                    </x-nav-item>
+                        <x-nav-item :href="route('weighin.index', $soleCategory)" :active="request()->routeIs('weighin.*')">
+                            {{ __('Weigh-in Form') }}
+                        </x-nav-item>
+                    @elseif ($ageCategories->isNotEmpty())
+                        <x-nav-group
+                            :label="__('Athlete Registration')"
+                            :items="$categoryItems('athletes.index')"
+                            :active="request()->routeIs('athletes.*')"
+                        />
+
+                        <x-nav-group
+                            :label="__('Weigh-in Form')"
+                            :items="$categoryItems('weighin.index')"
+                            :active="request()->routeIs('weighin.*')"
+                        />
+                    @endif
 
                     <x-nav-item :href="route('entries.index', $current)" :active="request()->routeIs('entries.*')">
                         {{ __('Entries') }}
