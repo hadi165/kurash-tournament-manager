@@ -1,6 +1,5 @@
 <x-page
-    :kicker="$championship->title"
-    :title="__('Fight Order')"
+    :title="__('Fight order')"
     :subtitle="__('Every weight class runs round by round, so athletes get bouts between their own.')"
     :breadcrumbs="[
         ['label' => __('Championships'), 'href' => route('championships.index')],
@@ -8,15 +7,11 @@
         ['label' => __('Fight order')],
     ]"
 >
-    <x-slot:actions>
-        <a href="{{ route('exports.fight-order', ['championship' => $championship, 'format' => 'pdf']) }}"
-           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
-        <a href="{{ route('exports.fight-order', ['championship' => $championship, 'format' => 'csv']) }}"
-           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
-        <button type="button" onclick="window.print()"
-                class="px-2.5 py-1 text-xs font-bold text-brand-700 hover:bg-brand-500/10 dark:text-brand-400">{{ __('Print') }}</button>
-        <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
-    </x-slot:actions>
+    <x-slot:aside>
+        <x-ui.chip :href="route('exports.fight-order', ['championship' => $championship, 'format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
+        <x-ui.chip :href="route('exports.fight-order', ['championship' => $championship, 'format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
+        <x-ui.chip onclick="window.print()">{{ __('Print') }}</x-ui.chip>
+    </x-slot:aside>
 
     <div class="hidden print:block">
         <h1 class="text-xl font-bold">{{ $championship->title }} — {{ __('Fight order') }}</h1>
@@ -28,9 +23,9 @@
         <x-ui.card class="print:hidden">
             <div class="flex flex-wrap items-end justify-between gap-4">
                 <div class="flex flex-wrap items-end gap-3">
-                    <div class="flex flex-col gap-1.5">
-                        <label for="min-rest" class="kicker">{{ __('Minimum bouts of rest') }}</label>
-                        <flux:input id="min-rest" wire:model="minimumRest" type="number" min="0" max="20" class="w-44" />
+                    <div class="flex flex-col gap-[7px]">
+                        <label for="min-rest" class="text-[12.5px] font-semibold text-muted">{{ __('Minimum bouts of rest') }}</label>
+                        <flux:input id="min-rest" wire:model="minimumRest" type="number" min="0" max="20" class="w-40" />
                     </div>
 
                     <flux:button variant="primary" wire:click="schedule">{{ __('Build running order') }}</flux:button>
@@ -46,42 +41,49 @@
                  send-to-mat control disappears from every row. Saying so beats
                  leaving an operator to wonder where the buttons went. --}}
             @if ($courts->isEmpty())
-                <div class="mt-4 flex flex-wrap items-center gap-3 border border-danger-200 bg-danger-100/60 p-3 dark:bg-danger-500/10">
+                <div class="mt-[18px] flex flex-wrap items-center gap-3 rounded-md bg-danger-soft px-[18px] py-3.5">
                     <x-ui.tag variant="danger">{{ __('No mats') }}</x-ui.tag>
-                    <span class="text-sm">{{ __('No mats are set up, so bouts cannot be sent to a scoreboard yet.') }}</span>
-                    <flux:button size="xs" :href="route('courts.index', $championship)" wire:navigate>{{ __('Add a mat') }}</flux:button>
+                    <span class="text-[13.5px]">{{ __('No mats are set up, so bouts cannot be sent to a scoreboard yet.') }}</span>
+                    <x-ui.chip :href="route('courts.index', $championship)" wire:navigate>{{ __('Add a mat') }}</x-ui.chip>
                 </div>
             @endif
 
             @if ($unscheduled > 0)
-                <div class="mt-4 flex flex-wrap items-center gap-3 border border-danger-200 bg-danger-100/60 p-3 dark:bg-danger-500/10">
-                    <x-ui.tag variant="danger">{{ __('Unscheduled') }}</x-ui.tag>
-                    <span class="text-sm">
+                <div class="mt-[18px] flex flex-wrap items-center gap-3 rounded-md bg-danger-soft px-[18px] py-3.5">
+                    <x-ui.tag variant="danger">
+                        {{ __(':count unscheduled', ['count' => $unscheduled]) }}
+                    </x-ui.tag>
+                    <span class="text-[13.5px]">
                         {{ trans_choice(
-                            '{1}:count bout has no fight number yet.|[2,*]:count bouts have no fight number yet.',
+                            '{1}:count bout has no fight number yet. Build the running order to place it.|[2,*]:count bouts have no fight number yet. Build the running order to place them.',
                             $unscheduled, ['count' => $unscheduled]
                         ) }}
                     </span>
                 </div>
             @endif
 
+            {{-- Not an error: the order is buildable, it simply could not give
+                 everyone the rest that was asked for. --}}
             @if ($violations->isNotEmpty())
-                <div class="mt-4 flex flex-col gap-1 border border-line p-3">
-                    <span class="text-sm font-bold">
+                <div class="mt-[18px] rounded-md border border-line bg-ground px-[18px] py-3.5">
+                    <div class="text-[13.5px] font-semibold">
                         {{ trans_choice(
                             '{1}:count bout gives less rest than requested.|[2,*]:count bouts give less rest than requested.',
                             $violations->count(), ['count' => $violations->count()]
                         ) }}
-                    </span>
-                    @foreach ($violations->take(5) as $violation)
-                        <span class="text-[13px] text-ink/55">
-                            {{ __('Fight :n follows fight :from after only :gap bout(s).', [
-                                'n' => $violation['bout']->fight_number,
-                                'from' => $violation['feeder']->fight_number,
-                                'gap' => $violation['gap'],
-                            ]) }}
-                        </span>
-                    @endforeach
+                    </div>
+
+                    <div class="mt-1 flex flex-col gap-0.5">
+                        @foreach ($violations->take(5) as $violation)
+                            <span class="text-[12.5px] text-muted">
+                                {{ __('Fight :n follows fight :from after only :gap bout(s).', [
+                                    'n' => $violation['bout']->fight_number,
+                                    'from' => $violation['feeder']->fight_number,
+                                    'gap' => $violation['gap'],
+                                ]) }}
+                            </span>
+                        @endforeach
+                    </div>
                 </div>
             @endif
         </x-ui.card>
@@ -106,43 +108,42 @@
                     @forelse ($bouts as $bout)
                         {{-- A decided bout is history: it drops back so the
                              contests still to come carry the eye. --}}
-                        <tr @class(['opacity-55' => $bout->isDecided()]) wire:key="fo-{{ $bout->id }}">
-                            <td class="num font-bold">{{ $bout->fight_number }}</td>
+                        <tr @class(['opacity-50' => $bout->isDecided()]) wire:key="fo-{{ $bout->id }}">
+                            <td class="num font-semibold">{{ $bout->fight_number }}</td>
                             <td>{{ $bout->weightCategory->label }} {{ __('kg') }}</td>
-                            <td class="text-ink/55">{{ $bout->phase((int) ($roundsByCategory[$bout->weight_category_id] ?? $bout->round)) }}</td>
+                            <td class="text-muted">{{ $bout->phase((int) ($roundsByCategory[$bout->weight_category_id] ?? $bout->round)) }}</td>
 
-                            {{-- The corner colour is carried by a square beside
-                                 the name, so the column reads as a corner even
-                                 when the heading has scrolled away. --}}
-                            <td @class(['font-bold' => $bout->winner_athlete_id && $bout->winner_athlete_id === $bout->athlete_a_id])>
+                            {{-- The corner colour is carried by a dot beside the
+                                 name, so the column reads as a corner even when
+                                 the heading has scrolled away. --}}
+                            <td @class(['font-semibold' => $bout->winner_athlete_id && $bout->winner_athlete_id === $bout->athlete_a_id])>
                                 <span class="inline-flex items-center gap-2">
-                                    <span class="size-2.5 flex-none bg-info-500"></span>
+                                    <span class="size-2 flex-none rounded-full bg-info"></span>
                                     <x-athlete :athlete="$bout->athleteA" />
                                 </span>
                             </td>
-                            <td @class(['font-bold' => $bout->winner_athlete_id && $bout->winner_athlete_id === $bout->athlete_b_id])>
+                            <td @class(['font-semibold' => $bout->winner_athlete_id && $bout->winner_athlete_id === $bout->athlete_b_id])>
                                 <span class="inline-flex items-center gap-2">
-                                    <span class="size-2.5 flex-none bg-brand-500"></span>
+                                    <span class="size-2 flex-none rounded-full bg-brand"></span>
                                     <x-athlete :athlete="$bout->athleteB" />
                                 </span>
                             </td>
 
-                            <td class="text-ink/55">{{ $bout->court?->label() ?? '—' }}</td>
-                            <td><x-athlete :athlete="$bout->winner" /></td>
+                            <td class="text-muted">{{ $bout->court?->label() ?? '—' }}</td>
+                            <td class="font-semibold"><x-athlete :athlete="$bout->winner" /></td>
                             <td class="print:hidden">
                                 @can('manage-competition')
-                                    <div class="flex justify-end gap-1">
+                                    <div class="flex justify-end gap-1.5">
                                         @if (! $bout->isDecided())
                                             <flux:button size="xs" variant="ghost" wire:click="move({{ $bout->id }}, 'up')" icon="chevron-up" />
                                             <flux:button size="xs" variant="ghost" wire:click="move({{ $bout->id }}, 'down')" icon="chevron-down" />
 
                                             @if ($bout->isReadyToFight())
                                                 @foreach ($courts as $court)
-                                                    <flux:button
-                                                        size="xs"
+                                                    <x-ui.chip
                                                         wire:click="sendToMat({{ $bout->id }}, {{ $court->id }})"
                                                         wire:key="fo-mat-{{ $bout->id }}-{{ $court->id }}"
-                                                    >{{ __('Mat :n', ['n' => $court->number]) }}</flux:button>
+                                                    >{{ __('Mat :n', ['n' => $court->number]) }}</x-ui.chip>
                                                 @endforeach
                                             @endif
                                         @endif
@@ -152,7 +153,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="py-8 text-center text-ink/55">
+                            <td colspan="8" class="py-8 text-center text-muted">
                                 {{ __('No running order yet. Draw the brackets, then build the order.') }}
                             </td>
                         </tr>
