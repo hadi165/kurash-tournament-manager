@@ -46,16 +46,24 @@
     @if (isset($hero))
         {{ $hero }}
     @else
-        <header class="px-2">
-            @if ($kicker)
-                <x-ui.tag :variant="$kickerVariant" class="mb-3">{{ $kicker }}</x-ui.tag>
-            @endif
+        <header class="flex max-w-[1180px] flex-wrap items-end justify-between gap-4 px-2">
+            <div>
+                @if ($kicker)
+                    <x-ui.tag :variant="$kickerVariant" class="mb-3">{{ $kicker }}</x-ui.tag>
+                @endif
 
-            <h1 class="m-0 text-[30px]">{{ $title }}</h1>
+                <h1 class="m-0 text-[30px]">{{ $title }}</h1>
 
-            @if ($subtitle)
-                <p class="mt-1.5 text-[14.5px] text-muted">{{ $subtitle }}</p>
-            @endif
+                @if ($subtitle)
+                    <p class="mt-1.5 text-[14.5px] text-muted">{{ $subtitle }}</p>
+                @endif
+            </div>
+
+            {{-- The one action that belongs beside the title rather than in the
+                 top row: the thing this screen exists to create. --}}
+            @isset($aside)
+                <div class="flex flex-wrap items-center gap-2">{{ $aside }}</div>
+            @endisset
         </header>
     @endif
 
