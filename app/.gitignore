@@ -1,0 +1,14 @@
+# Local SQLite data and its transient journal files.
+kurash.db
+kurash.db-*
+
+# Local environment settings and deployment metadata.
+.env
+.env.*
+!.env.example
+.vercel/
+
+# Editor and operating-system files.
+.DS_Store
+.idea/
+.vscode/

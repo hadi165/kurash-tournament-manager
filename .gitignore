@@ -1,0 +1,26 @@
+# Live data. The database lives outside the web root — never commit it.
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# Generated competition output (draw sheets, confirmed weigh-in lists,
+# fight-order CSVs). These are produced by the app, not source.
+weigh-in-list-confirmed/
+primary-draw-result/
+related-to-fight-order/
+
+# Environment settings and deployment metadata.
+# Real .env files never get committed; the *.example templates always do —
+# they carry no secrets, only the REPLACE_ME placeholders.
+.env
+.env.*
+!.env.example
+!.env.*.example
+.vercel/
+
+# Editor and operating-system files.
+.DS_Store
+.idea/
+.vscode/

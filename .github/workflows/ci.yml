@@ -1,0 +1,99 @@
+name: CI
+
+# The bracket engine decides who is eliminated from a competition. A silent
+# regression there is not a cosmetic bug, so the whole suite runs on every
+# push rather than whenever someone remembers to run it locally.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  laravel:
+    name: Laravel (lint, static analysis, tests)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: kurash-manager
+
+    services:
+      # Port 3307, matching phpunit.xml and the local dev container, so the
+      # test configuration is identical in both places.
+      mariadb:
+        image: mariadb:10.11
+        env:
+          MARIADB_ROOT_PASSWORD: devroot
+          MARIADB_DATABASE: kurash_test
+          MARIADB_USER: kurash
+          MARIADB_PASSWORD: devpass
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_mysql, mbstring, bcmath, intl, zip, gd, dom
+          coverage: none
+          tools: composer:v2
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: kurash-manager/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('kurash-manager/composer.lock') }}
+          restore-keys: ${{ runner.os }}-composer-
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: kurash-manager/package-lock.json
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      # Blade templates reference @vite, which throws without a manifest. This
+      # also means a broken Tailwind or Vite config fails CI rather than
+      # surfacing at deploy time.
+      - name: Build assets
+        run: npm run build
+
+      - name: Prepare the environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      # Runs pint --test, phpstan and pest — the same command used locally, so
+      # CI cannot drift from what a developer runs before pushing.
+      - name: Lint, analyse and test
+        run: composer test
+
+  legacy-mvp:
+    name: Legacy PHP MVP
+    runs-on: ubuntu-latest
+
+    # The monolith is still what runs an event until the Laravel app is
+    # deployed, so its 27-test mock tournament stays covered.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the mock tournament
+        run: ./tests/run.sh

@@ -1,0 +1,54 @@
+# Queue worker — the thing shared hosting could not run.
+#
+# Scoreboard pushes are queued so an official pressing "send to mat" never
+# waits on a display that is unplugged. On DirectAdmin this ran from a
+# per-minute cron, so a push could sit for up to 60 seconds. Here it is
+# picked up immediately.
+#
+#   sudo cp deploy/kurash-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now kurash-worker
+#
+# Watch it with: journalctl -u kurash-worker -f
+
+[Unit]
+Description=Kurash queue worker
+After=network.target mariadb.service
+Requires=mariadb.service
+
+[Service]
+Type=simple
+User=kurash
+Group=kurash
+WorkingDirectory=/var/www/kurash/current
+
+# --max-time recycles the worker hourly so a slow memory leak can never
+# accumulate across a competition weekend.
+# --tries=3 with a backoff: a scoreboard that is briefly unreachable should be
+# retried, not dropped.
+ExecStart=/usr/bin/php artisan queue:work \
+    --queue=default \
+    --sleep=1 \
+    --tries=3 \
+    --backoff=5,15,60 \
+    --max-time=3600 \
+    --max-jobs=1000
+
+Restart=always
+RestartSec=3
+
+# The deploy script signals a restart; systemd brings it back on the new code.
+KillSignal=SIGTERM
+TimeoutStopSec=45
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=kurash-worker
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target
