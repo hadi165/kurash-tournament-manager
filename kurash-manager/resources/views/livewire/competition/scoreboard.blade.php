@@ -1,11 +1,12 @@
 {{--
     The federation's scoreboard, as it reads in the hall.
 
-    Layout follows the IKA board: mat and phase top left, contest clock in red
-    on black in the middle, division top right; then each athlete as a name
-    band and a row of counts, with one shared set of column letters between
-    them. Y / C / D / T — yonbosh, chala, dakki, tanbeh. There is no halal
-    column because a halal ends the contest, and an ended contest shows WINNER.
+    Mat, contest number and phase top left; the contest clock in the middle;
+    weight class and division top right. Below that each athlete is a pane of
+    their own, carrying a full-height corner bar in the colour of their
+    yakhtak, their flag, their name, and their counts as separated tiles.
+    Y / C / D / T — yonbosh, chala, dakki, tanbeh. There is no halal column
+    because a halal ends the contest, and an ended contest shows WINNER.
 
     Polls for the score; runs the clock locally between polls. Two rates on
     purpose: the score only changes when a referee calls something, but a clock
@@ -27,6 +28,9 @@
             const m = String(Math.floor(this.left / 60)).padStart(2, '0')
             return `${m}:${String(this.left % 60).padStart(2, '0')}`
         },
+        {{-- The last twenty seconds are the only moment the clock changes
+             colour, so it has to follow the local tick rather than the poll. --}}
+        get urgent() { return this.left <= 20 },
     }"
     x-init="start()"
     {{-- Re-anchored on every poll, so a board left running all weekend cannot
@@ -42,253 +46,533 @@
         };
 
         // Top athlete first, as the board is read. Each carries the counts its
-        // row shows; dakki is derived from tanbeh rather than counted
-        // separately, so the D column is the state, not a tally.
+        // pane shows; dakki is derived from tanbeh rather than counted
+        // separately, so the D tile is the state, not a tally.
         $sides = $bout === null ? [] : [
-            [
-                'athlete' => $bout->athleteA,
-                'tally' => $tally['a'],
-                'id' => $bout->athlete_a_id,
-                'corner' => 'blue',
-            ],
-            [
-                'athlete' => $bout->athleteB,
-                'tally' => $tally['b'],
-                'id' => $bout->athlete_b_id,
-                'corner' => 'green',
-            ],
+            ['athlete' => $bout->athleteA, 'tally' => $tally['a'], 'id' => $bout->athlete_a_id, 'corner' => 'blue'],
+            ['athlete' => $bout->athleteB, 'tally' => $tally['b'], 'id' => $bout->athlete_b_id, 'corner' => 'green'],
         ];
+
+        $brandLogo = config('branding.logo');
+        $hasBrandLogo = $brandLogo && is_file(public_path($brandLogo));
     @endphp
 
     <header class="head">
-        <div class="head__left">
-            <div>{{ $court->label() }}@if ($bout?->fight_number) / No.{{ $bout->fight_number }} @endif</div>
-            <div>{{ $bout?->phase($totalRounds) }}</div>
+        <div class="head__id">
+            {{-- The logo always sits on a white chip and is never recoloured:
+                 the artwork is the federation's. --}}
+            <div class="chip">
+                @if ($hasBrandLogo)
+                    <img src="{{ asset($brandLogo) }}" alt="{{ config('branding.short_name') }}">
+                @else
+                    <span class="chip__text">{{ config('branding.short_name') }}</span>
+                @endif
+            </div>
+
+            <div class="head__titles">
+                <div class="head__strong">
+                    {{ $court->label() }}@if ($bout?->fight_number) · {{ __('No.:n', ['n' => $bout->fight_number]) }}@endif
+                </div>
+                <div class="head__meta">{{ $bout?->phase($totalRounds) }}</div>
+            </div>
         </div>
 
-        <div class="clock">
-            <span x-text="display">{{ sprintf('%02d:%02d', intdiv($secondsLeft, 60), $secondsLeft % 60) }}</span>
+        <div class="head__clock">
+            <div class="clock" :class="urgent && '-urgent'" x-text="display">{{ sprintf('%02d:%02d', intdiv($secondsLeft, 60), $secondsLeft % 60) }}</div>
+
+            {{-- One dot per period. A kurash contest as this system runs it is a
+                 single period, so there is one — the row is here so a rules
+                 edition that splits the contest has somewhere to say so. --}}
+            <div class="periods">
+                <span class="periods__dot -on"></span>
+                <span class="periods__label">{{ __('Period :n', ['n' => 1]) }}</span>
+            </div>
         </div>
 
-        <div class="head__right">
-            <div>{{ $bout ? $genderLabel : '' }}</div>
-            <div>{{ $bout?->weightCategory?->label }}{{ $bout ? ' kg' : '' }}</div>
+        <div class="head__division">
+            <div class="head__titles head__titles--end">
+                <div class="head__strong">{{ $bout?->weightCategory?->label }}{{ $bout ? ' ' . __('kg') : '' }}</div>
+                <div class="head__meta">{{ $bout ? $genderLabel : '' }}</div>
+            </div>
+
+            <span class="link -ok" title="{{ __('Scoreboard feed live') }}"></span>
         </div>
     </header>
 
     @if ($bout === null)
-        <div class="idle">{{ __('No contest on this mat') }}</div>
+        <div class="idle">
+            <div class="idle__line">{{ __('No contest on this mat') }}</div>
+            <div class="idle__sub">{{ __('The next bout will appear automatically') }}</div>
+        </div>
     @else
-        @foreach ($sides as $index => $side)
-            @php $isWinner = $winner !== null && $winner->id === $side['id']; @endphp
+        <div class="panes">
+            @foreach ($sides as $side)
+                @php
+                    $isWinner = $winner !== null && $winner->id === $side['id'];
+                    $iso = \App\Support\Noc::iso($side['athlete']?->noc_code);
+                @endphp
 
-            {{-- The top athlete's name band sits above their row, the bottom
-                 athlete's below theirs, so each name reads next to its counts. --}}
-            @if ($index === 0)
-                <div class="band band--{{ $side['corner'] }}">{{ $side['athlete']?->fullname }}</div>
-            @endif
+                <div class="pane {{ $isWinner ? '-winner -winner-' . $side['corner'] : '' }}">
+                    <span class="pane__bar -{{ $side['corner'] }}"></span>
 
-            <div class="row">
-                {{-- The flag is rendered here rather than through x-flag: that
-                     component sizes itself with Tailwind utilities, and this
-                     board is standalone HTML with its own stylesheet. --}}
-                @php($iso = \App\Support\Noc::iso($side['athlete']?->noc_code))
+                    <div class="pane__who">
+                        {{-- The flag is rendered here rather than through
+                             x-flag: that component sizes itself with Tailwind
+                             utilities, and this board is standalone HTML with
+                             its own stylesheet. At thirty metres the flag is a
+                             primary identifier, so it is the normal case and
+                             the code is the fallback. --}}
+                        <span class="flag">
+                            @if ($iso)
+                                <img src="{{ asset("flags/{$iso}.svg") }}" alt="{{ $side['athlete']?->noc_name }}">
+                            @else
+                                {{ \App\Support\Noc::normalise($side['athlete']?->noc_code) }}
+                            @endif
+                        </span>
 
-                <div class="row__who">
-                    @if ($iso)
-                        <img class="row__flag" src="{{ asset("flags/{$iso}.svg") }}" alt="{{ $side['athlete']?->noc_name }}">
-                    @else
-                        <span class="row__flag row__flag--blank"></span>
-                    @endif
+                        <div class="pane__titles">
+                            <div class="tags">
+                                <span class="tag -{{ $side['corner'] }}">
+                                    {{ $side['corner'] === 'blue' ? __('Blue corner') : __('Green corner') }}
+                                </span>
 
-                    <span class="row__noc">{{ \App\Support\Noc::normalise($side['athlete']?->noc_code) }}</span>
+                                @if ($isWinner)
+                                    {{-- Set as literal capitals rather than
+                                         transformed: this word is the result,
+                                         and it should read as the result in
+                                         the markup a screen reader reaches
+                                         too. --}}
+                                    <span class="tag -winner">{{ __('WINNER') }}</span>
+                                @endif
+                            </div>
+
+                            <div class="pane__name">{{ $side['athlete']?->fullname }}</div>
+                            <div class="pane__country">{{ $side['athlete']?->noc_name }}</div>
+                        </div>
+                    </div>
+
+                    {{-- A decided contest drops the two tiles that only matter
+                         while it is running, so the counts that stand are the
+                         only counts on the board. --}}
+                    @php
+                        $cells = $isWinner
+                            ? [['Y', $side['tally']->yonbosh], ['T', $side['tally']->tanbeh]]
+                            : [
+                                ['Y', $side['tally']->yonbosh],
+                                ['C', $side['tally']->chala],
+                                ['D', $side['tally']->isDakki() ? 1 : 0],
+                                ['T', $side['tally']->tanbeh],
+                            ];
+                    @endphp
+
+                    <div class="cells">
+                        @foreach ($cells as [$key, $value])
+                            {{-- A zero dakki or tanbeh count dims, so the
+                                 referee's eye goes to what actually scored. --}}
+                            <div class="cell {{ in_array($key, ['D', 'T'], true) && $value === 0 ? '-dim' : '' }}">
+                                <div class="cell__value">{{ $value }}</div>
+                                <div class="cell__key">{{ $key }}</div>
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
+            @endforeach
+        </div>
 
-                @if ($isWinner)
-                    <div class="cell">{{ $side['tally']->yonbosh }}</div>
-                    <div class="cell cell--winner"><span>{{ __('WINNER') }}</span></div>
-                    <div class="cell">{{ $side['tally']->tanbeh }}</div>
-                @else
-                    <div class="cell">{{ $side['tally']->yonbosh }}</div>
-                    <div class="cell">{{ $side['tally']->chala }}</div>
-                    <div class="cell">{{ $side['tally']->isDakki() ? 1 : 0 }}</div>
-                    <div class="cell">{{ $side['tally']->tanbeh }}</div>
-                @endif
+        <footer class="foot">
+            <div class="legend">
+                @foreach ([['Y', __('Yonbosh')], ['C', __('Chala')], ['D', __('Dakki')], ['T', __('Tanbeh')]] as [$key, $word])
+                    <span class="legend__item"><span class="legend__key">{{ $key }}</span>{{ $word }}</span>
+                @endforeach
             </div>
 
-            {{-- One shared set of column letters, between the two rows. --}}
-            @if ($index === 0)
-                <div class="legend">
-                    <div class="row__who"></div>
-                    <div>Y</div>
-                    <div>C</div>
-                    <div>D</div>
-                    <div>T</div>
-                </div>
-            @else
-                <div class="band band--{{ $side['corner'] }}">{{ $side['athlete']?->fullname }}</div>
-            @endif
-        @endforeach
+            <div class="foot__meta">
+                {{ $court->championship->title }}@if ($court->championship->location) · {{ $court->championship->location }}@endif
+            </div>
+        </footer>
     @endif
 </div>
 
 <style>
     /* Sized in vh throughout: the same board has to read on a laptop at the
        scorers' table and a projector at the end of a hall, and neither should
-       need its own stylesheet. */
+       need its own stylesheet. The design is drawn at 1920x1080, so every
+       value here is its pixel value divided by 10.8. */
     .board {
         height: 100vh;
         display: flex;
         flex-direction: column;
-        background: #000;
-        color: #fff;
-        font-family: "Arial Narrow", Arial, system-ui, sans-serif;
+        background: var(--bg);
+        color: var(--text);
         overflow: hidden;
     }
 
+    /* ── Header ─────────────────────────────────────────────────────────── */
+
     .head {
-        flex: 0 0 19%;
+        flex: 0 0 15.9vh;
         display: grid;
         grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        gap: 2vh;
-        padding: 0 2.4vh;
-        background: #0b0b0b;
+        gap: 3vh;
+        padding: 0 4.1vh;
+        background: var(--chrome);
+        border-bottom: 0.19vh solid var(--line);
     }
 
-    .head__left, .head__right {
-        font-size: 3vh;
-        font-weight: 700;
-        line-height: 1.25;
-        letter-spacing: 0.01em;
-    }
-
-    .head__right { text-align: right; }
-
-    /* Red on black, the way the hall clock reads. A system monospace stack
-       rather than a web font: a venue machine is often offline, and a clock
-       that falls back to a proportional face is a clock nobody can read at
-       thirty metres. */
-    .clock {
-        background: #000;
-        border: 0.4vh solid #1c1c1c;
-        border-radius: 0.6vh;
-        padding: 0.4vh 2.4vh;
-        font-family: ui-monospace, "DejaVu Sans Mono", "Courier New", monospace;
-        font-size: 9vh;
-        font-weight: 700;
-        line-height: 1.05;
-        color: #ff2a17;
-        font-variant-numeric: tabular-nums;
-        letter-spacing: 0.02em;
-    }
-
-    .band {
-        flex: 0 0 11%;
+    .head__id {
         display: flex;
         align-items: center;
-        padding: 0 2.4vh;
-        font-size: 4.6vh;
-        font-weight: 700;
-        letter-spacing: 0.02em;
+        gap: 2.2vh;
+        min-width: 0;
+    }
+
+    .chip {
+        flex: none;
+        background: #fff;
+        padding: 0.65vh;
+        border-radius: 1.1vh;
+        border: 0.19vh solid var(--line);
+        line-height: 0;
+    }
+
+    .chip img {
+        width: 5.6vh;
+        height: 5.6vh;
+        object-fit: contain;
+        display: block;
+    }
+
+    .chip__text {
+        display: grid;
+        place-items: center;
+        width: 5.6vh;
+        height: 5.6vh;
+        font-size: 1.8vh;
+        font-weight: 900;
+        color: #046830;
+        line-height: 1;
+    }
+
+    .head__titles { min-width: 0; }
+    .head__titles--end { text-align: right; }
+
+    .head__strong {
+        font-size: 4.3vh;
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: -0.015em;
+        white-space: nowrap;
+    }
+
+    .head__meta {
+        font-size: 2.1vh;
+        font-weight: 600;
+        color: var(--muted);
+        margin-top: 0.65vh;
+        letter-spacing: 0.08em;
         text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .head__clock {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.9vh;
+    }
+
+    /* Light-on-dark in both themes, and a system monospace stack rather than a
+       web font: a clock that falls back to a proportional face is a clock
+       nobody can read at thirty metres. */
+    .clock {
+        font-family: ui-monospace, 'DejaVu Sans Mono', 'Courier New', monospace;
+        font-size: 9.3vh;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--clock-text);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.01em;
+        padding: 0.55vh 3.1vh;
+        border-radius: 1.5vh;
+        background: var(--clock-plate);
+        border: 0.28vh solid var(--clock-plate);
+    }
+
+    .clock.-urgent {
+        color: var(--clock-urgent);
+        border-color: var(--clock-urgent);
+    }
+
+    .periods {
+        display: flex;
+        align-items: center;
+        gap: 0.9vh;
+    }
+
+    .periods__dot {
+        width: 1.7vh;
+        height: 1.7vh;
+        border-radius: 999px;
+        border: 0.19vh solid var(--dim);
+    }
+
+    .periods__dot.-on {
+        background: var(--green);
+        border-color: var(--green);
+    }
+
+    .periods__label {
+        font-size: 1.95vh;
+        font-weight: 700;
+        color: var(--muted);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        margin-left: 0.55vh;
+    }
+
+    .head__division {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 2.6vh;
+    }
+
+    /* The board runs its clock locally between polls, so a dead feed leaves a
+       plausible but wrong board. The dot is what says the feed is alive. */
+    .link {
+        width: 1.85vh;
+        height: 1.85vh;
+        border-radius: 999px;
+        flex: none;
+    }
+
+    .link.-ok {
+        background: var(--green);
+        box-shadow: 0 0 0 0.37vh rgb(1 154 68 / 0.18);
+    }
+
+    /* ── Athlete panes ──────────────────────────────────────────────────── */
+
+    .panes {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 1.7vh;
+        padding: 1.7vh 2.4vh;
+        min-height: 0;
+    }
+
+    .pane {
+        flex: 1 1 0;
+        display: flex;
+        align-items: center;
+        min-height: 0;
+        overflow: hidden;
+        border-radius: 2vh;
+        border: 0.19vh solid var(--line);
+        background: var(--pane);
+    }
+
+    .pane.-winner-blue { background: var(--blue-tint); border-color: var(--blue); }
+    .pane.-winner-green { background: var(--green-tint); border-color: var(--green); }
+
+    /* Kurash wrestlers wear a blue or a green yakhtak and the bracket decides
+       which, so the bar is the athlete's corner rather than decoration. */
+    .pane__bar {
+        width: 1.85vh;
+        align-self: stretch;
+        flex: none;
+    }
+
+    .pane__bar.-blue { background: var(--blue); }
+    .pane__bar.-green { background: var(--green); }
+
+    .pane__who {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 3.1vh;
+        padding: 0 3.7vh;
+    }
+
+    .flag {
+        width: 14.6vh;
+        height: 9.8vh;
+        flex: none;
+        border-radius: 1.1vh;
+        border: 0.19vh solid var(--cell-line);
+        background: var(--flag-fill);
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        font-size: 3.9vh;
+        font-weight: 900;
+        color: var(--text);
+    }
+
+    .flag img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .pane__titles { min-width: 0; }
+
+    .tags {
+        display: flex;
+        align-items: center;
+        gap: 1.3vh;
+    }
+
+    .tag {
+        display: inline-flex;
+        padding: 0.46vh 1.7vh;
+        border-radius: 999px;
         color: #fff;
+        font-size: 1.95vh;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        white-space: nowrap;
+    }
+
+    .tag.-blue { background: var(--blue); }
+    .tag.-green { background: var(--green); }
+
+    .tag.-winner {
+        background: var(--text);
+        color: var(--bg);
+        font-size: 2.3vh;
+        font-weight: 900;
+        letter-spacing: 0.08em;
+        padding: 0.46vh 2vh;
+        text-transform: none;
+    }
+
+    .pane__name {
+        font-size: 6.85vh;
+        font-weight: 900;
+        line-height: 1.02;
+        letter-spacing: -0.02em;
+        text-transform: uppercase;
+        margin-top: 0.75vh;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
     }
 
-    /* Kurash wrestlers wear a blue or a green yakhtak, and the bracket decides
-       which. Carrying that onto the name bands costs nothing and means the
-       board says which corner is which without another row of chrome. */
-    .band--blue  { background: #1560b0; }
-    .band--green { background: #1f7a3d; }
-
-    .row {
-        flex: 1 1 0;
-        display: grid;
-        grid-template-columns: 30% repeat(4, 1fr);
-        align-items: center;
-        background: #fff;
-        color: #000;
-        min-height: 0;
+    .pane__country {
+        font-size: 2.4vh;
+        font-weight: 600;
+        color: var(--muted);
+        margin-top: 0.2vh;
     }
 
-    .row__who {
+    /* ── Score tiles ────────────────────────────────────────────────────── */
+
+    .cells {
         display: flex;
-        align-items: center;
-        gap: 1.6vh;
-        padding-left: 2.4vh;
-        min-width: 0;
-    }
-
-    .row__flag {
-        width: 9vh;
-        height: 6.4vh;
-        object-fit: cover;
-        border: 1px solid rgba(0, 0, 0, 0.25);
-        flex: none;
-        display: block;
-    }
-
-    /* A delegation with no flag on file still needs the column to hold its
-       width, or the NOC code jumps left and the two rows stop lining up. */
-    .row__flag--blank { background: #d8d8d8; }
-
-    .row__noc {
-        font-size: 7vh;
-        font-weight: 700;
-        letter-spacing: 0.01em;
+        align-self: stretch;
+        gap: 1.3vh;
+        padding: 1.3vh 1.3vh 1.3vh 0;
     }
 
     .cell {
-        text-align: center;
-        font-size: 13vh;
-        font-weight: 700;
+        width: 15.2vh;
+        border-radius: 1.5vh;
+        background: var(--cell);
+        border: 0.19vh solid var(--cell-line);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .cell.-dim { background: var(--cell-dim); }
+
+    .cell__value {
+        font-size: 9.6vh;
+        font-weight: 900;
         line-height: 1;
         font-variant-numeric: tabular-nums;
     }
 
-    /* Spans the two middle columns, leaving the yonbosh and tanbeh counts
-       readable either side of it. */
-    .cell--winner {
-        grid-column: span 2;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        background: #86d94a;
-        align-self: stretch;
-        margin: 1.2vh 0.8vh;
+    .cell__key {
+        font-size: 2vh;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: var(--muted);
+        margin-top: 0.37vh;
     }
 
-    .cell--winner span {
-        font-size: 7.4vh;
-        font-weight: 700;
-        letter-spacing: 0.02em;
+    .cell.-dim .cell__value,
+    .cell.-dim .cell__key { color: var(--dim); }
+
+    /* ── Footer and idle ────────────────────────────────────────────────── */
+
+    .foot {
+        flex: 0 0 7vh;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 3vh;
+        padding: 0 4.1vh;
+        background: var(--chrome);
+        border-top: 0.19vh solid var(--line);
     }
 
     .legend {
-        flex: 0 0 7%;
-        display: grid;
-        grid-template-columns: 30% repeat(4, 1fr);
+        display: flex;
         align-items: center;
-        background: #fff;
-        color: #000;
-        border-top: 0.3vh solid #000;
+        gap: 3.5vh;
     }
 
-    .legend > div {
-        text-align: center;
-        font-size: 3.4vh;
+    .legend__item {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.9vh;
+        font-size: 1.95vh;
+        font-weight: 600;
+        color: var(--muted);
+        letter-spacing: 0.03em;
+    }
+
+    .legend__key {
+        font-size: 2.2vh;
+        font-weight: 900;
+        color: var(--text);
+    }
+
+    .foot__meta {
+        font-size: 1.95vh;
         font-weight: 700;
-        letter-spacing: 0.08em;
+        color: var(--muted);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        white-space: nowrap;
     }
 
     .idle {
         flex: 1;
-        display: grid;
-        place-items: center;
-        font-size: 5vh;
-        color: #6b6b6b;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1.3vh;
+        color: var(--dim);
+    }
+
+    .idle__line {
+        font-size: 7vh;
+        font-weight: 900;
+        letter-spacing: -0.01em;
+    }
+
+    .idle__sub {
+        font-size: 2.8vh;
+        font-weight: 600;
     }
 </style>

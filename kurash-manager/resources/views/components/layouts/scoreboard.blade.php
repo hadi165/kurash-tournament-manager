@@ -3,9 +3,18 @@
      Related to the venue display shell but not the same thing. Those pages are
      cached and reload themselves with a meta refresh, which is right for a
      bracket a hall reads. This one carries Livewire, because a scoreboard has
-     to change within a second of a call rather than within ten. --}}
+     to change within a second of a call rather than within ten.
+
+     The board carries two themes. Dark is the venue default; light is for a
+     bright hall or a daylight-lit projection. `?theme=light` on the URL pins
+     one for a given projector, and without it the board follows the same Flux
+     appearance setting the rest of the application writes. --}}
+@php
+    $pinnedTheme = in_array(request('theme'), ['light', 'dark'], true) ? request('theme') : null;
+@endphp
+
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" @if ($pinnedTheme) data-theme="{{ $pinnedTheme }}" @endif>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,18 +22,93 @@
 
     @livewireStyles
 
+    @unless ($pinnedTheme)
+        {{-- Applied before first paint, so a light-themed board does not flash
+             black on every poll-driven reload. --}}
+        <script>
+            (() => {
+                const stored = localStorage.getItem('flux.appearance') ?? 'dark'
+                const dark = stored === 'dark'
+                    || (stored === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+                document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+            })()
+        </script>
+    @endunless
+
     <style>
+        /* Self-hosted, like the rest of the application: a venue machine is
+           often on a locked-down network, and a board that loses its typeface
+           mid-competition is a board nobody trusts. 900 is here because the
+           names and counts are set in Black — at thirty metres the weight is
+           what carries, not the size alone. */
+        @font-face {
+            font-family: 'Source Sans 3';
+            src: url('/fonts/source-sans-3/SourceSans3-Semibold.woff2') format('woff2');
+            font-weight: 600;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Source Sans 3';
+            src: url('/fonts/source-sans-3/SourceSans3-Bold.woff2') format('woff2');
+            font-weight: 700;
+            font-display: swap;
+        }
+
+        @font-face {
+            font-family: 'Source Sans 3';
+            src: url('/fonts/source-sans-3/SourceSans3-Black.woff2') format('woff2');
+            font-weight: 900;
+            font-display: swap;
+        }
+
+        /* Dark is the default: an unthemed board is a venue board. */
+        :root, :root[data-theme="dark"] {
+            --bg: #05070a;
+            --chrome: #0b0f15;
+            --pane: #0e131a;
+            --cell: #151d26;
+            --cell-dim: #0d1218;
+            --strip: #0a0e14;
+            --text: #ffffff;
+            --muted: #8a99ab;
+            --dim: #4e5b6b;
+            --line: #1b222c;
+            --cell-line: #232d39;
+            --blue-tint: #0c1c28;
+            --green-tint: #0b1f14;
+            --flag-fill: repeating-linear-gradient(135deg, #171e27 0 10px, #1e262f 10px 20px);
+            --clock-urgent: #ff2a17;
+        }
+
+        :root[data-theme="light"] {
+            --bg: #eef1f0;
+            --chrome: #ffffff;
+            --pane: #ffffff;
+            --cell: #f2f5f4;
+            --cell-dim: #f7f9f8;
+            --strip: #e3e8e6;
+            --text: #0d1613;
+            --muted: #5d6d67;
+            --dim: #a8b4af;
+            --line: #dbe2df;
+            --cell-line: #e2e8e5;
+            --blue-tint: #eaf5fc;
+            --green-tint: #eaf7ef;
+            --flag-fill: repeating-linear-gradient(135deg, #e6ebe9 0 10px, #eef2f0 10px 20px);
+            --clock-urgent: #ff4a3a;
+        }
+
         :root {
-            --bg: #07090f;
-            --panel: #11151f;
-            --line: #222839;
-            --text: #f4f6fb;
-            --muted: #7d8aa8;
-            --blue: #2f6fe0;
-            --blue-soft: #10203c;
-            --green: #2f9e4f;
-            --green-soft: #0e2417;
+            --blue: #1a9fd8;
+            --green: #019a44;
             --gold: #e0a83c;
+
+            /* The clock plate stays light-on-dark in both themes: a clock on a
+               light ground loses its punch at thirty metres. */
+            --clock-plate: #0d1613;
+            --clock-text: #ff5b3c;
         }
 
         * { box-sizing: border-box; }
@@ -35,11 +119,7 @@
             margin: 0;
             background: var(--bg);
             color: var(--text);
-            font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-            /* Everything below is sized in vw/vh: the same page has to read on
-               a 15in laptop at the scorers' table and a projector at the end of
-               a hall, and neither should need its own stylesheet. */
-            font-size: clamp(16px, 1.15vw, 26px);
+            font-family: 'Source Sans 3', system-ui, -apple-system, 'Segoe UI', sans-serif;
             overflow: hidden;
         }
 
