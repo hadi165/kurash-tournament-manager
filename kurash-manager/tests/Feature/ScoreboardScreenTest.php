@@ -53,6 +53,42 @@ describe('what it shows', function () {
             ->and($tally['b']->chala)->toBe(1);
     });
 
+    it('names the bout this mat runs next', function () {
+        [$court, $bout] = boutOnMat();
+
+        // A second contest in the same draw, assigned here and given a number.
+        $next = Bout::where('championship_id', $court->championship_id)
+            ->readyToFight()
+            ->whereKeyNot($bout->getKey())
+            ->firstOrFail();
+
+        $next->update(['court_id' => $court->id, 'fight_number' => 44, 'status' => Bout::STATUS_SCHEDULED]);
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertSee('No.44')
+            ->assertSee($next->athleteA->fullname);
+    });
+
+    it('leaves the next strip off when the mat has nothing else to run', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertDontSee('No.44');
+    });
+
+    it('does not promise a bout that belongs to another mat', function () {
+        [$court, $bout] = boutOnMat();
+
+        $elsewhere = Bout::where('championship_id', $court->championship_id)
+            ->readyToFight()
+            ->whereKeyNot($bout->getKey())
+            ->firstOrFail();
+
+        $elsewhere->update(['court_id' => null, 'fight_number' => 44, 'status' => Bout::STATUS_SCHEDULED]);
+
+        expect(Livewire::test(Scoreboard::class, ['court' => $court->refresh()])->viewData('nextBout'))->toBeNull();
+    });
+
     it('says so when the mat is empty', function () {
         [$court, $bout] = boutOnMat();
         $bout->update(['court_id' => null, 'status' => Bout::STATUS_PENDING]);

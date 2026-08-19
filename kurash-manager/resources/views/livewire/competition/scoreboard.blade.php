@@ -179,6 +179,30 @@
             @endforeach
         </div>
 
+        {{-- Athletes and coaches at this mat should not have to find another
+             screen to know they are up. Nothing is shown when the mat has
+             nothing left to run: an empty strip would read as a board that had
+             lost its feed. --}}
+        @if ($nextBout)
+            <div class="next">
+                <span class="next__kicker">{{ __('Next') }}</span>
+                <span class="next__text">
+                    {{ __('No.:n', ['n' => $nextBout->fight_number]) }}
+                    ·
+                    {{ $nextBout->weightCategory?->label }} {{ __('kg') }}
+                    {{ match ($nextBout->weightCategory?->gender) {
+                        'M' => __('Men'),
+                        'F' => __('Women'),
+                        default => __('Open'),
+                    } }}
+                    ·
+                    {{ $nextBout->athleteA?->fullname }} ({{ \App\Support\Noc::normalise($nextBout->athleteA?->noc_code) }})
+                    {{ __('v') }}
+                    {{ $nextBout->athleteB?->fullname }} ({{ \App\Support\Noc::normalise($nextBout->athleteB?->noc_code) }})
+                </span>
+            </div>
+        @endif
+
         <footer class="foot">
             <div class="legend">
                 @foreach ([['Y', __('Yonbosh')], ['C', __('Chala')], ['D', __('Dakki')], ['T', __('Tanbeh')]] as [$key, $word])
@@ -512,6 +536,34 @@
     .cell.-dim .cell__key { color: var(--dim); }
 
     /* ── Footer and idle ────────────────────────────────────────────────── */
+
+    .next {
+        flex: 0 0 5.7vh;
+        display: flex;
+        align-items: center;
+        gap: 1.85vh;
+        padding: 0 4.1vh;
+        background: var(--strip);
+        border-top: 0.19vh solid var(--line);
+        min-width: 0;
+    }
+
+    .next__kicker {
+        flex: none;
+        font-size: 1.85vh;
+        font-weight: 900;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--muted);
+    }
+
+    .next__text {
+        font-size: 2.6vh;
+        font-weight: 700;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
 
     .foot {
         flex: 0 0 7vh;

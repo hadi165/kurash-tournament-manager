@@ -50,6 +50,26 @@ class Scoreboard extends Component
             ->first();
     }
 
+    /**
+     * What this mat runs after the contest on the board.
+     *
+     * Scoped to bouts actually assigned here rather than to anything loose in
+     * the fight order: the strip tells athletes and coaches standing at this
+     * mat that they are up, and a bout that is going to another mat would send
+     * them to the wrong place.
+     */
+    private function nextBout(?Bout $current): ?Bout
+    {
+        return $this->court->bouts()
+            ->readyToFight()
+            ->where('status', '!=', Bout::STATUS_ON_COURT)
+            ->when($current, fn ($q) => $q->whereKeyNot($current->getKey()))
+            ->whereNotNull('fight_number')
+            ->with(['athleteA', 'athleteB', 'weightCategory'])
+            ->orderBy('fight_number')
+            ->first();
+    }
+
     public function render(): View
     {
         $bout = $this->bout();
@@ -76,6 +96,7 @@ class Scoreboard extends Component
             'secondsLeft' => $bout?->secondsRemaining($seconds) ?? $seconds,
             'clockRunning' => (bool) ($bout?->clock_running && ! $bout->isDecided()),
             'winner' => $bout?->isDecided() ? $bout->winner : null,
+            'nextBout' => $this->nextBout($bout),
         ]);
     }
 }
