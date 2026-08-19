@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/styles.css">
+  <link rel="stylesheet" href="kurash-theme.css">
+  <script src="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/_ds_bundle.js"></script>
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Fight Order" style="display:flex; min-height:100vh; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body)">
+  <dc-import name="Sidebar" active="Fight Order" hint-size="252px,100%"></dc-import>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:10px 32px; border-bottom:2px solid var(--color-divider)">
+      <div style="font-size:13px; display:flex; align-items:center; gap:8px">
+        <a href="Championships.dc.html" style="font-weight:600; text-decoration:none">Championships</a>
+        <span class="text-muted">/</span>
+        <a href="Categories.dc.html" style="font-weight:600; text-decoration:none">Asian Kurash Championship 2026</a>
+        <span class="text-muted">/</span>
+        <span style="font-weight:600" class="text-muted">Fight order</span>
+      </div>
+      <button class="btn btn-secondary" style="font-size:12px; padding:4px 12px" onClick="{{ toggleTheme }}">{{ themeBtnLabel }}</button>
+    </div>
+    <header style="padding:28px 32px 0">
+      <div class="kicker" style="color:var(--color-accent-600)">Asian Kurash Championship 2026</div>
+      <h1 style="font-size:36px; margin:8px 0 4px">Fight order</h1>
+      <p class="text-muted" style="font-size:14px; margin:0 0 10px">Every weight class runs round by round, so athletes get bouts between their own.</p>
+      <div style="display:flex; align-items:center; gap:6px">
+        <span class="kicker text-muted" style="margin-right:4px">Export</span>
+        <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">PDF</a>
+        <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Excel</a>
+      </div>
+    </header>
+    <div style="padding:22px 32px 48px; display:flex; flex-direction:column; gap:20px; max-width:1240px">
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm); padding:18px 22px">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap">
+          <div style="display:flex; align-items:flex-end; gap:12px; flex-wrap:wrap">
+            <div style="display:flex; flex-direction:column; gap:6px">
+              <label class="kicker">Minimum bouts of rest</label>
+              <input class="input" type="number" min="0" max="20" style="width:160px" value="{{ minRest }}" onChange="{{ onMinRest }}">
+            </div>
+            <button class="btn btn-primary">Build running order</button>
+            <button class="btn btn-ghost">Clear</button>
+          </div>
+          <div style="display:flex; align-items:center; gap:14px">
+            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer">
+              <input type="checkbox" checked="{{ hideCompleted }}" onChange="{{ toggleHide }}">
+              Hide finished
+            </label>
+            <button class="btn btn-ghost" style="font-size:13px" onClick="{{ printPage }}">Print</button>
+          </div>
+        </div>
+        <div style="border-top:2px solid var(--color-divider); margin-top:16px; padding-top:12px; display:flex; align-items:center; gap:10px">
+          <span class="tag" style="background:var(--color-danger-200); color:var(--color-danger-700)">4 BOUTS UNSCHEDULED</span>
+          <span style="font-size:13px" class="text-muted">4 bouts have no fight number yet. Build the running order to place them.</span>
+        </div>
+      </section>
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm)">
+        <table class="table" style="width:100%">
+          <thead>
+            <tr><th style="text-align:right">#</th><th>Category</th><th>Phase</th><th>Blue</th><th>Green</th><th>Mat</th><th>Winner</th><th></th></tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ rows }}" as="b" hint-placeholder-count="6">
+              <tr style="{{ b.rowStyle }}">
+                <td style="text-align:right; font-family:monospace; font-weight:700">{{ b.n }}</td>
+                <td>{{ b.cat }}</td>
+                <td>{{ b.phase }}</td>
+                <td style="{{ b.blueStyle }}"><span style="display:inline-block; width:10px; height:10px; background:var(--color-accent-2-500); margin-right:8px"></span>{{ b.blue }}</td>
+                <td style="{{ b.greenStyle }}"><span style="display:inline-block; width:10px; height:10px; background:var(--color-accent-500); margin-right:8px"></span>{{ b.green }}</td>
+                <td>{{ b.mat }}</td>
+                <td style="font-weight:700">{{ b.winner }}</td>
+                <td style="text-align:right">
+                  <sc-if value="{{ b.open }}" hint-placeholder-val="{{ false }}">
+                    <div style="display:flex; justify-content:flex-end; gap:6px">
+                      <button class="btn btn-ghost" style="font-size:12px; padding:4px 8px">↑</button>
+                      <button class="btn btn-ghost" style="font-size:12px; padding:4px 8px">↓</button>
+                      <button class="btn btn-secondary" style="font-size:12px; padding:4px 10px">Mat 1</button>
+                      <button class="btn btn-secondary" style="font-size:12px; padding:4px 10px">Mat 2</button>
+                    </div>
+                  </sc-if>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;dark&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { themeOverride: null, hideCompleted: false, minRest: 2 };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'dark';
+    const bouts = [
+      { n: 41, cat: '-66 kg', phase: 'Quarterfinal', blue: 'Ulugbek Rashidov (UZB)', green: 'Daniyar Seit (KAZ)', mat: 'Mat 1', winner: 'Ulugbek Rashidov', winSide: 'blue', decided: true },
+      { n: 42, cat: '-73 kg', phase: 'Quarterfinal', blue: 'Emil Asanov (KGZ)', green: 'Arjun Patel (IND)', mat: 'Mat 2', winner: 'Arjun Patel', winSide: 'green', decided: true },
+      { n: 43, cat: '-66 kg', phase: 'Quarterfinal', blue: 'Sardor Turdiyev (UZB)', green: 'Nyam Ochirbat (MGL)', mat: 'Mat 1', winner: null, decided: false },
+      { n: 44, cat: '-81 kg', phase: 'Round of 16', blue: 'Jasur Malikov (UZB)', green: 'Temirlan Zhaksylyk (KAZ)', mat: null, winner: null, decided: false },
+      { n: 45, cat: '+90 kg', phase: 'Quarterfinal', blue: 'Reza Karimi (IRI)', green: 'Bat-Erdene Gan (MGL)', mat: null, winner: null, decided: false },
+      { n: 46, cat: '-90 kg', phase: 'Semifinal', blue: 'Akmal Yusupov (UZB)', green: 'Farrukh Saidov (TJK)', mat: null, winner: null, decided: false },
+    ];
+    const shown = bouts.filter(b => !this.state.hideCompleted || !b.decided);
+    return {
+      theme, themeBtnLabel: theme === 'dark' ? 'Light mode' : 'Dark mode',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }),
+      minRest: this.state.minRest, onMinRest: e => this.setState({ minRest: e.target.value }),
+      hideCompleted: this.state.hideCompleted,
+      toggleHide: () => this.setState(s => ({ hideCompleted: !s.hideCompleted })),
+      printPage: () => window.print(),
+      rows: shown.map(b => ({
+        ...b,
+        mat: b.mat ?? '—', winner: b.winner ?? '—', open: !b.decided,
+        rowStyle: b.decided ? { opacity: 0.55 } : {},
+        blueStyle: b.winSide === 'blue' ? { fontWeight: 800 } : {},
+        greenStyle: b.winSide === 'green' ? { fontWeight: 800 } : {},
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -20,7 +20,7 @@ return [
      | SVG for the screens. Dompdf renders PNG far more reliably than SVG, so
      | supply a PNG as well if the printouts matter.
      */
-    'logo' => env('BRANDING_LOGO', 'images/logo.svg'),
+    'logo' => env('BRANDING_LOGO', 'images/logo.png'),
 
     'logo_print' => env('BRANDING_LOGO_PRINT', 'images/logo.png'),
 ];

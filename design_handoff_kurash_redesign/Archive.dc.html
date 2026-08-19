@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/styles.css">
+  <link rel="stylesheet" href="kurash-theme.css">
+  <script src="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/_ds_bundle.js"></script>
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Archive" style="display:flex; min-height:100vh; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body)">
+  <dc-import name="Sidebar" active="Archive" hint-size="252px,100%"></dc-import>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:10px 32px; border-bottom:2px solid var(--color-divider)">
+      <div style="font-size:13px; font-weight:600" class="text-muted">Platform</div>
+      <button class="btn btn-secondary" style="font-size:12px; padding:4px 12px" onClick="{{ toggleTheme }}">{{ themeBtnLabel }}</button>
+    </div>
+    <header style="padding:28px 32px 0">
+      <div class="kicker" style="color:var(--color-accent-600)">International Kurash Association</div>
+      <h1 style="font-size:36px; margin:8px 0 4px">Archive</h1>
+      <p class="text-muted" style="font-size:14px; margin:0">Closed competitions and the reports that came out of them. An archived championship stops accepting changes.</p>
+    </header>
+    <div style="padding:22px 32px 48px; display:flex; flex-direction:column; gap:20px; max-width:1240px">
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm); padding:20px 24px">
+        <h4 style="margin:0 0 4px">Ready to close</h4>
+        <p class="text-muted" style="font-size:13px; margin:0 0 14px">Competitions that have been fought but are still open for editing.</p>
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap; border:1px solid var(--color-neutral-300); padding:12px 16px">
+          <div style="min-width:0">
+            <div style="font-weight:700; font-size:14px">Uzbekistan National Cup 2025</div>
+            <div style="font-size:12px" class="text-muted">Samarkand · 3 Nov 2025</div>
+          </div>
+          <span class="tag tag-accent">ALL DECIDED</span>
+          <button class="btn btn-primary" style="margin-left:auto; font-size:13px">Archive</button>
+        </div>
+      </section>
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm); padding:20px 24px">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap">
+          <div>
+            <h4 style="margin:0">World Kurash Cup 2024</h4>
+            <div style="font-size:13px; margin-top:4px" class="text-muted">Istanbul · 9 Nov 2024 · 186 athletes</div>
+          </div>
+          <span class="tag tag-neutral">ARCHIVED 12 NOV 2024</span>
+        </div>
+        <div style="display:flex; gap:24px; flex-wrap:wrap; margin-top:14px; font-size:13px">
+          <div style="display:flex; align-items:center; gap:8px"><span class="text-muted" style="font-size:11px">1</span><span style="display:inline-block; padding:1px 6px; border:1px solid var(--color-neutral-400); font-size:11px; font-weight:700">UZB</span><span class="text-muted">6–4–3</span></div>
+          <div style="display:flex; align-items:center; gap:8px"><span class="text-muted" style="font-size:11px">2</span><span style="display:inline-block; padding:1px 6px; border:1px solid var(--color-neutral-400); font-size:11px; font-weight:700">KAZ</span><span class="text-muted">3–2–5</span></div>
+          <div style="display:flex; align-items:center; gap:8px"><span class="text-muted" style="font-size:11px">3</span><span style="display:inline-block; padding:1px 6px; border:1px solid var(--color-neutral-400); font-size:11px; font-weight:700">TUR</span><span class="text-muted">2–3–4</span></div>
+        </div>
+        <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:14px">
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Results · PDF</a>
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Medal standing · PDF</a>
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Fight order · PDF</a>
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Entries by NOC · PDF</a>
+          <a href="Medals.dc.html" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Open medal table</a>
+        </div>
+        <div style="border-top:2px solid var(--color-divider); margin-top:16px; padding-top:12px; display:flex; flex-direction:column; gap:4px">
+          <div style="font-size:12px" class="text-muted"><span style="font-family:monospace">12 Nov 2024 18:42</span> · Archived by Hadi</div>
+          <div style="font-size:12px" class="text-muted"><span style="font-family:monospace">9 Nov 2024 21:05</span> · Results confirmed by system</div>
+        </div>
+        <div style="margin-top:14px"><button class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Reopen</button></div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;dark&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { themeOverride: null };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'dark';
+    return { theme, themeBtnLabel: theme === 'dark' ? 'Light mode' : 'Dark mode',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }) };
+  }
+}
+</script>
+</body>
+</html>

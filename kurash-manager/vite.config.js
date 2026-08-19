@@ -14,9 +14,12 @@ export default defineConfig({
                 'resources/js/passkeys.js',
             ],
             refresh: true,
+            // One family for the whole interface. Downloaded at build time and
+            // served from our own origin, so the venue machines never depend on
+            // reaching a font CDN mid-competition.
             fonts: [
-                bunny('Instrument Sans', {
-                    weights: [400, 500, 600],
+                bunny('Archivo', {
+                    weights: [400, 600, 800],
                 }),
             ],
         }),

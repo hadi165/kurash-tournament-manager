@@ -1,34 +1,34 @@
 {
-  "_fonts-C9MNnjVw.css": {
-    "file": "assets/fonts-C9MNnjVw.css",
-    "src": "_fonts-C9MNnjVw.css"
+  "_archivo-400-normal-Bl602Mgc.woff": {
+    "file": "assets/archivo-400-normal-Bl602Mgc.woff",
+    "src": "_archivo-400-normal-Bl602Mgc.woff"
   },
-  "_instrument-sans-400-normal-D1W7dsQl.woff": {
-    "file": "assets/instrument-sans-400-normal-D1W7dsQl.woff",
-    "src": "_instrument-sans-400-normal-D1W7dsQl.woff"
+  "_archivo-400-normal-C81ewxNO.woff2": {
+    "file": "assets/archivo-400-normal-C81ewxNO.woff2",
+    "src": "_archivo-400-normal-C81ewxNO.woff2"
   },
-  "_instrument-sans-400-normal-DRC__1Mx.woff2": {
-    "file": "assets/instrument-sans-400-normal-DRC__1Mx.woff2",
-    "src": "_instrument-sans-400-normal-DRC__1Mx.woff2"
+  "_archivo-600-normal-3BBy0ZsW.woff2": {
+    "file": "assets/archivo-600-normal-3BBy0ZsW.woff2",
+    "src": "_archivo-600-normal-3BBy0ZsW.woff2"
   },
-  "_instrument-sans-500-normal-Dk9ku72i.woff2": {
-    "file": "assets/instrument-sans-500-normal-Dk9ku72i.woff2",
-    "src": "_instrument-sans-500-normal-Dk9ku72i.woff2"
+  "_archivo-600-normal-DwYieO8P.woff": {
+    "file": "assets/archivo-600-normal-DwYieO8P.woff",
+    "src": "_archivo-600-normal-DwYieO8P.woff"
   },
-  "_instrument-sans-500-normal-Z6ESRlEs.woff": {
-    "file": "assets/instrument-sans-500-normal-Z6ESRlEs.woff",
-    "src": "_instrument-sans-500-normal-Z6ESRlEs.woff"
+  "_archivo-800-normal-DZa_k145.woff": {
+    "file": "assets/archivo-800-normal-DZa_k145.woff",
+    "src": "_archivo-800-normal-DZa_k145.woff"
   },
-  "_instrument-sans-600-normal-B7fBEWYG.woff2": {
-    "file": "assets/instrument-sans-600-normal-B7fBEWYG.woff2",
-    "src": "_instrument-sans-600-normal-B7fBEWYG.woff2"
+  "_archivo-800-normal-cB6v3kRN.woff2": {
+    "file": "assets/archivo-800-normal-cB6v3kRN.woff2",
+    "src": "_archivo-800-normal-cB6v3kRN.woff2"
   },
-  "_instrument-sans-600-normal-B9e8oLYv.woff": {
-    "file": "assets/instrument-sans-600-normal-B9e8oLYv.woff",
-    "src": "_instrument-sans-600-normal-B9e8oLYv.woff"
+  "_fonts-DbUN3iAJ.css": {
+    "file": "assets/fonts-DbUN3iAJ.css",
+    "src": "_fonts-DbUN3iAJ.css"
   },
   "resources/css/app.css": {
-    "file": "assets/app-DWFjinwf.css",
+    "file": "assets/app-WC1zbZE1.css",
     "name": "app",
     "names": [
       "app.css"

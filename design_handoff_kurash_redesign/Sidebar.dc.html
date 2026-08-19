@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/styles.css">
+  <link rel="stylesheet" href="kurash-theme.css">
+  <script src="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/_ds_bundle.js"></script>
+</helmet>
+<aside style="width:252px; flex:none; display:flex; flex-direction:column; border-right:2px solid var(--color-divider); min-height:100vh">
+  <div style="display:flex; align-items:center; gap:10px; padding:16px 20px">
+    <div style="background:#fff; padding:4px; flex:none"><img src="uploads/IKA.png" alt="IKA logo" style="width:38px; height:38px; object-fit:contain"></div>
+    <div style="font-family:var(--font-heading); font-weight:800; font-size:12.5px; line-height:1.25">INTERNATIONAL KURASH ASSOCIATION</div>
+  </div>
+  <div style="height:2px; background:var(--color-divider); flex:none"></div>
+  <nav style="padding:12px 0; display:flex; flex-direction:column">
+    <div class="kicker text-muted" style="padding:10px 20px 4px">Platform</div>
+    <sc-for list="{{ platformItems }}" as="it" hint-placeholder-count="3">
+      <a href="{{ it.href }}" style="{{ it.style }}" style-hover="background:var(--color-neutral-200)">{{ it.label }}</a>
+    </sc-for>
+    <div class="kicker text-muted" style="padding:18px 20px 4px">Asian Kurash Championship 2026</div>
+    <sc-for list="{{ champItems }}" as="it" hint-placeholder-count="7">
+      <a href="{{ it.href }}" style="{{ it.style }}" style-hover="background:var(--color-neutral-200)">{{ it.label }}</a>
+    </sc-for>
+  </nav>
+  <div style="flex:1"></div>
+  <div style="padding:8px 0">
+    <a href="#" style="display:block; padding:6px 20px; font-size:13px; font-weight:600; color:var(--color-text); text-decoration:none" style-hover="background:var(--color-neutral-200)">Repository</a>
+    <a href="#" style="display:block; padding:6px 20px; font-size:13px; font-weight:600; color:var(--color-text); text-decoration:none" style-hover="background:var(--color-neutral-200)">Documentation</a>
+  </div>
+  <div style="height:2px; background:var(--color-divider); flex:none"></div>
+  <div style="display:flex; align-items:center; gap:10px; padding:14px 20px">
+    <div style="width:30px; height:30px; flex:none; background:var(--color-accent); color:#fff; display:flex; align-items:center; justify-content:center; font-family:var(--font-heading); font-weight:800; font-size:13px">H</div>
+    <div>
+      <div style="font-size:13px; font-weight:800; font-family:var(--font-heading); line-height:1.2">Hadi</div>
+      <div style="font-size:11px" class="text-muted">Organizer</div>
+    </div>
+  </div>
+</aside>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 260, &quot;height&quot;: 900}, &quot;active&quot;: {&quot;editor&quot;: &quot;text&quot;, &quot;default&quot;: &quot;Dashboard&quot;, &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const active = this.props.active ?? '';
+    const mk = (label, href) => ({ label, href, style: {
+      display: 'block', padding: '7px 17px', fontSize: '13.5px', textDecoration: 'none', color: 'var(--color-text)',
+      fontWeight: active === label ? 800 : 600,
+      borderLeft: active === label ? '3px solid var(--color-accent)' : '3px solid transparent',
+      background: active === label ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'transparent',
+    }});
+    return {
+      platformItems: [mk('Dashboard', 'Dashboard.dc.html'), mk('Championship Management', 'Championships.dc.html'), mk('Archive', 'Archive.dc.html')],
+      champItems: [mk('Categories', 'Categories.dc.html'), mk('Athlete Registration', 'Registration.dc.html'), mk('Weigh-in Form', 'Weigh-in.dc.html'), mk('Entries', 'Entries.dc.html'), mk('Fight Order', 'Fight-Order.dc.html'), mk('Mats', 'Mats.dc.html'), mk('Results & Medal Standing', 'Medals.dc.html')],
+    };
+  }
+}
+</script>
+</body>
+</html>
