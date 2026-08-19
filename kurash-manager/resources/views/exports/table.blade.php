@@ -74,13 +74,11 @@
 <body>
     {{-- Required on every page after the welcome screen. --}}
     @php
-        // Dompdf reads from disk, not over HTTP, and renders PNG far more
-        // reliably than SVG — so the print logo is preferred and the screen
-        // logo is only a fallback.
-        $printLogo = collect([config('branding.logo_print'), config('branding.logo')])
-            ->filter()
-            ->map(fn (string $path) => public_path($path))
-            ->first(fn (string $path) => is_file($path));
+        // Dompdf reads from disk, not over HTTP, and needs GD for raster
+        // artwork — PrintLogo returns a path only when it can actually be
+        // drawn, so a server without GD prints the header without the mark
+        // instead of failing the whole document.
+        $printLogo = \App\Support\PrintLogo::path();
     @endphp
 
     <div class="association">
