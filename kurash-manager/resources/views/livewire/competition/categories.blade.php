@@ -123,7 +123,7 @@
             </button>
 
             <div x-show="open" x-cloak x-transition.opacity.duration.100ms
-                 class="absolute end-0 top-full z-50 min-w-[230px] border border-n-300 bg-surface py-2.5 shadow-elev-md">
+                 class="absolute end-0 top-full z-50 min-w-[230px] border border-n-300 bg-surface py-2.5 shadow-pop">
                 @foreach ([
                     ['label' => __('Entries by weight'), 'route' => 'exports.entries-weight'],
                     ['label' => __('Entries by NOC'), 'route' => 'exports.entries-noc'],
@@ -157,7 +157,7 @@
                 </div>
 
                 <div x-show="open || @js((bool) $editingId)" x-cloak
-                     class="border border-n-300 bg-surface px-6 py-[22px] shadow-elev-sm">
+                     class="border border-n-300 bg-surface px-6 py-[22px] shadow-chip">
                     <form wire:submit="save">
                         <h4 class="m-0 text-xl">{{ $editingId ? __('Edit age category') : __('New age category') }}</h4>
 
@@ -223,7 +223,7 @@
                 };
             @endphp
 
-            <section class="border border-n-300 bg-surface shadow-elev-sm" wire:key="age-{{ $ageCategory->id }}">
+            <section class="border border-n-300 bg-surface shadow-chip" wire:key="age-{{ $ageCategory->id }}">
                 <div class="flex flex-wrap items-start justify-between gap-3.5 px-6 pb-4 pt-5">
                     <div>
                         <div class="flex items-center gap-3">
@@ -291,7 +291,7 @@
                 </div>
             </section>
         @empty
-            <section class="border border-n-300 bg-surface px-6 py-10 text-center shadow-elev-sm">
+            <section class="border border-n-300 bg-surface px-6 py-10 text-center shadow-chip">
                 <p class="text-[13px] text-ink/55">
                     {{ __('No age categories yet. Add one — for example "Men Senior" with -60, -66, -73, -81, -90, +90.') }}
                 </p>

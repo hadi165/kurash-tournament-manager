@@ -7,7 +7,7 @@
 {{-- A card is a flat surface with a hairline border and no radius. Its internal
      sections are separated by 2px rules, not by gaps, so the whole thing reads
      as one block of the grid. --}}
-<section {{ $attributes->class('border border-n-300 bg-surface shadow-elev-sm') }}>
+<section {{ $attributes->class('border border-n-300 bg-surface shadow-chip') }}>
     @if ($title || $subtitle || isset($head))
         <div class="flex flex-wrap items-start justify-between gap-3.5 px-6 pb-4 pt-5">
             <div class="min-w-0">
