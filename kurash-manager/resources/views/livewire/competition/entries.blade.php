@@ -1,5 +1,4 @@
 <x-page
-    :kicker="$championship->title"
     :title="__('Entries')"
     :subtitle="__('How many are entered, how many made the scale, and which classes can start.')"
     :breadcrumbs="[
@@ -8,7 +7,7 @@
         ['label' => __('Entries')],
     ]"
 >
-    <x-ui.stats bordered :items="[
+    <x-ui.stats cards :items="[
         ['value' => $totalEntries, 'label' => __('Registered')],
         ['value' => $totalCleared, 'label' => __('Passed the scale')],
         ['value' => $readyToDraw, 'label' => __('Classes ready to draw'), 'accent' => true],
@@ -18,17 +17,13 @@
          the old system stopped at a file-upload page first. --}}
     <x-ui.card
         flush
-        :title="__('Number of Entries by Weight Categories')"
+        :title="__('Entries by weight category')"
         :subtitle="__('Only athletes who passed the scale are counted as entries.')"
     >
         <x-slot:head>
-            <a href="{{ route('exports.entries-weight', ['championship' => $championship, 'format' => 'pdf']) }}"
-               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
-            <a href="{{ route('exports.entries-weight', ['championship' => $championship, 'format' => 'csv']) }}"
-               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
+            <x-ui.chip :href="route('exports.entries-weight', ['championship' => $championship, 'format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
+            <x-ui.chip :href="route('exports.entries-weight', ['championship' => $championship, 'format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
         </x-slot:head>
-
-        <div class="rule-2"></div>
 
         <div class="overflow-x-auto">
             <table class="t">
@@ -38,8 +33,7 @@
                         <th class="num">{{ __('Registered') }}</th>
                         <th class="num">{{ __('Entries') }}</th>
                         <th>{{ __('Bracket') }}</th>
-                        <th>{{ __("Athlete's list") }}</th>
-                        <th>{{ __('Draw result') }}</th>
+                        <th>{{ __('Exports') }}</th>
                         <th>{{ __('Draw status') }}</th>
                     </tr>
                 </thead>
@@ -49,38 +43,37 @@
 
                         <tr wire:key="weight-{{ $category->id }}">
                             <td>
-                                <div class="font-bold">{{ $category->exportName() }}</div>
-                                <div class="text-xs text-ink/55">{{ $category->ageCategory->name }}</div>
+                                <div class="font-semibold">{{ $category->exportName() }}</div>
+                                <div class="text-[12.5px] text-muted">{{ $category->ageCategory->name }}</div>
                             </td>
                             <td class="num">{{ $row['registered'] }}</td>
-                            <td class="num font-bold">{{ $row['cleared'] }}</td>
-                            <td class="font-mono text-xs">{{ $row['bracket'] ?? '—' }}</td>
+                            <td class="num font-semibold">{{ $row['cleared'] }}</td>
+                            <td class="font-mono text-xs text-muted">{{ $row['bracket'] ?? '—' }}</td>
                             <td>
-                                <a href="{{ route('exports.weigh-in', ['weightCategory' => $category, 'format' => 'pdf']) }}"
-                                   class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
-                            </td>
-                            <td>
-                                @if ($row['drawn'])
-                                    <a href="{{ route('exports.draw', ['weightCategory' => $category, 'format' => 'pdf']) }}"
-                                       class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
-                                    <a href="{{ route('exports.draw', ['weightCategory' => $category, 'format' => 'csv']) }}"
-                                       class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
-                                @else
-                                    <span class="text-ink/40">—</span>
-                                @endif
+                                <div class="flex gap-1.5">
+                                    {{-- The athletes' list, and the drawn bracket
+                                         once there is one to print. --}}
+                                    <x-ui.chip :href="route('exports.weigh-in', ['weightCategory' => $category, 'format' => 'pdf'])">
+                                        {{ __('List') }}
+                                    </x-ui.chip>
+
+                                    @if ($row['drawn'])
+                                        <x-ui.chip :href="route('exports.draw', ['weightCategory' => $category, 'format' => 'pdf'])">
+                                            {{ __('Draw') }}
+                                        </x-ui.chip>
+                                    @endif
+                                </div>
                             </td>
                             <td>
                                 <div class="flex items-center gap-2">
                                     @if ($row['drawn'])
                                         <x-ui.tag variant="brand">{{ __('Done') }}</x-ui.tag>
-                                        <flux:button size="xs" variant="ghost" :href="route('bracket.show', $category)" wire:navigate>
-                                            {{ __('Open') }}
-                                        </flux:button>
+                                        <x-ui.chip :href="route('bracket.show', $category)" wire:navigate>{{ __('Open') }}</x-ui.chip>
                                     @elseif ($row['cleared'] >= 2)
-                                        <x-ui.tag variant="outline">{{ __('Not Started') }}</x-ui.tag>
+                                        <x-ui.tag>{{ __('Not started') }}</x-ui.tag>
                                         @can('manage-competition')
                                             <flux:button size="xs" variant="primary" :href="route('bracket.show', $category)" wire:navigate>
-                                                {{ __('Start') }}
+                                                {{ __('Start draw') }}
                                             </flux:button>
                                         @endcan
                                     @else
@@ -91,7 +84,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="py-8 text-center text-ink/55">{{ __('No weight classes yet.') }}</td>
+                            <td colspan="6" class="py-8 text-center text-muted">{{ __('No weight classes yet.') }}</td>
                         </tr>
                     @endforelse
                 </tbody>
@@ -100,15 +93,11 @@
     </x-ui.card>
 
     {{-- Specification §6.1. --}}
-    <x-ui.card flush :title="__('Number of Entries by NOC')" :subtitle="__('Largest delegations first.')">
+    <x-ui.card flush :title="__('Entries by NOC')" :subtitle="__('Largest delegations first.')">
         <x-slot:head>
-            <a href="{{ route('exports.entries-noc', ['championship' => $championship, 'format' => 'pdf']) }}"
-               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
-            <a href="{{ route('exports.entries-noc', ['championship' => $championship, 'format' => 'csv']) }}"
-               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
+            <x-ui.chip :href="route('exports.entries-noc', ['championship' => $championship, 'format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
+            <x-ui.chip :href="route('exports.entries-noc', ['championship' => $championship, 'format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
         </x-slot:head>
-
-        <div class="rule-2"></div>
 
         <div class="overflow-x-auto">
             <table class="t">
@@ -128,18 +117,18 @@
                             <td>
                                 <span class="inline-flex items-center gap-2">
                                     <x-flag :noc="$row['noc']" :name="$row['name']" />
-                                    <span class="border border-line px-1.5 py-px font-mono text-[11px]">{{ $row['noc'] }}</span>
+                                    <span class="rounded-sm border border-line bg-ground px-2 py-0.5 font-mono text-[11.5px]">{{ $row['noc'] }}</span>
                                 </span>
                             </td>
-                            <td class="text-ink/55">{{ $row['name'] ?? '—' }}</td>
+                            <td class="text-muted">{{ $row['name'] ?? '—' }}</td>
                             <td class="num">{{ $row['male'] }}</td>
                             <td class="num">{{ $row['female'] }}</td>
                             <td class="num">{{ $row['cleared'] }}</td>
-                            <td class="num font-bold">{{ $row['total'] }}</td>
+                            <td class="num font-semibold">{{ $row['total'] }}</td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="py-8 text-center text-ink/55">{{ __('Nobody is registered yet.') }}</td>
+                            <td colspan="6" class="py-8 text-center text-muted">{{ __('Nobody is registered yet.') }}</td>
                         </tr>
                     @endforelse
                 </tbody>
