@@ -191,6 +191,12 @@
         outline-offset: 2px;
     }
 
+    /* Anything Alpine hides on load must be hidden before Alpine boots, or a
+       collapsed form and a closed popover both flash open on every page load. */
+    [x-cloak] {
+        display: none !important;
+    }
+
     ::selection {
         background: color-mix(in srgb, var(--color-brand-500) 30%, transparent);
     }
