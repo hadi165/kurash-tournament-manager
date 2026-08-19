@@ -1,88 +1,107 @@
-<div class="flex flex-col gap-6">
-    <div>
-        <flux:breadcrumbs>
-            <flux:breadcrumbs.item :href="route('championships.index')" wire:navigate>{{ __('Championships') }}</flux:breadcrumbs.item>
-            <flux:breadcrumbs.item :href="route('championships.show', $championship)" wire:navigate>{{ $championship->title }}</flux:breadcrumbs.item>
-            <flux:breadcrumbs.item>{{ __('Medals') }}</flux:breadcrumbs.item>
-        </flux:breadcrumbs>
+<x-page
+    :kicker="$championship->title"
+    :title="__('Medals')"
+    :subtitle="trans_choice('{0}Every weight class is decided.|{1}:count weight class still undecided.|[2,*]:count weight classes still undecided.', $pending, ['count' => $pending])"
+    :breadcrumbs="[
+        ['label' => __('Championships'), 'href' => route('championships.index')],
+        ['label' => $championship->title, 'href' => route('championships.show', $championship)],
+        ['label' => __('Medals')],
+    ]"
+>
+    <x-slot:actions>
+        <span class="kicker me-1 text-ink/55">{{ __('Results') }}</span>
+        <a href="{{ route('exports.results', ['championship' => $championship, 'format' => 'pdf']) }}"
+           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
+        <a href="{{ route('exports.results', ['championship' => $championship, 'format' => 'csv']) }}"
+           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
 
-        <flux:heading size="xl" class="mt-2">{{ __('Medals') }}</flux:heading>
-        <flux:subheading>
-            {{ trans_choice('{0}Every weight class is decided|{1}:count weight class still undecided|[2,*]:count weight classes still undecided', $pending, ['count' => $pending]) }}
-        </flux:subheading>
+        {{-- A certificate is a laid-out document, so it is PDF only and does not
+             get the two-format pair the tabular exports get. --}}
+        <a href="{{ route('exports.certificates', $championship) }}"
+           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Certificates') }}</a>
 
-        <div class="mt-4 flex flex-wrap items-center gap-6">
-            <x-competition.exports
-                route="exports.medals"
-                :params="['championship' => $championship]"
-                :label="__('Medal standing')"
-            />
-            <x-competition.exports
-                route="exports.results"
-                :params="['championship' => $championship]"
-                :label="__('Results')"
-            />
+        <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+    </x-slot:actions>
 
-            {{-- A certificate is a laid-out document, so it is PDF only and does
-                 not go through the two-format exports component. --}}
-            <div class="flex items-center gap-2 print:hidden">
-                <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Certificates') }}</flux:text>
-                <flux:button size="xs" variant="ghost" icon="document-arrow-down" :href="route('exports.certificates', $championship)">
-                    {{ __('PDF') }}
-                </flux:button>
-            </div>
-        </div>
-    </div>
+    <x-ui.card
+        flush
+        :title="__('Medal Standing')"
+        :subtitle="__('Ordered by gold, then silver, then bronze.')"
+    >
+        <x-slot:head>
+            <a href="{{ route('exports.medals', ['championship' => $championship, 'format' => 'pdf']) }}"
+               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
+            <a href="{{ route('exports.medals', ['championship' => $championship, 'format' => 'csv']) }}"
+               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
+        </x-slot:head>
 
-    <flux:card class="p-0 overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="border-b border-zinc-200 text-left dark:border-zinc-700">
-                    <th class="px-4 py-3 font-medium">{{ __('NOC') }}</th>
-                    <th class="px-4 py-3 font-medium tabular-nums">{{ __('Gold') }}</th>
-                    <th class="px-4 py-3 font-medium tabular-nums">{{ __('Silver') }}</th>
-                    <th class="px-4 py-3 font-medium tabular-nums">{{ __('Bronze') }}</th>
-                    <th class="px-4 py-3 font-medium tabular-nums">{{ __('Total') }}</th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse ($standings as $row)
-                    <tr class="border-b border-zinc-100 last:border-0 dark:border-zinc-800" wire:key="noc-{{ $row['noc_code'] }}">
-                        <td class="px-4 py-3 font-medium"><x-flag :noc="$row['noc_code']" size="md" show-code /></td>
-                        <td class="px-4 py-3 tabular-nums">{{ $row['gold'] }}</td>
-                        <td class="px-4 py-3 tabular-nums">{{ $row['silver'] }}</td>
-                        <td class="px-4 py-3 tabular-nums">{{ $row['bronze'] }}</td>
-                        <td class="px-4 py-3 font-medium tabular-nums">{{ $row['total'] }}</td>
+        <div class="rule-2"></div>
+
+        <div class="overflow-x-auto">
+            <table class="t">
+                <thead>
+                    <tr>
+                        <th class="num">{{ __('#') }}</th>
+                        <th>{{ __('NOC') }}</th>
+                        <th class="num">{{ __('Gold') }}</th>
+                        <th class="num">{{ __('Silver') }}</th>
+                        <th class="num">{{ __('Bronze') }}</th>
+                        <th class="num">{{ __('Total') }}</th>
                     </tr>
-                @empty
-                    <tr><td colspan="5" class="px-4 py-8 text-center text-zinc-500">{{ __('No medals awarded yet.') }}</td></tr>
-                @endforelse
-            </tbody>
-        </table>
-    </flux:card>
+                </thead>
+                <tbody>
+                    @forelse ($standings as $i => $row)
+                        <tr wire:key="noc-{{ $row['noc_code'] }}">
+                            <td class="num text-ink/55">{{ $i + 1 }}</td>
+                            <td class="font-bold"><x-flag :noc="$row['noc_code']" size="md" show-code /></td>
+                            <td class="num">{{ $row['gold'] }}</td>
+                            <td class="num">{{ $row['silver'] }}</td>
+                            <td class="num">{{ $row['bronze'] }}</td>
+                            <td class="num font-bold">{{ $row['total'] }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-ink/55">{{ __('No medals awarded yet.') }}</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </x-ui.card>
 
+    {{-- One card per decided weight class. The places are a fixed set, so they
+         are laid on the same four-cell grid every time rather than flowing:
+         gold sits in the same place on every card, however many bronzes there
+         are. --}}
     @foreach ($events as $event)
-        <flux:card wire:key="event-{{ $event['category']->id }}">
-            <flux:heading size="lg">
-                {{ $event['category']->ageCategory->name }} — {{ $event['category']->label }} kg
-            </flux:heading>
+        <x-ui.card flush wire:key="event-{{ $event['category']->id }}">
+            <div class="flex flex-wrap items-baseline gap-3 px-6 pb-4 pt-5">
+                <h4 class="m-0 text-xl">{{ $event['category']->label }} {{ __('kg') }}</h4>
+                <span class="kicker text-ink/55">{{ $event['category']->ageCategory->name }}</span>
+            </div>
 
-            <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                    <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Gold') }}</flux:text>
-                    <div class="font-medium"><x-athlete :athlete="$event['gold']" /></div>
-                </div>
-                <div>
-                    <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Silver') }}</flux:text>
-                    <div class="font-medium"><x-athlete :athlete="$event['silver']" /></div>
-                </div>
+            <div class="rule-2"></div>
+
+            <div class="grid gap-px bg-n-300 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+                @foreach ([
+                    ['label' => __('Gold'), 'athlete' => $event['gold'], 'accent' => true],
+                    ['label' => __('Silver'), 'athlete' => $event['silver'], 'accent' => false],
+                ] as $place)
+                    <div class="bg-surface px-6 py-4">
+                        <div @class(['kicker', 'text-brand-600 dark:text-brand-400' => $place['accent'], 'text-ink/55' => ! $place['accent']])>
+                            {{ $place['label'] }}
+                        </div>
+                        <div class="mt-1.5 font-bold"><x-athlete :athlete="$place['athlete']" /></div>
+                    </div>
+                @endforeach
+
                 @foreach ($event['bronze'] as $bronze)
-                    <div wire:key="ev-bronze-{{ $bronze->id }}">
-                        <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Bronze') }}</flux:text>
-                        <div class="font-medium"><x-athlete :athlete="$bronze" /></div>
+                    <div class="bg-surface px-6 py-4" wire:key="ev-bronze-{{ $bronze->id }}">
+                        <div class="kicker text-ink/55">{{ __('Bronze') }}</div>
+                        <div class="mt-1.5 font-bold"><x-athlete :athlete="$bronze" /></div>
                     </div>
                 @endforeach
             </div>
-        </flux:card>
+        </x-ui.card>
     @endforeach
-</div>
+</x-page>

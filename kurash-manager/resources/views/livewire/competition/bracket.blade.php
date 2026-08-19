@@ -1,97 +1,107 @@
-<div class="flex flex-col gap-6">
-    <div>
-        <flux:breadcrumbs>
-            <flux:breadcrumbs.item :href="route('championships.index')" wire:navigate>{{ __('Championships') }}</flux:breadcrumbs.item>
-            <flux:breadcrumbs.item :href="route('championships.show', $weightCategory->ageCategory->championship)" wire:navigate>
-                {{ $weightCategory->ageCategory->championship->title }}
-            </flux:breadcrumbs.item>
-            <flux:breadcrumbs.item>{{ $weightCategory->label }} kg</flux:breadcrumbs.item>
-        </flux:breadcrumbs>
+@php
+    $championship = $weightCategory->ageCategory->championship;
 
-        <flux:heading size="xl" class="mt-2">
-            {{ $weightCategory->ageCategory->name }} — {{ $weightCategory->label }} kg
-        </flux:heading>
-        <flux:subheading>
-            {{ trans_choice('{0}Nobody drawn yet|{1}:count athlete drawn|[2,*]:count athletes drawn', $drawnCount, ['count' => $drawnCount]) }}
-            @if ($projectedSize)
-                · {{ __('bracket of :size', ['size' => $projectedSize]) }}
-            @endif
-        </flux:subheading>
+    $drawn = trans_choice(
+        '{0}Nobody drawn yet|{1}:count athlete drawn|[2,*]:count athletes drawn',
+        $drawnCount, ['count' => $drawnCount]
+    );
 
-        <div class="mt-4 flex flex-wrap items-center gap-6">
-            {{-- The sheet the draw numbers get written onto, and the drawn
-                 bracket itself. Both are named the way the federation files them. --}}
-            <x-competition.exports
-                route="exports.weigh-in"
-                :params="['weightCategory' => $weightCategory]"
-                :label="__('Weigh-in list')"
-            />
+    $subtitle = $projectedSize
+        ? $drawn.' · '.__('bracket of :size', ['size' => $projectedSize])
+        : $drawn;
+@endphp
 
-            @if ($bouts->isNotEmpty())
-                <x-competition.exports
-                    route="exports.draw"
-                    :params="['weightCategory' => $weightCategory]"
-                    :label="__('Draw result')"
-                />
-            @endif
-        </div>
-    </div>
+<x-page
+    :kicker="$weightCategory->ageCategory->name"
+    :title="$weightCategory->label.' '.__('kg')"
+    :subtitle="$subtitle"
+    :breadcrumbs="[
+        ['label' => __('Championships'), 'href' => route('championships.index')],
+        ['label' => $championship->title, 'href' => route('championships.show', $championship)],
+        ['label' => $weightCategory->label.' '.__('kg')],
+    ]"
+>
+
+    {{-- The sheet the draw numbers get written onto, and the drawn bracket
+         itself. Both are named the way the federation files them. --}}
+    <x-slot:actions>
+        <span class="kicker me-1 text-ink/55">{{ __('Weigh-in list') }}</span>
+        <a href="{{ route('exports.weigh-in', ['weightCategory' => $weightCategory, 'format' => 'pdf']) }}"
+           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
+        <a href="{{ route('exports.weigh-in', ['weightCategory' => $weightCategory, 'format' => 'csv']) }}"
+           class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
+
+        @if ($bouts->isNotEmpty())
+            <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+            <span class="kicker me-1 text-ink/55">{{ __('Draw result') }}</span>
+            <a href="{{ route('exports.draw', ['weightCategory' => $weightCategory, 'format' => 'pdf']) }}"
+               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
+            <a href="{{ route('exports.draw', ['weightCategory' => $weightCategory, 'format' => 'csv']) }}"
+               class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
+        @endif
+
+        <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+    </x-slot:actions>
 
     <x-competition.flash />
 
     @if ($podium['decided'])
-        <flux:card>
-            <flux:heading size="lg">{{ __('Podium') }}</flux:heading>
-            <div class="mt-3 flex flex-wrap gap-6">
-                <div>
-                    <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Gold') }}</flux:text>
-                    <div class="font-medium"><x-athlete :athlete="$podium['gold']" /></div>
+        <x-ui.card flush :title="__('Podium')">
+            <div class="rule-2"></div>
+
+            <div class="grid gap-px bg-n-300 [grid-template-columns:repeat(auto-fit,minmax(200px,1fr))]">
+                <div class="bg-surface px-6 py-4">
+                    <div class="kicker text-brand-600 dark:text-brand-400">{{ __('Gold') }}</div>
+                    <div class="mt-1.5 font-bold"><x-athlete :athlete="$podium['gold']" /></div>
                 </div>
-                <div>
-                    <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Silver') }}</flux:text>
-                    <div class="font-medium"><x-athlete :athlete="$podium['silver']" /></div>
+
+                <div class="bg-surface px-6 py-4">
+                    <div class="kicker text-ink/55">{{ __('Silver') }}</div>
+                    <div class="mt-1.5 font-bold"><x-athlete :athlete="$podium['silver']" /></div>
                 </div>
+
                 @foreach ($podium['bronze'] as $bronze)
-                    <div wire:key="bronze-{{ $bronze->id }}">
-                        <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ __('Bronze') }}</flux:text>
-                        <div class="font-medium"><x-athlete :athlete="$bronze" /></div>
+                    <div class="bg-surface px-6 py-4" wire:key="bronze-{{ $bronze->id }}">
+                        <div class="kicker text-ink/55">{{ __('Bronze') }}</div>
+                        <div class="mt-1.5 font-bold"><x-athlete :athlete="$bronze" /></div>
                     </div>
                 @endforeach
             </div>
-        </flux:card>
+        </x-ui.card>
     @endif
 
     @can('manage-competition')
-        <flux:card class="flex flex-col gap-4">
-            <div class="flex flex-wrap items-center justify-between gap-3">
-                <flux:heading size="lg">{{ __('Draw numbers') }}</flux:heading>
+        <x-ui.card :title="__('Draw numbers')">
+            <x-slot:head>
+                <flux:button size="sm" wire:click="drawAtRandom" wire:confirm="{{ __('Replace all draw numbers in this class with a random draw?') }}">
+                    {{ __('Draw at random') }}
+                </flux:button>
+                <flux:button size="sm" variant="primary" wire:click="saveDraws">{{ __('Save draw numbers') }}</flux:button>
+            </x-slot:head>
 
-                <div class="flex flex-wrap gap-2">
-                    <flux:button size="sm" wire:click="drawAtRandom" wire:confirm="{{ __('Replace all draw numbers in this class with a random draw?') }}">
-                        {{ __('Draw at random') }}
-                    </flux:button>
-                    <flux:button size="sm" variant="primary" wire:click="saveDraws">{{ __('Save draw numbers') }}</flux:button>
-                </div>
-            </div>
-
-            <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 @forelse ($athletes as $athlete)
                     {{-- The athlete is the field's label. Sitting them beside the
                          input squeezed the names down to "Ak…", "asg…", "DDD…". --}}
-                    <flux:input
-                        wire:model="draws.{{ $athlete->id }}"
-                        wire:key="draw-{{ $athlete->id }}"
-                        type="number"
-                        min="1"
-                        :label="$athlete->fullname"
-                        :badge="$athlete->weighin_status === 'fail' ? __('failed weigh-in') : $athlete->noc_code"
-                    />
+                    <div class="flex flex-col gap-1.5" wire:key="draw-{{ $athlete->id }}">
+                        <label for="draw-{{ $athlete->id }}" class="flex items-center gap-2 text-[13px] font-bold">
+                            <span class="truncate">{{ $athlete->fullname }}</span>
+
+                            @if ($athlete->weighin_status === 'fail')
+                                <x-ui.tag variant="danger" class="ms-auto">{{ __('failed weigh-in') }}</x-ui.tag>
+                            @else
+                                <x-ui.tag variant="outline" class="ms-auto">{{ $athlete->noc_code }}</x-ui.tag>
+                            @endif
+                        </label>
+
+                        <flux:input id="draw-{{ $athlete->id }}" wire:model="draws.{{ $athlete->id }}" type="number" min="1" />
+                    </div>
                 @empty
-                    <flux:text class="text-zinc-500">{{ __('No athletes registered in this weight class.') }}</flux:text>
+                    <p class="text-sm text-ink/55">{{ __('No athletes registered in this weight class.') }}</p>
                 @endforelse
             </div>
 
-            <flux:separator />
+            <div class="rule-2 my-5"></div>
 
             <div class="flex flex-wrap items-center gap-3">
                 <flux:button
@@ -107,10 +117,10 @@
                 @endif
 
                 @if ($drawnCount < 2)
-                    <flux:text class="text-zinc-500">{{ __('At least two athletes need draw numbers.') }}</flux:text>
+                    <span class="text-sm text-ink/55">{{ __('At least two athletes need draw numbers.') }}</span>
                 @endif
             </div>
-        </flux:card>
+        </x-ui.card>
     @endcan
 
     @if ($bouts->isNotEmpty())
@@ -118,87 +128,90 @@
             @if ($courts->isEmpty())
                 {{-- Same reason as on the fight order: no mat means no
                      send-to-mat control anywhere in the bracket. --}}
-                <flux:callout variant="warning" icon="tv">
-                    <div class="flex flex-wrap items-center gap-3">
-                        <span>{{ __('No mats are set up, so bouts cannot be sent to a scoreboard yet.') }}</span>
-                        <flux:button size="xs" :href="route('courts.index', $weightCategory->ageCategory->championship)" wire:navigate>
-                            {{ __('Add a mat') }}
-                        </flux:button>
-                    </div>
-                </flux:callout>
+                <div class="flex flex-wrap items-center gap-3 border border-danger-200 bg-danger-100/60 p-3 dark:bg-danger-500/10">
+                    <x-ui.tag variant="danger">{{ __('No mats') }}</x-ui.tag>
+                    <span class="text-sm">{{ __('No mats are set up, so bouts cannot be sent to a scoreboard yet.') }}</span>
+                    <flux:button size="xs" :href="route('courts.index', $championship)" wire:navigate>{{ __('Add a mat') }}</flux:button>
+                </div>
             @endif
         @endcan
 
-        <flux:card class="overflow-x-auto">
-            <flux:heading size="lg" class="mb-4">{{ __('Bracket') }}</flux:heading>
+        <x-ui.card flush :title="__('Bracket')">
+            <div class="rule-2"></div>
 
-            <div class="flex gap-6" style="min-width: {{ max(1, $totalRounds) * 17 }}rem;">
-                @foreach ($rounds as $round => $roundBouts)
-                    <div class="flex flex-1 flex-col gap-3" wire:key="round-{{ $round }}">
-                        <flux:text class="text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                            {{ $roundBouts->first()->phase($totalRounds) }}
-                        </flux:text>
+            <div class="overflow-x-auto px-6 py-5">
+                <div class="flex gap-6" style="min-width: {{ max(1, $totalRounds) * 17 }}rem;">
+                    @foreach ($rounds as $round => $roundBouts)
+                        <div class="flex flex-1 flex-col gap-3" wire:key="round-{{ $round }}">
+                            <div class="kicker text-ink/55">{{ $roundBouts->first()->phase($totalRounds) }}</div>
 
-                        @foreach ($roundBouts as $bout)
-                            <div
-                                class="rounded-lg border border-zinc-200 text-sm dark:border-zinc-700 {{ $bout->is_bye ? 'opacity-60' : '' }}"
-                                wire:key="bout-{{ $bout->id }}"
-                            >
-                                @foreach (['a', 'b'] as $side)
-                                    @php
-                                        $athlete = $side === 'a' ? $bout->athleteA : $bout->athleteB;
-                                        $isWinner = $athlete && $bout->winner_athlete_id === $athlete->id;
-                                    @endphp
+                            @foreach ($roundBouts as $bout)
+                                <div
+                                    @class(['border border-n-300 bg-surface text-sm', 'opacity-60' => $bout->is_bye])
+                                    wire:key="bout-{{ $bout->id }}"
+                                >
+                                    @foreach (['a', 'b'] as $side)
+                                        @php
+                                            $athlete = $side === 'a' ? $bout->athleteA : $bout->athleteB;
+                                            $isWinner = $athlete && $bout->winner_athlete_id === $athlete->id;
+                                        @endphp
 
-                                    <div @class([
-                                        'flex items-center justify-between gap-2 px-3 py-2',
-                                        'border-b border-zinc-100 dark:border-zinc-800' => $side === 'a',
-                                        'bg-green-50 font-medium dark:bg-green-950/40' => $isWinner,
-                                    ])>
-                                        <x-athlete
-                                            :athlete="$athlete"
-                                            :fallback="$bout->is_bye ? __('Bye') : '—'"
-                                            class="min-w-0"
-                                        />
+                                        {{-- The corner square carries the colour, the
+                                             brand tint carries the win: a glance down
+                                             the bracket reads who went through. --}}
+                                        <div @class([
+                                            'flex items-center justify-between gap-2 px-3 py-2',
+                                            'border-b border-ink/12' => $side === 'a',
+                                            'bg-brand-500/10 font-bold' => $isWinner,
+                                        ])>
+                                            <span class="flex min-w-0 items-center gap-2">
+                                                <span @class(['size-2.5 flex-none', $side === 'a' ? 'bg-info-500' : 'bg-brand-500'])></span>
+                                                <x-athlete
+                                                    :athlete="$athlete"
+                                                    :fallback="$bout->is_bye ? __('Bye') : '—'"
+                                                    class="min-w-0"
+                                                />
+                                            </span>
 
-                                        @if ($athlete && ! $bout->isDecided())
-                                            @can('manage-competition')
-                                                <flux:button
-                                                    size="xs"
-                                                    variant="ghost"
-                                                    wire:click="recordResult({{ $bout->id }}, '{{ $side }}')"
-                                                    :disabled="! $bout->isReadyToFight()"
-                                                >{{ __('Win') }}</flux:button>
-                                            @endcan
-                                        @endif
-                                    </div>
-                                @endforeach
-
-                                @can('manage-competition')
-                                    @if ($bout->isReadyToFight() && $courts->isNotEmpty())
-                                        <div class="flex flex-wrap items-center gap-1 border-t border-zinc-100 px-3 py-2 dark:border-zinc-800">
-                                            @if ($bout->court)
-                                                <flux:badge size="sm" color="blue">{{ $bout->court->label() }}</flux:badge>
-                                            @else
-                                                <span class="text-xs text-zinc-500">{{ __('Send to') }}</span>
+                                            @if ($athlete && ! $bout->isDecided())
+                                                @can('manage-competition')
+                                                    <flux:button
+                                                        size="xs"
+                                                        variant="ghost"
+                                                        wire:click="recordResult({{ $bout->id }}, '{{ $side }}')"
+                                                        :disabled="! $bout->isReadyToFight()"
+                                                    >{{ __('Win') }}</flux:button>
+                                                @endcan
                                             @endif
-
-                                            @foreach ($courts as $court)
-                                                <flux:button
-                                                    size="xs"
-                                                    variant="ghost"
-                                                    wire:click="sendToMat({{ $bout->id }}, {{ $court->id }})"
-                                                    wire:key="send-{{ $bout->id }}-{{ $court->id }}"
-                                                >{{ $court->number }}</flux:button>
-                                            @endforeach
                                         </div>
-                                    @endif
-                                @endcan
-                            </div>
-                        @endforeach
-                    </div>
-                @endforeach
+                                    @endforeach
+
+                                    @can('manage-competition')
+                                        @if ($bout->isReadyToFight() && $courts->isNotEmpty())
+                                            <div class="flex flex-wrap items-center gap-1 border-t border-ink/12 px-3 py-2">
+                                                @if ($bout->court)
+                                                    <x-ui.tag variant="info">{{ $bout->court->label() }}</x-ui.tag>
+                                                @else
+                                                    <span class="kicker text-ink/55">{{ __('Send to') }}</span>
+                                                @endif
+
+                                                @foreach ($courts as $court)
+                                                    <flux:button
+                                                        size="xs"
+                                                        variant="ghost"
+                                                        wire:click="sendToMat({{ $bout->id }}, {{ $court->id }})"
+                                                        wire:key="send-{{ $bout->id }}-{{ $court->id }}"
+                                                    >{{ $court->number }}</flux:button>
+                                                @endforeach
+                                            </div>
+                                        @endif
+                                    @endcan
+                                </div>
+                            @endforeach
+                        </div>
+                    @endforeach
+                </div>
             </div>
-        </flux:card>
+        </x-ui.card>
     @endif
-</div>
+</x-page>

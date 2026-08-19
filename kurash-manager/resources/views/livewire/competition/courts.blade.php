@@ -1,105 +1,130 @@
-<div class="flex flex-col gap-6">
-    <div>
-        <flux:breadcrumbs>
-            <flux:breadcrumbs.item :href="route('championships.index')" wire:navigate>{{ __('Championships') }}</flux:breadcrumbs.item>
-            <flux:breadcrumbs.item :href="route('championships.show', $championship)" wire:navigate>{{ $championship->title }}</flux:breadcrumbs.item>
-            <flux:breadcrumbs.item>{{ __('Mats') }}</flux:breadcrumbs.item>
-        </flux:breadcrumbs>
-
-        <flux:heading size="xl" class="mt-2">{{ __('Mats and scoreboards') }}</flux:heading>
-        <flux:subheading>
-            {{ __('Driver in use: :driver', ['driver' => $driver]) }}
-            @if ($driver !== 'http')
-                — {{ __('no real hardware will be contacted.') }}
-            @endif
-        </flux:subheading>
-    </div>
+<x-page
+    :kicker="$championship->title"
+    :title="__('Mats and Scoreboards')"
+    :subtitle="__('Every mat in the hall, the scoreboard it drives, and the bouts sent to it.')"
+    :breadcrumbs="[
+        ['label' => __('Championships'), 'href' => route('championships.index')],
+        ['label' => $championship->title, 'href' => route('championships.show', $championship)],
+        ['label' => __('Mats')],
+    ]"
+>
+    {{-- The driver belongs in the utility bar rather than the subtitle: on a
+         venue machine it is the first thing to check when a scoreboard stays
+         dark, and it should read the same on every mat screen. --}}
+    <x-slot:actions>
+        <span class="kicker me-1 text-ink/55">{{ __('Driver') }}</span>
+        <x-ui.tag :variant="$driver === 'http' ? 'brand' : 'outline'">{{ $driver }}</x-ui.tag>
+        @if ($driver !== 'http')
+            <span class="text-[13px] text-ink/55">{{ __('no real hardware is contacted') }}</span>
+        @endif
+        <span class="mx-1.5 h-5 w-0.5 bg-divider"></span>
+    </x-slot:actions>
 
     <x-competition.flash />
 
     @can('manage-competition')
-        <flux:card>
-            <form wire:submit="save" class="flex flex-col gap-4">
-                <flux:heading size="lg">{{ $editingId ? __('Edit mat') : __('Add mat') }}</flux:heading>
+        <x-ui.card>
+            <form wire:submit="save">
+                <h4 class="m-0 text-xl">{{ $editingId ? __('Edit mat') : __('Add mat') }}</h4>
 
-                <div class="grid gap-4 md:grid-cols-4">
-                    <flux:input wire:model="number" type="number" min="1" :label="__('Mat number')" required />
-                    <flux:input wire:model="name" :label="__('Name')" placeholder="{{ __('Mat A') }}" />
-                    <flux:input wire:model="scoreboard_base_url" :label="__('Scoreboard URL')" placeholder="http://192.168.1.40" />
-                    <flux:input
-                        wire:model="scoreboard_api_key"
-                        type="password"
-                        :label="__('API key')"
-                        :description="$editingId ? __('Leave blank to keep the current key') : __('Optional')"
-                    />
+                <div class="my-[18px] grid gap-4 md:grid-cols-4">
+                    <div class="flex flex-col gap-1.5">
+                        <label for="court-number" class="kicker">{{ __('Mat number') }}</label>
+                        <flux:input id="court-number" wire:model="number" type="number" min="1" required />
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="court-name" class="kicker">{{ __('Name') }}</label>
+                        <flux:input id="court-name" wire:model="name" :placeholder="__('Mat A')" />
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="court-url" class="kicker">{{ __('Scoreboard URL') }}</label>
+                        <flux:input id="court-url" wire:model="scoreboard_base_url" placeholder="http://192.168.1.40" />
+                    </div>
+
+                    <div class="flex flex-col gap-1.5">
+                        <label for="court-key" class="kicker">{{ __('API key') }}</label>
+                        <flux:input id="court-key" wire:model="scoreboard_api_key" type="password" />
+                        <p class="text-[11px] text-ink/55">
+                            {{ $editingId ? __('Leave blank to keep the current key') : __('Optional') }}
+                        </p>
+                    </div>
                 </div>
 
-                <div class="flex items-center gap-3">
-                    <flux:button type="submit" variant="primary">{{ $editingId ? __('Save changes') : __('Add mat') }}</flux:button>
+                <div class="flex gap-2.5">
+                    <flux:button type="submit" variant="primary">
+                        {{ $editingId ? __('Save changes') : __('Add mat') }}
+                    </flux:button>
+
                     @if ($editingId)
                         <flux:button type="button" variant="ghost" wire:click="cancelEdit">{{ __('Cancel') }}</flux:button>
                     @endif
                 </div>
             </form>
-        </flux:card>
+        </x-ui.card>
     @endcan
 
-    <flux:card class="p-0 overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead>
-                <tr class="border-b border-zinc-200 text-left dark:border-zinc-700">
-                    <th class="px-4 py-3 font-medium tabular-nums">{{ __('Mat') }}</th>
-                    <th class="px-4 py-3 font-medium">{{ __('Name') }}</th>
-                    <th class="px-4 py-3 font-medium">{{ __('Scoreboard') }}</th>
-                    <th class="px-4 py-3 font-medium tabular-nums">{{ __('Bouts') }}</th>
-                    <th class="px-4 py-3 font-medium">{{ __('Status') }}</th>
-                    <th class="px-4 py-3"></th>
-                </tr>
-            </thead>
-            <tbody>
-                @forelse ($courts as $court)
-                    <tr class="border-b border-zinc-100 last:border-0 dark:border-zinc-800" wire:key="court-{{ $court->id }}">
-                        <td class="px-4 py-3 tabular-nums font-medium">{{ $court->number }}</td>
-                        <td class="px-4 py-3">{{ $court->name ?: '—' }}</td>
-                        <td class="px-4 py-3 font-mono text-xs">{{ $court->scoreboard_base_url ?: '—' }}</td>
-                        <td class="px-4 py-3 tabular-nums">{{ $court->bouts_count }}</td>
-                        <td class="px-4 py-3">
-                            <flux:badge size="sm" :color="$court->is_active ? 'green' : 'zinc'">
-                                {{ $court->is_active ? __('Active') : __('Inactive') }}
-                            </flux:badge>
-                        </td>
-                        <td class="px-4 py-3 text-right">
-                            <div class="flex justify-end gap-2">
-                                {{-- Available to viewers too: the mat screen is
-                                     read-only for anyone without the gate, and it
-                                     is the clearest live view of a contest. --}}
-                                <flux:button size="sm" variant="primary" :href="route('mats.live', $court)" wire:navigate>
-                                    {{ __('Open mat') }}
-                                </flux:button>
-
-                                <flux:button size="sm" icon="tv" :href="route('display.scoreboard', $court)" target="_blank">
-                                    {{ __('Scoreboard') }}
-                                </flux:button>
-                            </div>
-
-                            @can('manage-competition')
-                                <div class="mt-2 flex justify-end gap-2">
-                                    <flux:button size="sm" variant="ghost" wire:click="testConnection({{ $court->id }})">{{ __('Test') }}</flux:button>
-                                    <flux:button size="sm" variant="ghost" wire:click="toggleActive({{ $court->id }})">
-                                        {{ $court->is_active ? __('Deactivate') : __('Activate') }}
+    <x-ui.card flush>
+        <div class="overflow-x-auto">
+            <table class="t">
+                <thead>
+                    <tr>
+                        <th class="num">{{ __('Mat') }}</th>
+                        <th>{{ __('Name') }}</th>
+                        <th>{{ __('Scoreboard') }}</th>
+                        <th class="num">{{ __('Bouts') }}</th>
+                        <th>{{ __('Status') }}</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse ($courts as $court)
+                        <tr wire:key="court-{{ $court->id }}">
+                            <td class="num font-bold">{{ $court->number }}</td>
+                            <td>{{ $court->name ?: '—' }}</td>
+                            <td class="font-mono text-xs text-ink/55">{{ $court->scoreboard_base_url ?: '—' }}</td>
+                            <td class="num">{{ $court->bouts_count }}</td>
+                            <td>
+                                <x-ui.tag :variant="$court->is_active ? 'brand' : 'muted'">
+                                    {{ $court->is_active ? __('Active') : __('Inactive') }}
+                                </x-ui.tag>
+                            </td>
+                            <td>
+                                <div class="flex flex-wrap justify-end gap-2">
+                                    {{-- Available to viewers too: the mat screen is
+                                         read-only for anyone without the gate, and it
+                                         is the clearest live view of a contest. --}}
+                                    <flux:button size="sm" variant="primary" :href="route('mats.live', $court)" wire:navigate>
+                                        {{ __('Open mat') }}
                                     </flux:button>
-                                    <flux:button size="sm" variant="ghost" wire:click="edit({{ $court->id }})">{{ __('Edit') }}</flux:button>
-                                    <flux:button size="sm" variant="danger" wire:click="delete({{ $court->id }})" wire:confirm="{{ __('Delete this mat?') }}">
-                                        {{ __('Delete') }}
+
+                                    <flux:button size="sm" icon="tv" :href="route('display.scoreboard', $court)" target="_blank">
+                                        {{ __('Scoreboard') }}
                                     </flux:button>
                                 </div>
-                            @endcan
-                        </td>
-                    </tr>
-                @empty
-                    <tr><td colspan="6" class="px-4 py-8 text-center text-zinc-500">{{ __('No mats configured yet.') }}</td></tr>
-                @endforelse
-            </tbody>
-        </table>
-    </flux:card>
-</div>
+
+                                @can('manage-competition')
+                                    <div class="mt-2 flex flex-wrap justify-end gap-2">
+                                        <flux:button size="xs" variant="ghost" wire:click="testConnection({{ $court->id }})">{{ __('Test') }}</flux:button>
+                                        <flux:button size="xs" variant="ghost" wire:click="toggleActive({{ $court->id }})">
+                                            {{ $court->is_active ? __('Deactivate') : __('Activate') }}
+                                        </flux:button>
+                                        <flux:button size="xs" variant="ghost" wire:click="edit({{ $court->id }})">{{ __('Edit') }}</flux:button>
+                                        <flux:button size="xs" variant="danger" wire:click="delete({{ $court->id }})" wire:confirm="{{ __('Delete this mat?') }}">
+                                            {{ __('Delete') }}
+                                        </flux:button>
+                                    </div>
+                                @endcan
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-ink/55">{{ __('No mats configured yet.') }}</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </x-ui.card>
+</x-page>
