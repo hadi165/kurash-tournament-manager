@@ -1,6 +1,15 @@
+@php
+    // The three figures describe the list on screen, so they follow the class
+    // filter rather than reporting the whole category behind it.
+    $weighed = $athletes->whereNotNull('weighin_kg')->count();
+    $passed = $athletes->where('weighin_status', 'pass')->count();
+    $failed = $weighed - $passed;
+@endphp
+
 <x-page
-    :kicker="$ageCategory->championship->title"
-    :title="__('Weigh-in Form')"
+    :kicker="$ageCategory->name"
+    kicker-variant="info"
+    :title="__('Weigh-in')"
     :subtitle="__('A 0.5 kg tolerance applies below an upper limit. Open classes have no upper bound.')"
     :breadcrumbs="[
         ['label' => __('Championships'), 'href' => route('championships.index')],
@@ -10,30 +19,32 @@
 >
     <x-competition.flash />
 
+    <x-ui.stats cards :items="[
+        ['value' => $weighed, 'label' => __('Weighed')],
+        ['value' => $passed, 'label' => __('Passed'), 'accent' => true],
+        ['value' => $failed, 'label' => __('Outside class'), 'danger' => true],
+    ]" />
+
     <x-ui.card flush>
-        <div class="flex flex-wrap items-end justify-between gap-3 px-6 pb-4 pt-5">
-            <div class="flex flex-col gap-1.5">
-                <label for="weigh-filter" class="kicker">{{ __('Weight class') }}</label>
-                <flux:select id="weigh-filter" wire:model.live="weightFilter" class="max-w-xs">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-7 pb-4 pt-5">
+            <div class="flex flex-wrap items-center gap-3">
+                <label for="weigh-filter" class="text-[12.5px] font-semibold text-muted">{{ __('Weight class') }}</label>
+                <flux:select id="weigh-filter" wire:model.live="weightFilter" size="sm" class="w-[200px]">
                     <flux:select.option value="">{{ __('All classes') }}</flux:select.option>
                     @foreach ($weightCategories as $weightCategory)
-                        <flux:select.option value="{{ $weightCategory->id }}">{{ $weightCategory->label }} kg</flux:select.option>
+                        <flux:select.option value="{{ $weightCategory->id }}">{{ $weightCategory->label }} {{ __('kg') }}</flux:select.option>
                     @endforeach
                 </flux:select>
             </div>
 
             @if ($weightFilter)
-                <div class="flex items-center gap-2">
-                    <span class="kicker text-ink/55">{{ __('Confirmed list') }}</span>
-                    <a href="{{ route('exports.weigh-in', ['weightCategory' => $weightFilter, 'format' => 'pdf']) }}"
-                       class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('PDF') }}</a>
-                    <a href="{{ route('exports.weigh-in', ['weightCategory' => $weightFilter, 'format' => 'csv']) }}"
-                       class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Excel') }}</a>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span class="text-[12.5px] text-muted">{{ __('Confirmed list') }}</span>
+                    <x-ui.chip :href="route('exports.weigh-in', ['weightCategory' => $weightFilter, 'format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
+                    <x-ui.chip :href="route('exports.weigh-in', ['weightCategory' => $weightFilter, 'format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
                 </div>
             @endif
         </div>
-
-        <div class="rule-2"></div>
 
         <div class="overflow-x-auto">
             <table class="t">
@@ -50,9 +61,16 @@
                 <tbody>
                     @forelse ($athletes as $athlete)
                         <tr wire:key="weighin-{{ $athlete->id }}">
-                            <td class="font-mono text-xs">{{ $athlete->ika_id }}</td>
-                            <td class="font-bold">{{ $athlete->fullname }}</td>
-                            <td><x-flag :noc="$athlete->noc_code" :name="$athlete->noc_name" show-code /></td>
+                            <td class="font-mono text-xs text-muted">{{ $athlete->ika_id }}</td>
+                            <td class="font-semibold">{{ $athlete->fullname }}</td>
+                            <td>
+                                <span class="inline-flex items-center gap-2">
+                                    <x-flag :noc="$athlete->noc_code" :name="$athlete->noc_name" />
+                                    <span class="rounded-sm border border-line bg-ground px-2 py-0.5 font-mono text-[11.5px]">
+                                        {{ \App\Support\Noc::normalise($athlete->noc_code) }}
+                                    </span>
+                                </span>
+                            </td>
                             <td>{{ $athlete->weightCategory?->label ?? '—' }}</td>
                             <td>
                                 @can('manage-competition')
@@ -62,10 +80,10 @@
                                             type="number"
                                             step="0.01"
                                             min="0"
-                                            class="w-28"
                                             size="sm"
+                                            class="w-24"
                                         />
-                                        <flux:button size="sm" wire:click="record({{ $athlete->id }})">{{ __('Save') }}</flux:button>
+                                        <x-ui.chip wire:click="record({{ $athlete->id }})">{{ __('Save') }}</x-ui.chip>
                                     </div>
                                 @else
                                     <span class="tabular-nums">{{ $athlete->weighin_kg ?? '—' }}</span>
@@ -73,9 +91,9 @@
                             </td>
                             <td>
                                 @if ($athlete->weighin_kg === null)
-                                    <x-ui.tag variant="outline">{{ __('Not weighed') }}</x-ui.tag>
+                                    <x-ui.tag>{{ __('Not weighed') }}</x-ui.tag>
                                 @elseif ($athlete->weighin_status === 'pass')
-                                    <x-ui.tag variant="brand">{{ __('Passed') }}</x-ui.tag>
+                                    <x-ui.tag variant="brand">{{ $athlete->weighin_kg }} {{ __('kg') }}</x-ui.tag>
                                 @else
                                     <x-ui.tag variant="danger">{{ __('Outside class') }}</x-ui.tag>
                                 @endif
@@ -83,7 +101,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="py-8 text-center text-ink/55">{{ __('No athletes to weigh in.') }}</td>
+                            <td colspan="6" class="py-8 text-center text-muted">{{ __('No athletes to weigh in.') }}</td>
                         </tr>
                     @endforelse
                 </tbody>

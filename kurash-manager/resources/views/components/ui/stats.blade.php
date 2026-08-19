@@ -1,5 +1,5 @@
 @props([
-    // list<array{value:string|int, label:string, accent?:bool}>
+    // list<array{value:string|int, label:string, accent?:bool, danger?:bool}>
     'items' => [],
     // How the figures sit on the page:
     //   default — a row of tiles inset into the card that holds them
@@ -34,6 +34,7 @@
                 $figure,
                 'font-bold leading-none tabular-nums',
                 'text-brand' => $item['accent'] ?? false,
+                'text-danger' => $item['danger'] ?? false,
             ])>{{ $item['value'] }}</div>
 
             <div class="mt-1 text-[12.5px] text-muted">{{ $item['label'] }}</div>
