@@ -1,25 +1,28 @@
 @props([
     // list<array{value:string|int, label:string, accent?:bool}>
     'items' => [],
-    'bordered' => false,   // draw the outer border too, for a standalone strip
+    'cards' => false,   // each figure in its own card, rather than tiles in one
 ])
 
-{{-- The stat strip: equal cells on a neutral ground with 1px gaps, so the
-     gutters read as rules and the row shows the modular grid rather than
-     floating boxes. --}}
+{{-- Stat tiles: the page ground inset into a card, so the figures read as part
+     of the card that holds them rather than as boxes of their own. --}}
 <div {{ $attributes->class([
-    'grid gap-px bg-n-300',
-    'border border-n-300' => $bordered,
-    '[grid-template-columns:repeat(auto-fit,minmax(140px,1fr))]',
+    'gap-3',
+    'grid [grid-template-columns:repeat(auto-fit,minmax(150px,1fr))]' => $cards,
+    'flex flex-wrap' => ! $cards,
 ]) }}>
     @foreach ($items as $item)
-        <div class="bg-surface px-5 py-4">
+        <div @class([
+            'min-w-[112px] rounded-md px-4 py-3.5',
+            'bg-surface shadow-card' => $cards,
+            'bg-ground' => ! $cards,
+        ])>
             <div @class([
-                'text-[30px] font-bold leading-none tabular-nums',
-                'text-brand-600 dark:text-brand-400' => $item['accent'] ?? false,
+                'text-[28px] font-bold leading-none tabular-nums',
+                'text-brand' => $item['accent'] ?? false,
             ])>{{ $item['value'] }}</div>
 
-            <div class="kicker mt-1.5 text-ink/55">{{ $item['label'] }}</div>
+            <div class="mt-1 text-xs text-muted">{{ $item['label'] }}</div>
         </div>
     @endforeach
 </div>

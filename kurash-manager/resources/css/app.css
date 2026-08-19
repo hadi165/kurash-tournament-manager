@@ -239,6 +239,7 @@
     --radius-2xl: 20px;
     --radius-3xl: 24px;
     --radius-4xl: 28px;
+    --radius-pill: 999px;
 
     /* Flux reads these for primary buttons, focus rings and selection. */
     --color-accent: #019a44;
@@ -371,6 +372,31 @@
         text-align: right;
         font-variant-numeric: tabular-nums;
     }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Flux, re-shaped.
+
+   These rules sit outside every @layer on purpose: unlayered declarations beat
+   layered ones, which is what lets them win against the utility classes Flux
+   puts on its own markup. Overriding the components here rather than at each
+   call site is what keeps a Flux button and a hand-written one the same
+   object.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Anything you press is a pill, at weight 600. */
+[data-flux-button] {
+    border-radius: var(--radius-pill);
+    font-weight: 600;
+}
+
+/* Anything you type into is an inset: the page ground on a white card, a 1px
+   line, and the small radius. */
+input[data-flux-control],
+textarea[data-flux-control],
+select[data-flux-control] {
+    border-radius: var(--radius-sm);
+    background-color: var(--ground);
 }
 
 [data-flux-field]:not(ui-radio, ui-checkbox) {
