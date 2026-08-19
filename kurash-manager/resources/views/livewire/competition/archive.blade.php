@@ -1,21 +1,18 @@
 <x-page
-    :kicker="config('branding.organisation')"
     :title="__('Archive')"
     :subtitle="__('Closed competitions and the reports that came out of them. An archived championship stops accepting changes.')"
 >
     <x-competition.flash />
 
     @if ($closable->isNotEmpty())
-        <x-ui.card :title="__('Ready to close')" :subtitle="__('Competitions that have been fought but are still open for editing.')" flush>
-            <div class="rule-2"></div>
-
-            <div class="flex flex-col">
+        <x-ui.card :title="__('Ready to close')" :subtitle="__('Competitions that have been fought but are still open for editing.')">
+            <div class="flex flex-col gap-2.5">
                 @foreach ($closable as $championship)
-                    <div class="flex flex-wrap items-center gap-3.5 border-b border-ink/12 px-6 py-4 last:border-b-0"
+                    <div class="flex flex-wrap items-center gap-3.5 rounded-md border border-line bg-ground px-[18px] py-3.5"
                          wire:key="closable-{{ $championship->id }}">
                         <div class="min-w-0">
-                            <div class="font-bold">{{ $championship->title }}</div>
-                            <div class="text-xs text-ink/55">
+                            <div class="text-[14.5px] font-semibold">{{ $championship->title }}</div>
+                            <div class="mt-0.5 text-[12.5px] text-muted">
                                 {{ $championship->location ?: __('Location not set') }}
                                 @if ($championship->starts_on)
                                     · {{ $championship->starts_on->format('j M Y') }}
@@ -48,11 +45,11 @@
     @endif
 
     @forelse ($archived as $championship)
-        <x-ui.card flush wire:key="archived-{{ $championship->id }}">
-            <div class="flex flex-wrap items-start justify-between gap-3.5 px-6 pb-4 pt-5">
+        <x-ui.card wire:key="archived-{{ $championship->id }}">
+            <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                    <h3 class="m-0 text-2xl">{{ $championship->title }}</h3>
-                    <p class="mt-1 text-[13px] text-ink/55">
+                    <h2 class="m-0 text-xl">{{ $championship->title }}</h2>
+                    <p class="mt-1.5 text-[13.5px] text-muted">
                         {{ $championship->location ?: __('Location not set') }}
                         @if ($championship->starts_on)
                             · {{ $championship->starts_on->format('j M Y') }}
@@ -61,20 +58,19 @@
                     </p>
                 </div>
 
-                <x-ui.tag variant="muted">
-                    {{ __('Archived :date', ['date' => $championship->archived_at?->format('j M Y')]) }}
-                </x-ui.tag>
+                <x-ui.tag>{{ __('Archived :date', ['date' => $championship->archived_at?->format('j M Y')]) }}</x-ui.tag>
             </div>
 
             @if (($top = $standings[$championship->id] ?? collect())->isNotEmpty())
-                <div class="rule-2"></div>
-
-                <div class="flex flex-wrap gap-6 px-6 py-4">
+                {{-- The top of the table as chips rather than as a table: three
+                     lines of medals is a summary, and a summary should not need
+                     column headings. --}}
+                <div class="mt-[18px] flex flex-wrap gap-2.5">
                     @foreach ($top as $i => $row)
-                        <div class="flex items-center gap-2 text-sm">
-                            <span class="font-mono text-xs text-ink/55">{{ $i + 1 }}</span>
+                        <div class="flex items-center gap-2 rounded-full border border-line bg-ground px-3.5 py-1.5 text-[13px]">
+                            <span class="font-semibold text-muted">{{ $i + 1 }}</span>
                             <x-flag :noc="$row['noc_code']" show-code />
-                            <span class="tabular-nums text-ink/55">
+                            <span class="tabular-nums text-muted">
                                 {{ $row['gold'] }}–{{ $row['silver'] }}–{{ $row['bronze'] }}
                             </span>
                         </div>
@@ -82,36 +78,31 @@
                 </div>
             @endif
 
-            <div class="rule-2"></div>
-
-            <div class="flex flex-wrap items-center gap-2 px-6 py-4">
+            <div class="mt-[18px] flex flex-wrap gap-2">
                 @foreach ([
                     ['route' => 'exports.results', 'label' => __('Results')],
                     ['route' => 'exports.medals', 'label' => __('Medal standing')],
                     ['route' => 'exports.fight-order', 'label' => __('Fight order')],
                     ['route' => 'exports.entries-noc', 'label' => __('Entries by NOC')],
                 ] as $export)
-                    <a href="{{ route($export['route'], ['championship' => $championship, 'format' => 'pdf']) }}"
-                       class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">
+                    <x-ui.chip :href="route($export['route'], ['championship' => $championship, 'format' => 'pdf'])">
                         {{ $export['label'] }} · PDF
-                    </a>
+                    </x-ui.chip>
                 @endforeach
 
-                <flux:button size="xs" variant="ghost" :href="route('medals.index', $championship)" wire:navigate>
+                <x-ui.chip :href="route('medals.index', $championship)" wire:navigate>
                     {{ __('Open medal table') }}
-                </flux:button>
+                </x-ui.chip>
             </div>
 
             @if ($championship->events->isNotEmpty())
-                <div class="rule-2"></div>
-
-                {{-- The event log is set in mono: it is a record to be read line
-                     by line, not prose. --}}
-                <div class="flex flex-col gap-1 px-6 py-4 font-mono text-[11px] text-ink/55">
+                {{-- The event log is what a protest is settled from, so it stays
+                     on the card — quiet, under a hairline, but present. --}}
+                <div class="mt-[18px] flex flex-col gap-1.5 border-t border-line-soft pt-4">
                     @foreach ($championship->events as $event)
-                        <div>
-                            <span>{{ $event->created_at?->format('j M Y H:i') }}</span>
-                            · <span class="uppercase">{{ $event->action }}</span>
+                        <div class="text-[12.5px] text-muted">
+                            <span class="tabular-nums">{{ $event->created_at?->format('j M Y H:i') }}</span>
+                            · {{ $event->action }}
                             {{ __('by') }} {{ $event->user?->name ?? __('system') }}
                             @if ($event->note)
                                 — {{ $event->note }}
@@ -122,30 +113,28 @@
             @endif
 
             @can('manage-competition')
-                <div class="rule-2"></div>
-
-                <div class="px-6 py-4">
+                <div class="mt-4">
                     @if ($confirmingReopen === $championship->id)
-                        <div class="flex flex-col gap-3 border border-danger-200 bg-danger-100/60 p-4 dark:bg-danger-500/10">
-                            <span class="text-sm">
+                        <div class="flex flex-col gap-3 rounded-md bg-danger-soft px-[18px] py-4">
+                            <span class="text-[13.5px] text-danger dark:text-danger-200">
                                 {{ __('Reopening lets results be changed after the medals were given out. The reason goes on the record.') }}
                             </span>
 
-                            <div class="flex flex-col gap-1.5">
-                                <label for="reopen-{{ $championship->id }}" class="kicker">{{ __('Reason') }}</label>
+                            <div class="flex flex-col gap-[7px]">
+                                <label for="reopen-{{ $championship->id }}" class="text-[12.5px] font-semibold text-muted">{{ __('Reason') }}</label>
                                 <flux:input id="reopen-{{ $championship->id }}" wire:model="reopenReason"
                                             :placeholder="__('e.g. transcription error in the -73 kg final')" />
                             </div>
 
                             <div class="flex gap-2">
-                                <flux:button size="xs" variant="danger" wire:click="reopen({{ $championship->id }})">
+                                <flux:button size="sm" variant="danger" wire:click="reopen({{ $championship->id }})">
                                     {{ __('Reopen') }}
                                 </flux:button>
-                                <flux:button size="xs" variant="ghost" wire:click="cancelReopen">{{ __('Cancel') }}</flux:button>
+                                <flux:button size="sm" variant="ghost" wire:click="cancelReopen">{{ __('Cancel') }}</flux:button>
                             </div>
                         </div>
                     @else
-                        <flux:button size="xs" variant="ghost" wire:click="confirmReopen({{ $championship->id }})">
+                        <flux:button size="sm" variant="ghost" wire:click="confirmReopen({{ $championship->id }})">
                             {{ __('Reopen') }}
                         </flux:button>
                     @endif
@@ -153,9 +142,9 @@
             @endcan
         </x-ui.card>
     @empty
-        <x-ui.card class="px-6 py-10 text-center">
-            <h3 class="m-0 text-2xl">{{ __('Nothing archived yet') }}</h3>
-            <p class="mt-2 text-[13px] text-ink/55">
+        <x-ui.card class="py-10 text-center">
+            <h2 class="m-0 text-2xl">{{ __('Nothing archived yet') }}</h2>
+            <p class="mt-2 text-[13.5px] text-muted">
                 {{ __('A championship appears here once every contest is decided and it has been closed.') }}
             </p>
         </x-ui.card>
