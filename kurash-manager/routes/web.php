@@ -5,6 +5,7 @@ use App\Http\Controllers\ExportController;
 use App\Http\Middleware\AllowPublicDisplay;
 use App\Livewire\Competition\Archive;
 use App\Livewire\Competition\Bracket;
+use App\Livewire\Competition\Brackets;
 use App\Livewire\Competition\Categories;
 use App\Livewire\Competition\Championships;
 use App\Livewire\Competition\Courts;
@@ -114,6 +115,7 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('championships/{championship}/medals', Medals::class)->name('medals.index');
     Route::get('championships/{championship}/mats', Courts::class)->name('courts.index');
     Route::get('mats/{court}/live', MatControl::class)->name('mats.live');
+    Route::get('championships/{championship}/brackets', Brackets::class)->name('brackets.index');
     Route::get('championships/{championship}/fight-order', FightOrder::class)->name('fight-order.index');
 
     Route::get('categories/{ageCategory}/athletes', Registration::class)->name('athletes.index');
@@ -131,6 +133,13 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     // Laid-out documents rather than tables, so they are PDF only and sit
     // outside the format-constrained group below.
     Route::prefix('exports')->name('exports.')->group(function () {
+        // The draw sheet is a tree rather than a table, and comes as a
+        // spreadsheet rather than as CSV — a bracket cannot be expressed in
+        // comma-separated rows at all.
+        Route::get('weight-classes/{weightCategory}/bracket.{format}', [ExportController::class, 'bracketSheet'])
+            ->where(['format' => 'pdf|xlsx'])
+            ->name('bracket-sheet');
+
         Route::get('championships/{championship}/certificates.pdf', [ExportController::class, 'certificates'])->name('certificates');
         Route::get('weight-classes/{weightCategory}/certificates.pdf', [ExportController::class, 'categoryCertificates'])->name('certificates.category');
 

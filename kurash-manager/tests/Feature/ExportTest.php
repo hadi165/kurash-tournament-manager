@@ -1,5 +1,7 @@
 <?php
 
+use App\Exports\BracketSheet;
+use App\Exports\BracketSheetWriter;
 use App\Exports\ConfirmedWeighInReport;
 use App\Exports\DocumentReference;
 use App\Exports\DrawNumbersReport;
@@ -19,6 +21,8 @@ use App\Services\BoutAdvancer;
 use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
 use App\Services\MedalTable;
+use App\Support\BracketSeeding;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 beforeEach(function () {
     $this->admin = User::factory()->create(['role' => 'admin']);
@@ -471,5 +475,96 @@ describe('the draw numbers', function () {
         app(BracketGenerator::class)->generate($category);
 
         expect((new DrawNumbersReport($category->refresh()))->meta()['Bracket'])->toBe('Bracket of 8');
+    });
+});
+
+describe('the bracket sheet', function () {
+    beforeEach(fn () => $this->actingAs($this->admin));
+
+    it('seats the tree in the order the draw seeded it', function () {
+        $category = weighedClass(8);
+        app(BracketGenerator::class)->generate($category);
+
+        $sheet = new BracketSheet($category->refresh());
+
+        expect($sheet->size())->toBe(8)
+            ->and($sheet->rounds())->toBe(3)
+            ->and(array_column($sheet->seats(), 'seed'))->toBe(BracketSeeding::order(8))
+            // The upper seat of every pair is blue, the lower green.
+            ->and(array_column($sheet->seats(), 'corner'))->toBe(['blue', 'green', 'blue', 'green', 'blue', 'green', 'blue', 'green']);
+    });
+
+    it('puts a square on every match, with its fight number', function () {
+        $championship = championshipWithBrackets(['-66' => 8]);
+        app(FightOrderScheduler::class)->schedule($championship);
+
+        $category = $championship->ageCategories()->first()->weightCategories()->first();
+        $sheet = new BracketSheet($category->refresh());
+
+        expect($sheet->matches(1))->toHaveCount(4)
+            ->and($sheet->matches(2))->toHaveCount(2)
+            ->and($sheet->matches(3))->toHaveCount(1)
+            // Each spans the rows it feeds from: 2, 4, 8.
+            ->and(array_column($sheet->matches(2), 'span'))->toBe([4, 4])
+            ->and($sheet->matches(1)[0]['fight'])->toStartWith('No. ');
+    });
+
+    it('marks the empty seats as byes rather than inventing people', function () {
+        $category = weighedClass(5);
+        app(BracketGenerator::class)->generate($category);
+
+        $seats = (new BracketSheet($category->refresh()))->seats();
+
+        expect(collect($seats)->where('bye', true))->toHaveCount(3)
+            ->and(collect($seats)->firstWhere('bye', true)['name'])->toBe('BYE');
+    });
+
+    it('downloads as a PDF and as a spreadsheet', function () {
+        $category = weighedClass(8);
+        app(BracketGenerator::class)->generate($category);
+
+        $this->get(route('exports.bracket-sheet', ['weightCategory' => $category, 'format' => 'pdf']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $this->get(route('exports.bracket-sheet', ['weightCategory' => $category, 'format' => 'xlsx']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    });
+
+    it('has nothing to draw before the draw is made', function () {
+        $category = weighedClass(8);
+
+        $this->get(route('exports.bracket-sheet', ['weightCategory' => $category, 'format' => 'pdf']))
+            ->assertNotFound();
+    });
+
+    /** The fight number goes in the square, which on a worksheet is a merged range. */
+    it('writes each fight number into the cell that spans its match', function () {
+        $championship = championshipWithBrackets(['-66' => 8]);
+        app(FightOrderScheduler::class)->schedule($championship);
+
+        $category = $championship->ageCategories()->first()->weightCategories()->first();
+
+        $path = tempnam(sys_get_temp_dir(), 'bracket').'.xlsx';
+        $response = app(BracketSheetWriter::class)->xlsx(new BracketSheet($category->refresh()));
+
+        ob_start();
+        $response->sendContent();
+        file_put_contents($path, ob_get_clean());
+
+        $book = IOFactory::load($path);
+        $page = $book->getActiveSheet();
+
+        // Four first-round matches, two quarters, one final, plus the champion.
+        expect($page->getMergeCells())->toHaveCount(8);
+
+        $numbers = collect($page->getMergeCells())
+            ->map(fn (string $range) => (string) $page->getCell(explode(':', $range)[0])->getValue())
+            ->filter(fn (string $value) => str_starts_with($value, 'No. '));
+
+        expect($numbers)->toHaveCount(7);
+
+        unlink($path);
     });
 });

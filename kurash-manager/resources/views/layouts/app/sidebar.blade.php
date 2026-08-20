@@ -124,6 +124,10 @@
                         {{ __('Entries and Draw') }}
                     </x-nav-item>
 
+                    <x-nav-item :href="route('brackets.index', $current)" :active="request()->routeIs('brackets.*')">
+                        {{ __('Bracket') }}
+                    </x-nav-item>
+
                     <x-nav-item :href="route('fight-order.index', $current)" :active="request()->routeIs('fight-order.*')">
                         {{ __('Fight Order') }}
                     </x-nav-item>

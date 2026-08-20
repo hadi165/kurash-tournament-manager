@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Exports\AccreditationCards;
+use App\Exports\BracketSheet;
+use App\Exports\BracketSheetWriter;
 use App\Exports\CertificateSheet;
 use App\Exports\ConfirmedWeighInReport;
 use App\Exports\CsvWriter;
@@ -22,6 +24,7 @@ use App\Models\Championship;
 use App\Models\WeightCategory;
 use App\Services\MedalTable;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Every table the planning specification asks to be printable or downloadable.
@@ -96,6 +99,29 @@ class ExportController extends Controller
     public function drawNumbers(WeightCategory $weightCategory, string $format): Response
     {
         return $this->render(new DrawNumbersReport($weightCategory->load('ageCategory.championship')), $format);
+    }
+
+    /**
+     * The bracket as a tree, in both formats.
+     *
+     * Outside render(): a tree is not a table of rows, so it has its own
+     * writer rather than being forced through the tabular one.
+     */
+    public function bracketSheet(WeightCategory $weightCategory, string $format): Response|StreamedResponse
+    {
+        $sheet = new BracketSheet($weightCategory->load('ageCategory.championship'));
+
+        // Drawable is not drawn: a class whose athletes hold numbers but whose
+        // bracket has never been generated has no tree to print.
+        abort_unless(
+            $weightCategory->hasDraw() && $sheet->size() >= 2,
+            404,
+            __('This weight class has not been drawn yet.'),
+        );
+
+        $writer = app(BracketSheetWriter::class);
+
+        return $format === 'xlsx' ? $writer->xlsx($sheet) : $writer->pdf($sheet);
     }
 
     public function drawSheet(WeightCategory $weightCategory, string $format): Response
