@@ -160,8 +160,9 @@
 .dc-seat {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 12px;
-    min-width: 260px;
+    min-width: 0;
     padding: 10px 14px;
     border-radius: var(--dc-radius-sm);
     background: var(--dc-panel);
@@ -181,11 +182,16 @@
     min-width: 22px;
 }
 
+/* The seats size themselves to the column rather than holding a 260px floor:
+   on a phone the overlay is the whole screen, and a floor wider than it means
+   seven of the eight pairs are laid out where nobody can see them. */
 .dc-pairs {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(260px, max-content));
+    grid-template-columns: repeat(auto-fit, minmax(130px, 240px));
     justify-content: center;
     gap: 10px;
+    width: 100%;
+    max-width: 860px;
 }
 
 /* ── Failure ────────────────────────────────────────────────────────────── */
