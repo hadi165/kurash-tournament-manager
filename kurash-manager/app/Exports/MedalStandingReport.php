@@ -12,7 +12,7 @@ use App\Support\Noc;
  * Ranked the way standings always are: gold first, then silver, then bronze,
  * so a country with one gold finishes above a country with three bronzes.
  */
-class MedalStandingReport implements Report
+class MedalStandingReport implements HasTotal, Report
 {
     public function __construct(
         private readonly Championship $championship,
@@ -42,7 +42,16 @@ class MedalStandingReport implements Report
         return ['Rank', 'NOC', 'Gold', 'Silver', 'Bronze', 'Total'];
     }
 
+    /** @var list<list<string|int|float|null>>|null */
+    private ?array $memo = null;
+
     public function rows(): array
+    {
+        return $this->memo ??= $this->build();
+    }
+
+    /** @return list<list<string|int|float|null>> */
+    private function build(): array
     {
         $rows = [];
         $rank = 0;
@@ -62,5 +71,13 @@ class MedalStandingReport implements Report
         }
 
         return $rows;
+    }
+
+    public function total(): array
+    {
+        return [
+            'label' => 'Medals awarded',
+            'value' => array_sum(array_map(fn (array $row) => (int) $row[5], $this->rows())),
+        ];
     }
 }

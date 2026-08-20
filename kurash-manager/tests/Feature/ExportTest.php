@@ -1,10 +1,13 @@
 <?php
 
 use App\Exports\ConfirmedWeighInReport;
+use App\Exports\DocumentReference;
 use App\Exports\DrawSheetReport;
 use App\Exports\EntriesByWeightCategoryReport;
 use App\Exports\FightOrderReport;
+use App\Exports\HasTotal;
 use App\Exports\MedalStandingReport;
+use App\Exports\Report;
 use App\Exports\ResultsReport;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
@@ -321,5 +324,89 @@ describe('serving the files', function () {
         $this->actingAs($this->admin)
             ->get("/exports/weight-classes/{$category->id}/weigh-in.xlsx")
             ->assertNotFound();
+    });
+});
+
+describe('the printed sheet', function () {
+    beforeEach(fn () => $this->actingAs($this->admin));
+
+    /** Rendered as HTML rather than as a PDF: the template is what is on trial. */
+    function renderedSheet(Report $report): string
+    {
+        return view('exports.table', [
+            'title' => $report->title(),
+            'meta' => $report->meta(),
+            'headings' => $report->headings(),
+            'rows' => $report->rows(),
+            'documentTag' => DocumentReference::tag($report),
+            'documentReference' => DocumentReference::reference($report),
+            'total' => $report instanceof HasTotal ? $report->total() : null,
+            'footerLine' => $report->meta()['Competition'] ?? null,
+        ])->render();
+    }
+
+    it('carries a document type and a filing reference', function () {
+        $category = weighedClass(4);
+        $championship = $category->ageCategory->championship;
+
+        $html = renderedSheet(new EntriesByWeightCategoryReport($championship));
+
+        expect($html)->toContain('Entries by Weight Category')
+            ->and($html)->toContain('IKA-ENT-'.now()->format('Y'));
+    });
+
+    /**
+     * The reference is cited in correspondence weeks later, so the same
+     * document has to keep producing the same one.
+     */
+    it('gives the same document the same reference every time', function () {
+        $category = weighedClass(4);
+        $championship = $category->ageCategory->championship;
+
+        $first = DocumentReference::reference(new EntriesByWeightCategoryReport($championship));
+        $second = DocumentReference::reference(new EntriesByWeightCategoryReport($championship));
+
+        expect($first)->toBe($second);
+    });
+
+    it('sets draw status as a chip in the fixed vocabulary', function () {
+        $category = weighedClass(4);
+        $championship = $category->ageCategory->championship;
+
+        $html = renderedSheet(new EntriesByWeightCategoryReport($championship));
+
+        expect($html)->toContain('chip-status chip-idle');
+
+        app(BracketGenerator::class)->generate($category);
+
+        expect(renderedSheet(new EntriesByWeightCategoryReport($championship)))
+            ->toContain('chip-status chip-done');
+    });
+
+    it('totals the reports that have something to add up', function () {
+        $category = weighedClass(6);
+        $championship = $category->ageCategory->championship;
+
+        $report = new EntriesByWeightCategoryReport($championship);
+
+        expect($report->total())->toBe(['label' => 'Total weighed in', 'value' => 6])
+            ->and(renderedSheet($report))->toContain('Total weighed in');
+    });
+
+    /** A running order has nothing to sum, and a spurious total is worse than none. */
+    it('leaves the total off a report that has no meaningful sum', function () {
+        $category = weighedClass(4);
+        $championship = $category->ageCategory->championship;
+
+        expect(new FightOrderReport($championship))->not->toBeInstanceOf(HasTotal::class);
+    });
+
+    it('drops the total row when there is nothing to report', function () {
+        $championship = Championship::factory()->create();
+
+        expect(renderedSheet(new EntriesByWeightCategoryReport($championship)))
+            ->toContain('Nothing to report yet.')
+            ->and(renderedSheet(new EntriesByWeightCategoryReport($championship)))
+            ->not->toContain('Total weighed in');
     });
 });
