@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="kurash-soft.css">
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Championships" style="display:flex; min-height:100vh; background:var(--s-bg); color:var(--s-text); font-family:var(--s-font)">
+  <dc-import name="Sidebar v2" active="Championships" hint-size="264px,100%"></dc-import>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column; padding:16px 20px 40px 4px">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:4px 8px 18px">
+      <div style="font-size:13px; color:var(--s-muted); font-weight:500">Platform</div>
+      <button style="{{ ghostBtn }}" onClick="{{ toggleTheme }}" style-hover="background:var(--s-line-soft)">{{ themeBtnLabel }}</button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; padding:0 8px 20px">
+      <div>
+        <h1 style="font-size:30px; font-weight:700; letter-spacing:-0.02em; margin:0 0 6px">Championships</h1>
+        <p style="margin:0; color:var(--s-muted); font-size:14.5px">Define a tournament before adding categories, athletes or draws.</p>
+      </div>
+      <sc-if value="{{ formClosed }}" hint-placeholder-val="{{ true }}">
+        <button style="{{ primaryBtn }}" onClick="{{ openForm }}">+ New championship</button>
+      </sc-if>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; max-width:1180px">
+      <sc-if value="{{ formOpen }}" hint-placeholder-val="{{ false }}">
+        <section style="{{ card }}">
+          <div style="font-size:17px; font-weight:700; margin-bottom:18px">New championship</div>
+          <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:18px">
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Title</label>
+              <input style="{{ inputStyle }}" placeholder="Asian Kurash Championship 2026" value="{{ fTitle }}" onChange="{{ onTitle }}">
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Location</label>
+              <input style="{{ inputStyle }}" placeholder="Tashkent" value="{{ fLoc }}" onChange="{{ onLoc }}">
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Start date</label>
+              <input style="{{ inputStyle }}" type="date" value="{{ fDate }}" onChange="{{ onDate }}">
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:22px">
+            <button style="{{ primaryBtn }}" onClick="{{ create }}">Create championship</button>
+            <button style="{{ ghostBtn }}" onClick="{{ closeForm }}" style-hover="background:var(--s-line-soft)">Cancel</button>
+          </div>
+        </section>
+      </sc-if>
+      <section style="{{ tableCard }}">
+        <table style="width:100%; border-collapse:collapse">
+          <thead>
+            <tr><th style="{{ th }}">Title</th><th style="{{ th }}">Location</th><th style="{{ th }}">Starts</th><th style="{{ thR }}">Categories</th><th style="{{ thR }}">Athletes</th><th style="{{ thR }}"></th></tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ rows }}" as="c" hint-placeholder-count="2">
+              <tr style-hover="background:var(--s-line-soft)">
+                <td style="{{ td }}"><a href="{{ c.href }}" style="font-weight:600; text-decoration:none">{{ c.title }}</a></td>
+                <td style="{{ tdMuted }}">{{ c.location }}</td>
+                <td style="{{ tdMuted }}">{{ c.starts }}</td>
+                <td style="{{ tdR }}">{{ c.cats }}</td>
+                <td style="{{ tdR }}">{{ c.athletes }}</td>
+                <td style="{{ tdR }}">
+                  <div style="display:flex; justify-content:flex-end; gap:6px">
+                    <button style="{{ smallBtn }}" style-hover="background:var(--s-line-soft)">Edit</button>
+                    <button style="{{ dangerBtn }}" onClick="{{ c.onDelete }}" style-hover="background:var(--s-red-soft)">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;light&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = {
+    themeOverride: null, formOpen: false, fTitle: '', fLoc: '', fDate: '', nextId: 3,
+    champs: [
+      { id: 1, title: 'Asian Kurash Championship 2026', location: 'Tashkent', starts: '12 Sep 2026', cats: 2, athletes: 168, href: 'Categories v2.dc.html' },
+      { id: 2, title: 'Uzbekistan National Cup 2025', location: 'Samarkand', starts: '03 Nov 2025', cats: 4, athletes: 212, href: '#' },
+    ],
+  };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'light';
+    const btn = e => ({ borderRadius: 'var(--s-r-pill)', border: '1px solid transparent', cursor: 'pointer',
+      fontFamily: 'var(--s-font)', fontSize: '13.5px', fontWeight: 600, padding: '8px 16px', textDecoration: 'none',
+      display: 'inline-flex', alignItems: 'center', background: 'transparent', color: 'var(--s-text)', transition: 'all .15s', ...e });
+    const th = { textAlign: 'left', fontSize: '11.5px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em',
+      color: 'var(--s-muted)', padding: '12px 16px', borderBottom: '1px solid var(--s-line)' };
+    const td = { padding: '13px 16px', fontSize: '13.5px', borderBottom: '1px solid var(--s-line-soft)' };
+    const set = k => e => this.setState({ [k]: e.target.value });
+    return {
+      theme, themeBtnLabel: theme === 'dark' ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }),
+      card: { background: 'var(--s-surface)', borderRadius: 'var(--s-r-lg)', boxShadow: 'var(--s-sh-md)',
+        padding: '24px 28px', borderTop: '5px solid var(--s-green)' },
+      tableCard: { background: 'var(--s-surface)', borderRadius: 'var(--s-r-lg)', boxShadow: 'var(--s-sh-md)',
+        overflowX: 'auto', overflowY: 'hidden', borderTop: '5px solid var(--s-blue)' },
+      primaryBtn: btn({ background: 'var(--s-green)', color: '#fff', boxShadow: 'var(--s-sh-sm)' }),
+      ghostBtn: btn({}), dangerBtn: btn({ color: 'var(--s-red)', fontSize: '12.5px', padding: '6px 14px' }),
+      smallBtn: btn({ fontSize: '12.5px', padding: '6px 14px' }),
+      th, thR: { ...th, textAlign: 'right' }, td, tdR: { ...td, textAlign: 'right' },
+      tdMuted: { ...td, color: 'var(--s-muted)' },
+      labelStyle: { fontSize: '12.5px', fontWeight: 600, color: 'var(--s-muted)' },
+      inputStyle: { fontFamily: 'var(--s-font)', fontSize: '14px', padding: '10px 14px', borderRadius: 'var(--s-r-sm)',
+        border: '1px solid var(--s-line)', background: 'var(--s-bg)', color: 'var(--s-text)', width: '100%' },
+      formOpen: this.state.formOpen, formClosed: !this.state.formOpen,
+      openForm: () => this.setState({ formOpen: true }),
+      closeForm: () => this.setState({ formOpen: false }),
+      fTitle: this.state.fTitle, onTitle: set('fTitle'),
+      fLoc: this.state.fLoc, onLoc: set('fLoc'),
+      fDate: this.state.fDate, onDate: set('fDate'),
+      create: () => {
+        const t = this.state.fTitle.trim();
+        if (!t) return;
+        this.setState(s => ({ formOpen: false, fTitle: '', fLoc: '', fDate: '', nextId: s.nextId + 1,
+          champs: [...s.champs, { id: s.nextId, title: t, location: s.fLoc || '—', starts: s.fDate || '—', cats: 0, athletes: 0, href: '#' }] }));
+      },
+      rows: this.state.champs.map(c => ({ ...c,
+        onDelete: () => { if (window.confirm('Delete "' + c.title + '" and everything in it?')) this.setState(s => ({ champs: s.champs.filter(x => x.id !== c.id) })); } })),
+    };
+  }
+}
+</script>
+</body>
+</html>

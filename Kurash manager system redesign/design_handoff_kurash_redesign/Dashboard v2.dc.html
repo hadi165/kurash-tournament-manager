@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="kurash-soft.css">
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Dashboard" style="display:flex; min-height:100vh; background:var(--s-bg); color:var(--s-text); font-family:var(--s-font)">
+  <dc-import name="Sidebar v2" active="Dashboard" hint-size="264px,100%"></dc-import>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column; padding:16px 20px 40px 4px">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:4px 8px 18px">
+      <div style="font-size:13px; color:var(--s-muted); font-weight:500">Platform</div>
+      <button style="{{ ghostBtn }}" onClick="{{ toggleTheme }}" style-hover="background:var(--s-line-soft)">{{ themeBtnLabel }}</button>
+    </div>
+    <div style="padding:0 8px 20px">
+      <h1 style="font-size:30px; font-weight:700; letter-spacing:-0.02em; margin:0 0 6px">Dashboard</h1>
+      <p style="margin:0; color:var(--s-muted); font-size:14.5px">Where each competition stands, and what it is waiting on.</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; max-width:1180px">
+      <section style="{{ card }}">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:16px; flex-wrap:wrap">
+          <div>
+            <div style="display:flex; align-items:center; gap:10px">
+              <h3 style="font-size:20px; font-weight:700; margin:0"><a href="Categories v2.dc.html" style="color:var(--s-text); text-decoration:none" style-hover="color:var(--s-green)">Asian Kurash Championship 2026</a></h3>
+              <span style="{{ livePill }}"><span style="width:7px; height:7px; border-radius:999px; background:var(--s-green); margin-right:7px"></span>2 bouts on mats</span>
+            </div>
+            <div style="font-size:13.5px; color:var(--s-muted); margin-top:5px">Tashkent · 12 Sep 2026</div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <a href="Fight Order v2.dc.html" style="{{ softBtn }}" style-hover="background:var(--s-line-soft)">Fight order</a>
+            <a href="Medals v2.dc.html" style="{{ softBtn }}" style-hover="background:var(--s-line-soft)">Medals</a>
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-top:20px">
+          <sc-for list="{{ stats }}" as="s" hint-placeholder-count="5">
+            <div style="{{ s.cellStyle }}">
+              <div style="font-size:26px; font-weight:700; line-height:1">{{ s.value }}</div>
+              <div style="font-size:12.5px; color:var(--s-muted); margin-top:3px">{{ s.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin-top:20px">
+          <div style="display:flex; justify-content:space-between; font-size:13px; margin-bottom:7px">
+            <span style="color:var(--s-muted)">Bouts decided</span>
+            <span style="font-weight:600">98 / 156</span>
+          </div>
+          <div style="height:8px; border-radius:999px; background:var(--s-line); overflow:hidden">
+            <div style="height:8px; border-radius:999px; background:var(--s-green); width:63%"></div>
+          </div>
+        </div>
+        <div style="margin-top:20px; background:var(--s-blue-soft); border-radius:var(--s-r-md); padding:16px 18px">
+          <div style="font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--s-blue-deep); margin-bottom:10px">Next up</div>
+          <div style="display:flex; flex-direction:column; gap:10px">
+            <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
+              <span style="font-size:14px">Weigh-in is still open for Women Senior — 47 athletes to weigh.</span>
+              <a href="Weigh-in v2.dc.html" style="{{ smallBtn }}">Open weigh-in →</a>
+            </div>
+            <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap">
+              <span style="font-size:14px">The Men -90 kg bracket can be drawn — 14 athletes cleared.</span>
+              <a href="Entries v2.dc.html" style="{{ smallBtn }}">Open entries →</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;light&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { themeOverride: null };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'light';
+    const btn = e => ({ borderRadius: 'var(--s-r-pill)', border: '1px solid transparent', cursor: 'pointer',
+      fontFamily: 'var(--s-font)', fontSize: '13.5px', fontWeight: 600, padding: '8px 16px', textDecoration: 'none',
+      display: 'inline-flex', alignItems: 'center', background: 'transparent', color: 'var(--s-text)', transition: 'all .15s', ...e });
+    // One tint per metric, so the numbers separate at a glance.
+    const cell = color => ({ background: 'var(--s-bg)', borderRadius: 'var(--s-r-md)',
+      padding: '14px 16px', borderLeft: '4px solid ' + color });
+    return {
+      theme, themeBtnLabel: theme === 'dark' ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }),
+      card: { background: 'var(--s-surface)', borderRadius: 'var(--s-r-lg)', boxShadow: 'var(--s-sh-md)',
+        padding: '24px 28px', borderTop: '5px solid var(--s-green)' },
+      ghostBtn: btn({}), softBtn: btn({ border: '1px solid var(--s-line)', background: 'var(--s-surface)' }),
+      smallBtn: btn({ fontSize: '12.5px', padding: '6px 14px', background: 'var(--s-surface)', border: '1px solid var(--s-line)' }),
+      livePill: { display: 'inline-flex', alignItems: 'center', padding: '3px 11px', borderRadius: '999px',
+        fontSize: '12px', fontWeight: 600, background: 'var(--s-green-soft)', color: 'var(--s-green-deep)' },
+      stats: [['168','Athletes','var(--s-blue)'],['12','Weight classes','var(--s-amber)'],
+              ['121','Passed the scale','var(--s-green)'],['156','Bouts','var(--s-blue)'],
+              ['3','Mats','var(--s-muted)']]
+        .map(([value, label, color]) => ({ value, label, cellStyle: cell(color) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

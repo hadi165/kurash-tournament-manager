@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@600;700;900&display=swap">
+  <style>
+    html, body { margin: 0; }
+    a { color: #086690; } a:hover { color: #0c81b4; }
+    @keyframes sb-pulse { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
+  </style>
+</helmet>
+<div data-screen-label="Scoreboard" style="{{ rootStyle }}">
+
+  <header style="{{ headStyle }}">
+    <div style="display:flex; align-items:center; gap:24px; min-width:0">
+      <div style="{{ logoChipStyle }}"><img src="uploads/IKA.png" alt="IKA" style="width:60px; height:60px; object-fit:contain; display:block"></div>
+      <div style="min-width:0">
+        <div style="font-size:46px; font-weight:900; line-height:1; letter-spacing:-0.015em">{{ matLabel }}</div>
+        <div style="{{ headMetaStyle }}">{{ boutLabel }}</div>
+      </div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; align-items:center; gap:10px">
+      <div style="{{ clockStyle }}">{{ clock }}</div>
+      <div style="display:flex; align-items:center; gap:10px">
+        <sc-if value="{{ showPeriods }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ periods }}" as="p" hint-placeholder-count="3">
+            <span style="{{ p.style }}"></span>
+          </sc-for>
+        </sc-if>
+        <span style="{{ periodLabelStyle }}">{{ periodLabel }}</span>
+      </div>
+    </div>
+
+    <div style="display:flex; align-items:center; justify-content:flex-end; gap:28px">
+      <div style="text-align:right">
+        <div style="font-size:46px; font-weight:900; line-height:1">{{ weightLabel }}</div>
+        <div style="{{ headMetaStyle }}">{{ divisionLabel }}</div>
+      </div>
+      <div style="{{ linkDotStyle }}" title="{{ linkTitle }}"></div>
+    </div>
+  </header>
+
+  <sc-if value="{{ idle }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ idleStyle }}">
+      <div style="font-size:76px; font-weight:900; letter-spacing:-0.01em">No contest on this mat</div>
+      <div style="{{ idleSubStyle }}">Next bout will appear automatically</div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ live }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1; display:flex; flex-direction:column; gap:18px; padding:18px 26px; min-height:0">
+      <sc-for list="{{ sides }}" as="s" hint-placeholder-count="2">
+        <div style="{{ s.paneStyle }}">
+          <div style="{{ s.barStyle }}"></div>
+          <div style="flex:1; min-width:0; display:flex; align-items:center; gap:34px; padding:0 40px">
+            <div style="{{ s.flagStyle }}">{{ s.noc }}</div>
+            <div style="min-width:0">
+              <div style="display:flex; align-items:center; gap:14px">
+                <span style="{{ s.cornerTagStyle }}">{{ s.cornerLabel }}</span>
+                <sc-if value="{{ s.showWinner }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ s.winnerTagStyle }}">WINNER</span>
+                </sc-if>
+                <sc-if value="{{ s.showPassivity }}" hint-placeholder-val="{{ false }}">
+                  <span style="{{ s.passivityStyle }}">PASSIVITY {{ s.passivityClock }}</span>
+                </sc-if>
+              </div>
+              <div style="{{ s.nameStyle }}">{{ s.name }}</div>
+              <div style="{{ s.countryStyle }}">{{ s.country }}</div>
+            </div>
+          </div>
+          <div style="display:flex; align-self:stretch; gap:14px; padding:14px 14px 14px 0">
+            <sc-for list="{{ s.cells }}" as="c" hint-placeholder-count="4">
+              <div style="{{ c.style }}">
+                <div style="{{ c.valueStyle }}">{{ c.value }}</div>
+                <div style="{{ c.keyStyle }}">{{ c.key }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="{{ nextStripStyle }}">
+      <span style="{{ nextKickerStyle }}">Next</span>
+      <span style="{{ nextTextStyle }}">{{ nextBout }}</span>
+    </div>
+
+    <footer style="{{ footStyle }}">
+      <div style="display:flex; gap:38px; align-items:center">
+        <sc-for list="{{ legend }}" as="l" hint-placeholder-count="4">
+          <span style="{{ legendItemStyle }}"><span style="{{ legendKeyStyle }}">{{ l.key }}</span>{{ l.word }}</span>
+        </sc-for>
+      </div>
+      <div style="{{ footMetaStyle }}">Asian Kurash Championship 2026 · Tashkent</div>
+    </footer>
+  </sc-if>
+
+  <sc-if value="{{ takeover }}" hint-placeholder-val="{{ false }}">
+    <div style="{{ takeoverStyle }}">
+      <div style="{{ takeoverKickerStyle }}">{{ takeoverKicker }}</div>
+      <div style="{{ takeoverCallStyle }}">{{ takeoverCall }}</div>
+      <div style="{{ takeoverNameStyle }}">{{ takeoverName }}</div>
+      <div style="{{ takeoverMetaStyle }}">{{ takeoverMeta }}</div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: {&quot;width&quot;: 1920, &quot;height&quot;: 1080},
+  &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;dark&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Appearance&quot;},
+  &quot;state&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;live&quot;, &quot;options&quot;: [&quot;live&quot;, &quot;golden&quot;, &quot;halal&quot;, &quot;winner&quot;, &quot;idle&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Contest&quot;},
+  &quot;passivity&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;none&quot;, &quot;options&quot;: [&quot;none&quot;, &quot;blue&quot;, &quot;green&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Contest&quot;},
+  &quot;link&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;ok&quot;, &quot;options&quot;: [&quot;ok&quot;, &quot;stale&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;System&quot;}
+}">
+class Component extends DCLogic {
+  state = { left: 152, golden: 0, passivity: 8 };
+  componentDidMount() {
+    this.timer = setInterval(() => this.setState(s => ({
+      left: Math.max(0, s.left - 1),
+      golden: s.golden + 1,
+      passivity: s.passivity > 0 ? s.passivity - 1 : 10,
+    })), 1000);
+  }
+  componentWillUnmount() { clearInterval(this.timer); }
+  fmt(n) { return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0'); }
+  renderVals() {
+    const dark = (this.props.theme ?? 'dark') === 'dark';
+    const state = this.props.state ?? 'live';
+    const link = this.props.link ?? 'ok';
+    const passiveSide = this.props.passivity ?? 'none';
+    const golden = state === 'golden';
+    const winnerSide = (state === 'winner' || state === 'halal') ? 'blue' : null;
+    const left = this.state.left;
+    const urgent = !golden && left <= 20;
+
+    const t = dark ? {
+      bg: '#05070a', chrome: '#0b0f15', pane: '#0e131a', cell: '#151d26', cellDim: '#0d1218',
+      text: '#ffffff', muted: '#8a99ab', dim: '#4e5b6b', line: '#1b222c', cellLine: '#232d39',
+      blueTint: '#0c1c28', greenTint: '#0b1f14', flagFill: 'repeating-linear-gradient(135deg, #171e27 0 10px, #1e262f 10px 20px)',
+      strip: '#0a0e14',
+    } : {
+      bg: '#eef1f0', chrome: '#ffffff', pane: '#ffffff', cell: '#f2f5f4', cellDim: '#f7f9f8',
+      text: '#0d1613', muted: '#5d6d67', dim: '#a8b4af', line: '#dbe2df', cellLine: '#e2e8e5',
+      blueTint: '#eaf5fc', greenTint: '#eaf7ef', flagFill: 'repeating-linear-gradient(135deg, #e6ebe9 0 10px, #eef2f0 10px 20px)',
+      strip: '#e3e8e6',
+    };
+    // The clock plate stays light-on-dark in both themes: a light-ground clock loses punch at thirty metres.
+    const clockPlate = '#0d1613';
+    const clockText = golden ? '#e0a83c' : urgent ? (dark ? '#ff2a17' : '#ff4a3a') : '#ff5b3c';
+    const clockLine = golden ? '#e0a83c' : urgent ? '#ff2a17' : clockPlate;
+
+    const mk = (corner, name, noc, country, tally) => {
+      const isWinner = winnerSide === corner;
+      const accent = corner === 'blue' ? '#1a9fd8' : '#019a44';
+      const passive = passiveSide === corner && !isWinner;
+      const cell = (key, value, dim) => ({ key, value,
+        style: { width: '164px', borderRadius: '16px', background: dim ? t.cellDim : t.cell,
+          border: '2px solid ' + t.cellLine, display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center' },
+        valueStyle: { fontSize: '104px', fontWeight: 900, lineHeight: 1, fontVariantNumeric: 'tabular-nums',
+          color: dim ? t.dim : t.text },
+        keyStyle: { fontSize: '22px', fontWeight: 700, letterSpacing: '0.14em', color: dim ? t.dim : t.muted, marginTop: '4px' } });
+      return {
+        name, noc, country, cornerLabel: corner === 'blue' ? 'Blue corner' : 'Green corner',
+        paneStyle: { flex: '1 1 0', display: 'flex', alignItems: 'center', minHeight: 0, overflow: 'hidden',
+          borderRadius: '22px', border: '2px solid ' + (isWinner ? accent : passive ? '#e0a83c' : t.line),
+          background: isWinner ? (corner === 'blue' ? t.blueTint : t.greenTint) : t.pane },
+        barStyle: { width: '20px', alignSelf: 'stretch', flex: 'none', background: accent },
+        flagStyle: { width: '158px', height: '106px', flex: 'none', borderRadius: '12px', background: t.flagFill,
+          border: '2px solid ' + t.cellLine, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '42px', fontWeight: 900, color: t.text },
+        nameStyle: { fontSize: '74px', fontWeight: 900, lineHeight: 1.02, letterSpacing: '-0.02em',
+          textTransform: 'uppercase', color: t.text, whiteSpace: 'nowrap', overflow: 'hidden',
+          textOverflow: 'ellipsis', marginTop: '8px' },
+        countryStyle: { fontSize: '26px', fontWeight: 600, color: t.muted, marginTop: '2px' },
+        cornerTagStyle: { display: 'inline-flex', padding: '5px 18px', borderRadius: '999px', background: accent,
+          color: '#fff', fontSize: '21px', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase' },
+        showWinner: isWinner,
+        winnerTagStyle: { display: 'inline-flex', padding: '5px 22px', borderRadius: '999px',
+          background: t.text, color: t.bg, fontSize: '25px', fontWeight: 900, letterSpacing: '0.08em' },
+        showPassivity: passive,
+        passivityClock: '0:' + String(this.state.passivity).padStart(2, '0'),
+        passivityStyle: { display: 'inline-flex', padding: '5px 18px', borderRadius: '999px', background: '#e0a83c',
+          color: '#221800', fontSize: '21px', fontWeight: 900, letterSpacing: '0.08em',
+          fontVariantNumeric: 'tabular-nums' },
+        cells: isWinner
+          ? [cell('Y', tally[0]), cell('T', tally[3], tally[3] === 0)]
+          : [cell('Y', tally[0]), cell('C', tally[1]), cell('D', tally[2], tally[2] === 0), cell('T', tally[3], tally[3] === 0)],
+      };
+    };
+
+    const period = 2;
+    const linkOk = link === 'ok';
+    return {
+      idle: state === 'idle',
+      live: state !== 'idle' && state !== 'halal',
+      takeover: state === 'halal',
+      rootStyle: { width: '1920px', height: '1080px', background: t.bg, color: t.text, overflow: 'hidden',
+        display: 'flex', flexDirection: 'column', fontFamily: "'Source Sans 3', system-ui, sans-serif" },
+      headStyle: { flex: '0 0 172px', display: 'grid', gridTemplateColumns: '1fr auto 1fr', alignItems: 'center',
+        gap: '32px', padding: '0 44px', background: t.chrome, borderBottom: '2px solid ' + t.line },
+      headMetaStyle: { fontSize: '23px', fontWeight: 600, color: t.muted, marginTop: '7px',
+        letterSpacing: '0.08em', textTransform: 'uppercase' },
+      logoChipStyle: { background: '#fff', padding: '7px', borderRadius: '12px', flex: 'none',
+        border: '2px solid ' + t.line },
+      clock: golden ? this.fmt(this.state.golden) : this.fmt(left),
+      clockStyle: { fontFamily: 'ui-monospace, "DejaVu Sans Mono", monospace', fontSize: '100px', fontWeight: 700,
+        lineHeight: 1, color: clockText, fontVariantNumeric: 'tabular-nums', letterSpacing: '0.01em',
+        padding: '6px 34px', borderRadius: '16px', background: clockPlate, border: '3px solid ' + clockLine },
+      showPeriods: !golden,
+      periods: [1, 2, 3].map(n => ({ style: { width: '18px', height: '18px', borderRadius: '999px',
+        background: n <= period ? '#019a44' : 'transparent', border: '2px solid ' + (n <= period ? '#019a44' : t.dim) } })),
+      periodLabel: golden ? 'Golden score' : 'Period ' + period,
+      periodLabelStyle: { fontSize: '21px', fontWeight: golden ? 900 : 700, color: golden ? '#e0a83c' : t.muted,
+        letterSpacing: '0.1em', textTransform: 'uppercase', marginLeft: golden ? 0 : '6px' },
+      // Health dot: the board runs its clock locally between 2 s polls, so a dead
+      // poll leaves a plausible but wrong board. Red once the feed goes stale.
+      linkDotStyle: { width: '20px', height: '20px', borderRadius: '999px', flex: 'none',
+        background: linkOk ? '#019a44' : '#d7263d',
+        boxShadow: '0 0 0 4px ' + (linkOk ? 'rgba(1,154,68,.18)' : 'rgba(215,38,61,.22)'),
+        animation: linkOk ? 'none' : 'sb-pulse 1s ease-in-out infinite' },
+      linkTitle: linkOk ? 'Scoreboard feed live' : 'Feed stale — no update for over 6 seconds',
+      matLabel: 'Mat 1 · No.43', boutLabel: 'Quarterfinal',
+      weightLabel: '-66 kg', divisionLabel: 'Men Senior',
+      sides: [mk('blue', 'Ulugbek Rashidov', 'UZB', 'Uzbekistan', [1, 2, 0, 1]),
+              mk('green', 'Daniyar Seit', 'KAZ', 'Kazakhstan', [0, 1, 0, 2])],
+      nextStripStyle: { flex: '0 0 62px', display: 'flex', alignItems: 'center', gap: '20px', padding: '0 44px',
+        background: t.strip, borderTop: '2px solid ' + t.line },
+      nextKickerStyle: { fontSize: '20px', fontWeight: 900, letterSpacing: '0.14em', textTransform: 'uppercase',
+        color: t.muted, flex: 'none' },
+      nextTextStyle: { fontSize: '28px', fontWeight: 700, color: t.text, whiteSpace: 'nowrap',
+        overflow: 'hidden', textOverflow: 'ellipsis' },
+      nextBout: 'No.44 · -81 kg Men · MALIKOV (UZB) v ZHAKSYLYK (KAZ)',
+      footStyle: { flex: '0 0 76px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '0 44px', background: t.chrome, borderTop: '2px solid ' + t.line },
+      legend: [{ key: 'Y', word: 'Yonbosh' }, { key: 'C', word: 'Chala' }, { key: 'D', word: 'Dakki' }, { key: 'T', word: 'Tanbeh' }],
+      legendItemStyle: { fontSize: '21px', fontWeight: 600, color: t.muted, display: 'inline-flex',
+        alignItems: 'center', gap: '10px', letterSpacing: '0.03em' },
+      legendKeyStyle: { fontSize: '24px', fontWeight: 900, color: t.text },
+      footMetaStyle: { fontSize: '21px', fontWeight: 700, color: t.muted, letterSpacing: '0.1em', textTransform: 'uppercase' },
+      idleStyle: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', gap: '14px', color: t.dim },
+      idleSubStyle: { fontSize: '30px', fontWeight: 600, color: t.dim },
+      // Halal takeover: a halal ends the contest, so the hall gets the moment
+      // full-screen before the board settles into the winner state.
+      takeoverStyle: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
+        justifyContent: 'center', gap: '18px', background: '#019a44', color: '#fff' },
+      takeoverKickerStyle: { fontSize: '30px', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', opacity: 0.85 },
+      takeoverCallStyle: { fontSize: '188px', fontWeight: 900, lineHeight: 0.94, letterSpacing: '-0.02em' },
+      takeoverNameStyle: { fontSize: '84px', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '-0.01em', marginTop: '8px' },
+      takeoverMetaStyle: { fontSize: '32px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', opacity: 0.85 },
+      takeoverKicker: 'Mat 1 · No.43 · Quarterfinal',
+      takeoverCall: 'HALAL',
+      takeoverName: 'Ulugbek Rashidov',
+      takeoverMeta: 'Uzbekistan · -66 kg Men',
+    };
+  }
+}
+</script>
+</body>
+</html>
