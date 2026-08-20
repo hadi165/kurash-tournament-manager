@@ -31,8 +31,20 @@
         {{-- The last twenty seconds are the only moment the clock changes
              colour, so it has to follow the local tick rather than the poll. --}}
         get urgent() { return this.left <= 20 },
+
+        {{-- The board runs its own clock between polls, so a dead feed leaves a
+             plausible but wrong board that nobody notices. Six seconds without
+             an update and the dot says so. --}}
+        seen: Date.now(),
+        stale: false,
+        watch: null,
+        watchFeed() {
+            clearInterval(this.watch)
+            this.watch = setInterval(() => { this.stale = Date.now() - this.seen > 6000 }, 1000)
+        },
     }"
-    x-init="start()"
+    x-init="start(); watchFeed()"
+    x-on:livewire:updated="seen = Date.now(); stale = false"
     {{-- Re-anchored on every poll, so a board left running all weekend cannot
          drift away from the mat. --}}
     x-effect="sync(@js($secondsLeft), @js($clockRunning))"
@@ -95,7 +107,12 @@
                 <div class="head__meta">{{ $bout ? $genderLabel : '' }}</div>
             </div>
 
-            <span class="link -ok" title="{{ __('Scoreboard feed live') }}"></span>
+            @if ($readOnly)
+                <span class="readonly">{{ __('Read only') }}</span>
+            @endif
+
+            <span class="link" :class="stale ? '-stale' : '-ok'"
+                  :title="stale ? @js(__('Feed stale — no update for over 6 seconds')) : @js(__('Scoreboard feed live'))"></span>
         </div>
     </header>
 
@@ -374,6 +391,34 @@
     .link.-ok {
         background: var(--green);
         box-shadow: 0 0 0 0.37vh rgb(1 154 68 / 0.18);
+    }
+
+    .link.-stale {
+        background: #d7263d;
+        box-shadow: 0 0 0 0.37vh rgb(215 38 61 / 0.22);
+        animation: sb-pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes sb-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.35; }
+    }
+
+    /* A viewer account is told what it is, rather than left to work it out
+       from the absence of controls it never had. */
+    .readonly {
+        font-size: 1.85vh;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border: 0.19vh solid var(--line);
+        border-radius: 0.5vh;
+        padding: 0.4vh 1.2vh;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .link.-stale { animation: none; }
     }
 
     /* ── Athlete panes ──────────────────────────────────────────────────── */

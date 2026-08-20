@@ -6,6 +6,7 @@ use App\Models\Bout;
 use App\Models\Court;
 use App\Services\KurashScore;
 use App\Support\ScoreTally;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -30,6 +31,15 @@ class Scoreboard extends Component
 
     public function mount(Court $court): void
     {
+        // Checked whenever somebody is signed in, on this route and on the
+        // public display one alike: a scoped account must not reach another
+        // championship's mat by editing the id in either URL. Guests are left
+        // to the display gate, which is what decides whether a hall screen is
+        // public at all.
+        if (auth()->check()) {
+            Gate::authorize('scoreboard.select_court', $court);
+        }
+
         $this->court = $court->load('championship');
     }
 
@@ -97,6 +107,10 @@ class Scoreboard extends Component
             'clockRunning' => (bool) ($bout?->clock_running && ! $bout->isDecided()),
             'winner' => $bout?->isDecided() ? $bout->winner : null,
             'nextBout' => $this->nextBout($bout),
+            // The board carries no controls for anybody, but an account that
+            // may only read one should be told so rather than left to infer it
+            // from an absence.
+            'readOnly' => (bool) auth()->user()?->isScoreboardViewer(),
         ]);
     }
 }

@@ -545,3 +545,36 @@
     .dc-seat-new { animation: dc-fade 120ms linear both; }
     .dc-feed-stale { animation: none; }
 }
+
+/* ── Scoreboard picker ──────────────────────────────────────────────────── */
+
+.dc-select { flex-direction: column; gap: 34px; }
+
+.dc-select-group { min-width: 0; }
+
+.dc-select-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.dc-select-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 20px;
+    text-decoration: none;
+    color: inherit;
+    border-left: 3px solid var(--dc-accent);
+}
+
+.dc-select-no {
+    font-size: 27px;
+    font-weight: 900;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.dc-select-name { font-size: 17.5px; font-weight: 600; }
+.dc-select-meta { font-size: 13px; color: var(--dc-muted); }

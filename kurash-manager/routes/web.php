@@ -17,6 +17,7 @@ use App\Livewire\Competition\Medals;
 use App\Livewire\Competition\Registration;
 use App\Livewire\Competition\Scoreboard;
 use App\Livewire\Competition\WeighIn;
+use App\Livewire\Scoreboard\Selection as ScoreboardSelection;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -67,7 +68,28 @@ Route::middleware(AllowPublicDisplay::class)->prefix('display')->name('display.'
     Route::get('weight-classes/{weightCategory}/draw-ceremony', DrawCeremony::class)->name('draw-ceremony');
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
+/*
+ | The signed-in scoreboard.
+ |
+ | Separate from the public display group above: those screens hang in a hall
+ | and answer to DISPLAY_PUBLIC, while these belong to an account that signed
+ | in. Every route here is behind the scoreboard.view permission rather than a
+ | role name, so an operator or an admin reaches the same board through the
+ | same door — and reaches nothing else through it.
+ */
+Route::middleware(['auth', 'verified', 'can:scoreboard.view'])->group(function () {
+    Route::get('scoreboard', ScoreboardSelection::class)->name('scoreboard.index');
+    Route::get('scoreboard/mats/{court}', Scoreboard::class)->name('scoreboard.show');
+});
+
+/*
+ | The competition application.
+ |
+ | Gated on access-admin rather than on "signed in": a scoreboard account has a
+ | session like everybody else, and without this it would reach the dashboard by
+ | typing the address.
+ */
+Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('dashboard', Dashboard::class)->name('dashboard');
     Route::get('archive', Archive::class)->name('archive.index');
 

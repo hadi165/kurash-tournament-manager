@@ -3,13 +3,14 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
 use Laravel\Fortify\Contracts\PasskeyUser;
 use Laravel\Fortify\PasskeyAuthenticatable;
@@ -19,14 +20,17 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
  * @property int $id
  * @property string $name
  * @property string $email
- * @property Carbon|null $email_verified_at
+ * @property CarbonImmutable|null $email_verified_at
  * @property string $password
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
- * @property Carbon|null $two_factor_confirmed_at
+ * @property CarbonImmutable|null $two_factor_confirmed_at
  * @property string|null $remember_token
- * @property Carbon|null $created_at
- * @property Carbon|null $updated_at
+ * @property CarbonImmutable|null $created_at
+ * @property CarbonImmutable|null $updated_at
+ * @property string $role
+ * @property bool $is_active
+ * @property int|null $scoreboard_championship_id
  */
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
@@ -45,15 +49,97 @@ class User extends Authenticatable implements PasskeyUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
     }
 
-    /** Roles allowed to change competition data. */
-    public const MANAGING_ROLES = ['admin', 'supervisor'];
+    public const ROLE_ADMIN = 'admin';
 
+    public const ROLE_SUPERVISOR = 'supervisor';
+
+    /** The operator: works a mat and the presentation screens. */
+    public const ROLE_OFFICIAL = 'official';
+
+    public const ROLE_VIEWER = 'viewer';
+
+    /** Reads one scoreboard and nothing else. */
+    public const ROLE_SCOREBOARD_VIEWER = 'scoreboard_viewer';
+
+    /** Roles allowed to change competition data. */
+    public const MANAGING_ROLES = [self::ROLE_ADMIN, self::ROLE_SUPERVISOR];
+
+    /**
+     * What an admin may hand out from the account form.
+     *
+     * A server-side allowlist, checked after validation and never taken from
+     * the request as-is: admin is absent on purpose, so no form post can mint
+     * an account that can mint accounts.
+     */
+    public const ASSIGNABLE_ROLES = [self::ROLE_OFFICIAL, self::ROLE_SCOREBOARD_VIEWER];
+
+    /**
+     * Roles that may read a scoreboard.
+     *
+     * Stated as a permission rather than inferred from "can manage": an
+     * operator watching a mat and an admin watching from an office are doing
+     * the same read, and neither of them is scoring from that screen.
+     */
+    public const SCOREBOARD_ROLES = [
+        self::ROLE_ADMIN,
+        self::ROLE_SUPERVISOR,
+        self::ROLE_OFFICIAL,
+        self::ROLE_VIEWER,
+        self::ROLE_SCOREBOARD_VIEWER,
+    ];
+
+    /**
+     * Every capability check goes through is_active first.
+     *
+     * A closed account keeps its rows — it is referenced by everything it ever
+     * recorded — so "closed" has to mean "authorises nothing" rather than
+     * "deleted".
+     */
     public function canManageCompetition(): bool
     {
-        return in_array($this->role, self::MANAGING_ROLES, true);
+        return $this->is_active && in_array($this->role, self::MANAGING_ROLES, true);
+    }
+
+    public function canViewScoreboard(): bool
+    {
+        return $this->is_active && in_array($this->role, self::SCOREBOARD_ROLES, true);
+    }
+
+    public function isScoreboardViewer(): bool
+    {
+        return $this->role === self::ROLE_SCOREBOARD_VIEWER;
+    }
+
+    public function canManageUsers(): bool
+    {
+        return $this->is_active && $this->role === self::ROLE_ADMIN;
+    }
+
+    /**
+     * Is this championship inside the account's scoreboard scope?
+     *
+     * A null scope is every championship, which is what an unscoped account
+     * means; a set scope is exactly one. Checked in the query as well as here,
+     * so a tampered id never reaches a board.
+     */
+    public function mayViewChampionship(?Championship $championship): bool
+    {
+        if (! $this->canViewScoreboard()) {
+            return false;
+        }
+
+        return $this->scoreboard_championship_id === null
+            || $championship?->getKey() === $this->scoreboard_championship_id;
+    }
+
+    /** @return BelongsTo<Championship, $this> */
+    public function scoreboardChampionship(): BelongsTo
+    {
+        return $this->belongsTo(Championship::class, 'scoreboard_championship_id');
     }
 
     /**
