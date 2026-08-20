@@ -54,7 +54,7 @@ class DrawNumbersReport implements HasTotal, Report
 
     public function headings(): array
     {
-        return ['Draw No.', "Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Country', 'Source'];
+        return ['Draw No.', "Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Country'];
     }
 
     public function rows(): array
@@ -65,14 +65,6 @@ class DrawNumbersReport implements HasTotal, Report
             $a->ika_id,
             Noc::normalise($a->noc_code),
             $a->noc_name,
-            // How the number was arrived at: drawn at random, typed in by hand,
-            // or brought in from a file. A protest asks this first.
-            match ($a->draw_number_source) {
-                'random' => 'Random draw',
-                'manual' => 'Entered by hand',
-                'import' => 'Imported',
-                default => '',
-            },
         ])->all());
     }
 

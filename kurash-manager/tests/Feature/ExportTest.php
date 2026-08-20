@@ -445,11 +445,19 @@ describe('the draw numbers', function () {
             ->and(array_filter(array_column($numbers, 0)))->toHaveCount(4);
     });
 
-    it('says how each number was arrived at', function () {
+    /**
+     * The sheet is the numbers and who holds them. How each was arrived at is
+     * recorded on the athlete and stays off the printed list.
+     */
+    it('prints the number and the athlete, and nothing about the method', function () {
         $category = weighedClass(4);
         $category->athletes()->update(['draw_number_source' => 'random']);
 
-        expect((new DrawNumbersReport($category->refresh()))->rows()[0][5])->toBe('Random draw');
+        $report = new DrawNumbersReport($category->refresh());
+
+        expect($report->headings())->toBe(['Draw No.', "Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Country'])
+            ->and($report->rows()[0])->toHaveCount(5)
+            ->and(collect($report->rows())->flatten()->contains('Random draw'))->toBeFalse();
     });
 
     it('leaves out anybody who was never drawn', function () {
