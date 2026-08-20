@@ -116,7 +116,7 @@
                     @endif
 
                     <x-nav-item :href="route('entries.index', $current)" :active="request()->routeIs('entries.*')">
-                        {{ __('Entries') }}
+                        {{ __('Entries and Draw') }}
                     </x-nav-item>
 
                     <x-nav-item :href="route('fight-order.index', $current)" :active="request()->routeIs('fight-order.*')">

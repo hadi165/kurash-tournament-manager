@@ -1,10 +1,10 @@
 <x-page
-    :title="__('Entries')"
+    :title="__('Entries and Draw')"
     :subtitle="__('How many are entered, how many made the scale, and which classes can start.')"
     :breadcrumbs="[
         ['label' => __('Championships'), 'href' => route('championships.index')],
         ['label' => $championship->title, 'href' => route('championships.show', $championship)],
-        ['label' => __('Entries')],
+        ['label' => __('Entries and Draw')],
     ]"
 >
     <x-ui.stats cards :items="[
