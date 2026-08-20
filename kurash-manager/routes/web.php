@@ -17,6 +17,8 @@ use App\Livewire\Competition\Medals;
 use App\Livewire\Competition\Registration;
 use App\Livewire\Competition\Scoreboard;
 use App\Livewire\Competition\WeighIn;
+use App\Livewire\Operator\Draws as OperatorDraws;
+use App\Livewire\Operator\Presentation as OperatorPresentation;
 use App\Livewire\Scoreboard\Viewer as ScoreboardViewer;
 use Illuminate\Support\Facades\Route;
 
@@ -89,6 +91,18 @@ Route::middleware(['auth', 'verified', 'can:scoreboard.view'])->group(function (
  | session like everybody else, and without this it would reach the dashboard by
  | typing the address.
  */
+/*
+ | The published draw, for whoever is presenting it.
+ |
+ | Behind draw.view_published rather than a role name, and pointed only at
+ | tables an admin has approved — the working bracket screen below stays with
+ | the people who run the draw.
+ */
+Route::middleware(['auth', 'verified', 'can:draw.view_published'])->group(function () {
+    Route::get('operator/draws', OperatorDraws::class)->name('operator.draws.index');
+    Route::get('operator/draws/{weightCategory}', OperatorPresentation::class)->name('operator.draws.show');
+});
+
 Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('dashboard', Dashboard::class)->name('dashboard');
     Route::get('archive', Archive::class)->name('archive.index');
@@ -105,7 +119,9 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('categories/{ageCategory}/athletes', Registration::class)->name('athletes.index');
     Route::get('categories/{ageCategory}/weigh-in', WeighIn::class)->name('weighin.index');
 
-    Route::get('weight-classes/{weightCategory}/bracket', Bracket::class)->name('bracket.show');
+    Route::get('weight-classes/{weightCategory}/bracket', Bracket::class)
+        ->middleware('can:manage-competition')
+        ->name('bracket.show');
 
     // Printable and downloadable paperwork. Every table the specification asks
     // for, in both formats, rendered from the database on request so a

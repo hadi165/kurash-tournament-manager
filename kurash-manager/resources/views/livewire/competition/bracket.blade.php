@@ -30,6 +30,18 @@
 
     {{-- The sheet the draw numbers get written onto, and the drawn bracket
          itself. Both are named the way the federation files them. --}}
+    <x-slot:aside>
+        @if ($weightCategory->isDrawPublished())
+            <x-ui.tag variant="brand">{{ __('Published to operators') }}</x-ui.tag>
+        @elseif ($bouts->isNotEmpty())
+            <x-ui.tag>{{ __('Not published') }}</x-ui.tag>
+        @endif
+
+        @if ($weightCategory->isDrawLocked())
+            <x-ui.tag variant="amber">{{ __('Locked') }}</x-ui.tag>
+        @endif
+    </x-slot:aside>
+
     <x-slot:actions>
         <span class="kicker me-1 text-ink/55">{{ __('Weigh-in list') }}</span>
         <a href="{{ route('exports.weigh-in', ['weightCategory' => $weightCategory, 'format' => 'pdf']) }}"
@@ -114,6 +126,31 @@
 
             <div class="rule-2 my-5"></div>
 
+            {{-- What drawing now would produce, before anybody commits to it.
+                 The figures come from the same query the generator counts, so
+                 the summary and the draw cannot disagree. --}}
+            <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1.5 rounded-md border border-line bg-ground px-[18px] py-3.5 text-[13px]">
+                <span><span class="text-muted">{{ __('Registered athletes') }}</span> <b class="tabular-nums">{{ $drawSummary['athletes'] }}</b></span>
+                <span><span class="text-muted">{{ __('Bracket size') }}</span> <b class="tabular-nums">{{ $drawSummary['size'] ?: '—' }}</b></span>
+                <span><span class="text-muted">{{ __('Byes') }}</span> <b class="tabular-nums">{{ $drawSummary['byes'] }}</b></span>
+                <span><span class="text-muted">{{ __('First-round bouts') }}</span> <b class="tabular-nums">{{ $drawSummary['firstRound'] }}</b></span>
+            </div>
+
+            @if ($weightCategory->drawIsStale())
+                {{-- Informational, and only here: the published table an
+                     operator is presenting does not change because somebody
+                     registered late. --}}
+                <div class="mb-4 flex flex-wrap items-center gap-3 rounded-md bg-amber-soft px-[18px] py-3.5">
+                    <x-ui.tag variant="amber">{{ __('Entry list changed') }}</x-ui.tag>
+                    <span class="text-[13.5px] text-amber-deep">
+                        {{ __('This draw was made for :was athletes and the class now holds :now. Redraw it if that is wrong.', [
+                            'was' => $weightCategory->draw_athlete_count,
+                            'now' => $drawSummary['athletes'],
+                        ]) }}
+                    </span>
+                </div>
+            @endif
+
             <div class="flex flex-wrap items-center gap-3">
                 <flux:button
                     variant="primary"
@@ -132,6 +169,33 @@
                         wire:target="drawAtRandom,generate"
                         x-on:click="$dispatch('draw-started', { mode: 'bracket' })"
                     >{{ __('Erase results and redraw') }}</flux:button>
+                @endif
+
+                @if ($confirmingReplacePublished)
+                    <flux:button
+                        variant="danger"
+                        wire:click="generate(false, true)"
+                        wire:loading.attr="disabled"
+                        wire:target="drawAtRandom,generate"
+                        x-on:click="$dispatch('draw-started', { mode: 'bracket' })"
+                    >{{ __('Replace the published draw') }}</flux:button>
+                @endif
+
+                @if ($bouts->isNotEmpty())
+                    @can('draw.publish')
+                        @if ($weightCategory->isDrawPublished())
+                            <flux:button variant="ghost" wire:click="withdrawDraw"
+                                         wire:confirm="{{ __('Withdraw this draw? Operators will no longer be able to present it.') }}">
+                                {{ __('Withdraw from operators') }}
+                            </flux:button>
+                        @else
+                            <flux:button wire:click="publishDraw">{{ __('Publish to operators') }}</flux:button>
+                        @endif
+
+                        <flux:button variant="ghost" wire:click="toggleDrawLock">
+                            {{ $weightCategory->isDrawLocked() ? __('Unlock draw') : __('Lock draw') }}
+                        </flux:button>
+                    @endcan
                 @endif
 
                 {{-- The way out of "cannot remove: a bracket has already been

@@ -19,7 +19,52 @@ class WeightCategory extends Model
 
     protected function casts(): array
     {
-        return ['min_kg' => 'decimal:2', 'max_kg' => 'decimal:2'];
+        return [
+            'min_kg' => 'decimal:2',
+            'max_kg' => 'decimal:2',
+            'draw_generated_at' => 'datetime',
+            'draw_published_at' => 'datetime',
+            'draw_locked_at' => 'datetime',
+        ];
+    }
+
+    /*
+     |--------------------------------------------------------------------------
+     | The draw, as it was drawn
+     |--------------------------------------------------------------------------
+     |
+     | These read the figures recorded when the bracket was generated, never
+     | today's registration list. An operator looking at a published draw must
+     | see what was published, and a late registration must not quietly change
+     | the shape of a table somebody is presenting from.
+     */
+
+    public function hasDraw(): bool
+    {
+        return $this->bouts()->exists();
+    }
+
+    public function isDrawPublished(): bool
+    {
+        return $this->draw_published_at !== null;
+    }
+
+    public function isDrawLocked(): bool
+    {
+        return $this->draw_locked_at !== null;
+    }
+
+    /**
+     * Has the entry list moved since the draw was generated?
+     *
+     * Informational only, and only ever shown to somebody who could act on it:
+     * a published draw stays exactly as published until an admin regenerates
+     * it on purpose.
+     */
+    public function drawIsStale(): bool
+    {
+        return $this->draw_athlete_count !== null
+            && $this->draw_athlete_count !== $this->drawnAthletes()->count();
     }
 
     /** @return BelongsTo<AgeCategory, $this> */

@@ -52,7 +52,22 @@ describe('access', function () {
         $this->get(route('medals.index', $championship))->assertOk();
         $this->get(route('athletes.index', $ageCategory))->assertOk();
         $this->get(route('weighin.index', $ageCategory))->assertOk();
-        $this->get(route('bracket.show', $weightCategory))->assertOk();
+    });
+
+    /**
+     * The one screen a reader does not get.
+     *
+     * The bracket screen is where a draw is made, so it shows pairings before
+     * anybody has approved them. Reading a draw now goes through the published
+     * table instead, which is what an operator presents from.
+     */
+    it('keeps the working bracket screen for the people who run the draw', function () {
+        $championship = Championship::factory()->create();
+        $ageCategory = AgeCategory::factory()->create(['championship_id' => $championship->id]);
+        $weightCategory = WeightCategory::factory()->create(['age_category_id' => $ageCategory->id]);
+
+        $this->actingAs($this->viewer)->get(route('bracket.show', $weightCategory))->assertForbidden();
+        $this->actingAs($this->admin)->get(route('bracket.show', $weightCategory))->assertOk();
     });
 
     /**

@@ -87,6 +87,10 @@
                     {{ __('Archive') }}
                 </x-nav-item>
 
+                <x-nav-item :href="route('operator.draws.index')" :active="request()->routeIs('operator.draws.*')">
+                    {{ __('Draws to present') }}
+                </x-nav-item>
+
                 @if ($current)
                     <div class="kicker truncate px-4 pb-1.5 pt-4 !text-nav-muted">{{ Str::limit($current->title, 28) }}</div>
 

@@ -113,6 +113,21 @@ class AppServiceProvider extends ServiceProvider
          */
         Gate::define('access-admin', fn (User $user): bool => $user->is_active && ! $user->isScoreboardViewer());
 
+        /*
+         | The published draw.
+         |
+         | An operator presents what an admin approved, and nothing else: this
+         | permission opens the published table and the presentation that runs
+         | off it, while generating, publishing and withdrawing stay behind
+         | manage-competition. Reading a draw grants nothing towards drawing
+         | one, which is the same separation the scoreboard permissions keep.
+         */
+        Gate::define('draw.view_published', fn (User $user): bool => $user->is_active && ! $user->isScoreboardViewer());
+
+        Gate::define('presentation.operate', fn (User $user): bool => $user->is_active && ! $user->isScoreboardViewer());
+
+        Gate::define('draw.publish', fn (User $user): bool => $user->canManageCompetition());
+
         Gate::define('scoreboard.view', fn (User $user): bool => $user->canViewScoreboard());
 
         Gate::define(
