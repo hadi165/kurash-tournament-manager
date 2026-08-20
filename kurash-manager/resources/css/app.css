@@ -95,7 +95,19 @@
        become a deep green to read the same way on a dark ground. */
     --green-soft: #e9f7ee;
     --blue-soft: #e8f6fd;
+    --amber-soft: #fbf0d8;
     --red-soft: #fdeaee;
+
+    /* The -deep roles are the readable-text end of each hue, and they invert
+       too: on a light surface the readable end is the dark ink, on a dark one
+       it is the pale tint. The bright hues below are for fills, rails and bars
+       only — #c98a00 on white is 2.95:1 and fails large-text contrast, so a
+       label in amber has to be amber-deep or it is not a label anyone can
+       read. */
+    --green-deep: #046830;
+    --blue-deep: #086690;
+    --amber-deep: #6f4d00;
+    --red-deep: #8f1626;
 
     /* A neutral ramp for the few places that need a step between surface and
        line — avatars, disabled fills, capacity bars. */
@@ -126,7 +138,15 @@
 
     --green-soft: #12291d;
     --blue-soft: #0f2733;
+    --amber-soft: #2b2109;
     --red-soft: #2a1418;
+
+    --green-deep: #6fd898;
+    --blue-deep: #7fd0f0;
+    --amber-deep: #e8bf62;
+    /* The handoff names no dark red-deep; this is the same lightness step as
+       its three, so a failed state reads at the weight the others do. */
+    --red-deep: #f38a98;
 
     /* Inverted: 100 is the darkest step here, so a component written against
        n-200 stays the "one step off the surface" tint in both themes instead
@@ -160,7 +180,13 @@
 
     --color-brand-soft: var(--green-soft);
     --color-info-soft: var(--blue-soft);
+    --color-amber-soft: var(--amber-soft);
     --color-danger-soft: var(--red-soft);
+
+    --color-brand-deep: var(--green-deep);
+    --color-info-deep: var(--blue-deep);
+    --color-amber-deep: var(--amber-deep);
+    --color-danger-deep: var(--red-deep);
 
     --color-n-100: var(--n-100);
     --color-n-200: var(--n-200);
@@ -193,7 +219,6 @@
        the gold column. `brand` is the colour itself; `brand-deep` is the text
        weight of it, used on a green-soft ground. */
     --color-brand: #019a44;
-    --color-brand-deep: #046830;
 
     --color-brand-100: #e9f7ee;
     --color-brand-200: #c8f1d6;
@@ -207,7 +232,6 @@
 
     /* IKA blue — info pills, the blue corner, secondary emphasis. */
     --color-info: #1a9fd8;
-    --color-info-deep: #086690;
 
     --color-info-100: #e8f6fd;
     --color-info-200: #c8eafa;
@@ -221,12 +245,16 @@
 
     /* IKA red — destructive and fail states only. Never decorative. */
     --color-danger: #d7263d;
-    --color-danger-deep: #8f1626;
 
     --color-danger-100: #fdeaee;
     --color-danger-200: #f9cdd4;
     --color-danger-500: #d7263d;
     --color-danger-700: #8f1626;
+
+    /* Medal amber — the third data hue. Medals, honours and "needs attention",
+       and nothing else: it is close enough to a warning that spending it on
+       decoration would cost it its meaning. */
+    --color-amber: #c98a00;
 
     /* Soft and rounded. Flux's components read this same scale, so overriding
        it here is what gives its inputs, buttons and menus the new shape:
@@ -281,18 +309,14 @@
         letter-spacing: -0.02em;
     }
 
-    /* Links are the deep green, so they read as ours without shouting; in dark
-       the mid green carries better against the ground. */
+    /* Links are green at its readable end, which is what green-deep means in
+       either theme — so this needs no dark: counterpart. */
     a {
-        color: var(--color-brand-700);
+        color: var(--green-deep);
     }
 
     a:hover {
         color: var(--color-brand-500);
-    }
-
-    .dark a {
-        color: var(--color-brand-400);
     }
 
     .dark a:hover {

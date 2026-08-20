@@ -66,7 +66,7 @@
                  is information, not a result. --}}
             @if (! empty($c['next_steps']))
                 <div class="mt-5 rounded-md bg-info-soft px-[18px] py-4">
-                    <div class="kicker mb-2.5 text-info-deep dark:text-info-300">{{ __('Next up') }}</div>
+                    <div class="kicker mb-2.5 text-info-deep">{{ __('Next up') }}</div>
 
                     <div class="flex flex-col gap-2.5">
                         @foreach ($c['next_steps'] as $i => $step)
@@ -84,7 +84,7 @@
                 </div>
             @elseif ($c['bouts'] > 0 && $c['decided'] === $c['bouts'])
                 <div class="mt-5 flex flex-wrap items-center gap-3.5 rounded-md bg-brand-soft px-[18px] py-4">
-                    <span class="text-sm text-brand-deep dark:text-brand-300">{{ __('Every bout is decided.') }}</span>
+                    <span class="text-sm text-brand-deep">{{ __('Every bout is decided.') }}</span>
                     <x-ui.chip :href="route('medals.index', $c['model'])" wire:navigate>
                         {{ __('See the medals') }} →
                     </x-ui.chip>

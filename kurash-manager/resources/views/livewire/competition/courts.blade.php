@@ -77,7 +77,7 @@
                 <x-ui.card wire:key="court-{{ $court->id }}">
                     <div class="flex items-start justify-between gap-3">
                         <div class="flex min-w-0 items-center gap-3">
-                            <span class="grid size-11 flex-none place-items-center rounded-md bg-brand-soft text-lg font-bold text-brand-deep dark:text-brand-300">
+                            <span class="grid size-11 flex-none place-items-center rounded-md bg-brand-soft text-lg font-bold text-brand-deep">
                                 {{ $court->number }}
                             </span>
 

@@ -116,7 +116,7 @@
                 <div class="mt-4">
                     @if ($confirmingReopen === $championship->id)
                         <div class="flex flex-col gap-3 rounded-md bg-danger-soft px-[18px] py-4">
-                            <span class="text-[13.5px] text-danger dark:text-danger-200">
+                            <span class="text-[13.5px] text-danger-deep">
                                 {{ __('Reopening lets results be changed after the medals were given out. The reason goes on the record.') }}
                             </span>
 

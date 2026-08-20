@@ -19,7 +19,7 @@
         :aria-expanded="open"
         @class([
             'flex w-full items-center gap-2 rounded-sm px-3 py-[9px] text-start text-[13.5px] leading-snug transition-colors',
-            'bg-brand-soft font-semibold text-brand-deep dark:text-brand-300' => $active,
+            'bg-brand-soft font-semibold text-brand-deep' => $active,
             'font-medium text-ink hover:bg-line-soft' => ! $active,
         ])
     >
@@ -36,7 +36,7 @@
                 @if ($item['active']) aria-current="page" @endif
                 @class([
                     'block truncate rounded-sm px-3 py-[7px] text-[12.5px] no-underline transition-colors',
-                    'bg-brand-soft font-semibold text-brand-deep dark:text-brand-300' => $item['active'],
+                    'bg-brand-soft font-semibold text-brand-deep' => $item['active'],
                     'font-medium text-muted hover:bg-line-soft hover:text-ink' => ! $item['active'],
                 ])
             >{{ $item['label'] }}</a>

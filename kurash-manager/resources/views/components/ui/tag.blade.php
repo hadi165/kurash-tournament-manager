@@ -9,9 +9,9 @@
 
 @php
     [$styles, $dotColour] = match ($variant) {
-        'brand' => ['bg-brand-soft text-brand-deep dark:text-brand-300', 'bg-brand'],
-        'info' => ['bg-info-soft text-info-deep dark:text-info-300', 'bg-info'],
-        'danger' => ['bg-danger-soft text-danger dark:text-danger-200', 'bg-danger'],
+        'brand' => ['bg-brand-soft text-brand-deep', 'bg-brand'],
+        'info' => ['bg-info-soft text-info-deep', 'bg-info'],
+        'danger' => ['bg-danger-soft text-danger-deep', 'bg-danger'],
         default => ['bg-ground text-muted ring-1 ring-inset ring-line', 'bg-muted'],
     };
 @endphp

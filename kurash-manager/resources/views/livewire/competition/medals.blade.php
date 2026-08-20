@@ -45,7 +45,7 @@
 
                             {{-- Gold carries the colour: a medal table is read
                                  down that column first. --}}
-                            <td class="num font-semibold text-brand-deep dark:text-brand-300">{{ $row['gold'] }}</td>
+                            <td class="num font-semibold text-brand-deep">{{ $row['gold'] }}</td>
                             <td class="num">{{ $row['silver'] }}</td>
                             <td class="num">{{ $row['bronze'] }}</td>
                             <td class="num font-bold">{{ $row['total'] }}</td>
