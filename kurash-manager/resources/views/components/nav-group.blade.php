@@ -18,9 +18,9 @@
         x-on:click="open = ! open"
         :aria-expanded="open"
         @class([
-            'flex w-full items-center gap-2 rounded-sm px-3 py-[9px] text-start text-[13.5px] leading-snug transition-colors',
-            'bg-brand-soft font-semibold text-brand-deep' => $active,
-            'font-medium text-ink hover:bg-line-soft' => ! $active,
+            'flex w-full items-center gap-2 rounded-full px-4 py-2.5 text-start text-[13.5px] leading-snug transition-colors',
+            'bg-nav-active-bg font-semibold text-nav-active-ink' => $active,
+            'font-medium text-nav-ink hover:bg-nav-hover' => ! $active,
         ])
     >
         <span class="min-w-0 flex-1 truncate">{{ $label }}</span>
@@ -35,9 +35,9 @@
                 wire:navigate
                 @if ($item['active']) aria-current="page" @endif
                 @class([
-                    'block truncate rounded-sm px-3 py-[7px] text-[12.5px] no-underline transition-colors',
-                    'bg-brand-soft font-semibold text-brand-deep' => $item['active'],
-                    'font-medium text-muted hover:bg-line-soft hover:text-ink' => ! $item['active'],
+                    'block truncate rounded-full px-4 py-2 text-[12.5px] no-underline transition-colors',
+                    'bg-nav-active-bg font-semibold text-nav-active-ink' => $item['active'],
+                    'font-medium text-nav-muted hover:bg-nav-hover hover:text-nav-ink' => ! $item['active'],
                 ])
             >{{ $item['label'] }}</a>
         @endforeach

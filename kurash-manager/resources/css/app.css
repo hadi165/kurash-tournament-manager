@@ -126,6 +126,23 @@
     --n-800: #45524d;
     --n-900: #26332e;
 
+    /* ── Navigation drawer ──────────────────────────────────────────────
+       The drawer is one hue taken to opposite ends of the lightness scale —
+       pale sage on a light page, deep pine on a dark one — so it reads as the
+       same surface in either theme rather than as two different panels.
+
+       It carries its own ink and muted values because the page's greys were
+       measured against the page ground: --muted on this sage fill does not
+       reach 4.5:1, and a group label nobody can read is not a label. */
+    --nav-bg: #dcebe2;
+    --nav-line: #c4d9cb;
+    --nav-ink: #12211a;
+    --nav-muted: #4f6559;
+    --nav-hover: rgb(11 26 20 / 0.06);
+    --nav-active-bg: rgb(1 154 68 / 0.16);
+    --nav-active-ink: #04331a;
+    --nav-card: #ffffff;
+
     /* Soft, wide and cheap: the card shadow does the work borders used to. */
     --sh-sm: 0 1px 2px rgb(16 33 29 / 0.06), 0 1px 3px rgb(16 33 29 / 0.04);
     --sh-md: 0 4px 16px rgb(16 33 29 / 0.07), 0 1px 3px rgb(16 33 29 / 0.05);
@@ -166,6 +183,15 @@
     --n-800: #c2cfc9;
     --n-900: #eaf2ee;
 
+    --nav-bg: #0b1a14;
+    --nav-line: #16302b;
+    --nav-ink: #eaf4ee;
+    --nav-muted: #8ba99a;
+    --nav-hover: rgb(255 255 255 / 0.07);
+    --nav-active-bg: rgb(18 194 104 / 0.22);
+    --nav-active-ink: #6fe3a3;
+    --nav-card: rgb(255 255 255 / 0.06);
+
     --sh-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --sh-md: 0 4px 16px rgb(0 0 0 / 0.45);
     --sh-lg: 0 12px 32px rgb(0 0 0 / 0.55);
@@ -182,6 +208,15 @@
     --color-muted: var(--muted);
     --color-line: var(--line);
     --color-line-soft: var(--line-soft);
+
+    --color-nav-bg: var(--nav-bg);
+    --color-nav-line: var(--nav-line);
+    --color-nav-ink: var(--nav-ink);
+    --color-nav-muted: var(--nav-muted);
+    --color-nav-hover: var(--nav-hover);
+    --color-nav-active-bg: var(--nav-active-bg);
+    --color-nav-active-ink: var(--nav-active-ink);
+    --color-nav-card: var(--nav-card);
 
     --color-brand-soft: var(--green-soft);
     --color-info-soft: var(--blue-soft);

@@ -5,10 +5,11 @@
     </head>
     <body class="min-h-screen bg-ground text-ink">
         {{-- The Flux shell is kept for its mobile collapse behaviour; everything
-             inside it is the soft sidebar: 264px, no background and no border,
-             so the column floats on the page ground rather than sitting in a
-             panel of its own. --}}
-        <flux:sidebar sticky collapsible="mobile" class="w-[264px] gap-1 border-none bg-transparent px-3 py-4">
+             inside it is the drawer: 264px of its own surface, rounded on the
+             outer corners only, and carrying its own ink and greys because
+             they were measured against this fill rather than the page's. --}}
+        <flux:sidebar sticky collapsible="mobile"
+                      class="sticky top-0 h-screen w-[264px] gap-1 overflow-y-auto rounded-e-[18px] border-0 border-e border-nav-line bg-nav-bg px-3 py-4 text-nav-ink">
             <div class="flex items-center gap-2.5 px-2.5 pb-3.5 pt-2">
                 @php
                     $brandLogo = config('branding.logo');
@@ -29,10 +30,10 @@
                     </span>
 
                     <span class="min-w-0">
-                        <span class="block text-sm font-bold leading-tight text-ink">
+                        <span class="block text-sm font-bold leading-tight text-nav-ink">
                             {{ config('branding.short_name') }} {{ __('Manager') }}
                         </span>
-                        <span class="block truncate text-[11.5px] text-muted">
+                        <span class="block truncate text-[11.5px] text-nav-muted">
                             {{ config('branding.organisation') }}
                         </span>
                     </span>
@@ -72,7 +73,7 @@
             @endphp
 
             <nav class="flex flex-col gap-1">
-                <div class="kicker px-3 pb-1.5 pt-2.5">{{ __('Platform') }}</div>
+                <div class="kicker px-4 pb-1.5 pt-2.5 !text-nav-muted">{{ __('Platform') }}</div>
 
                 <x-nav-item :href="route('dashboard')" :active="request()->routeIs('dashboard')">
                     {{ __('Dashboard') }}
@@ -87,7 +88,7 @@
                 </x-nav-item>
 
                 @if ($current)
-                    <div class="kicker truncate px-3 pb-1.5 pt-4">{{ Str::limit($current->title, 28) }}</div>
+                    <div class="kicker truncate px-4 pb-1.5 pt-4 !text-nav-muted">{{ Str::limit($current->title, 28) }}</div>
 
                     <x-nav-item :href="route('championships.show', $current)" :active="request()->routeIs('championships.show')">
                         {{ __('Categories') }}
@@ -140,11 +141,11 @@
             {{-- Not in the design, but the links have to stay reachable, so they
                  sit as quiet meta text rather than as nav items competing with
                  the workflow above. --}}
-            <div class="flex flex-wrap gap-x-3 gap-y-1 px-3 pb-2 text-[11.5px]">
+            <div class="flex flex-wrap gap-x-3 gap-y-1 px-4 pb-2 text-[11.5px]">
                 <a href="https://github.com/hadi165/kurash-tournament-manager" target="_blank" rel="noopener"
-                   class="text-muted no-underline hover:text-ink">{{ __('Repository') }}</a>
+                   class="text-nav-muted no-underline hover:text-nav-ink">{{ __('Repository') }}</a>
                 <a href="https://laravel.com/docs" target="_blank" rel="noopener"
-                   class="text-muted no-underline hover:text-ink">{{ __('Documentation') }}</a>
+                   class="text-nav-muted no-underline hover:text-nav-ink">{{ __('Documentation') }}</a>
             </div>
 
             {{-- The user card is the specified design and also the account menu:
@@ -152,13 +153,13 @@
                  is the dropdown trigger rather than a decorative block. --}}
             <flux:dropdown position="top" align="start" class="hidden lg:block">
                 <button type="button" data-test="sidebar-menu-button"
-                        class="flex w-full items-center gap-2.5 rounded-md bg-surface p-3 text-start shadow-chip transition-shadow hover:shadow-card">
+                        class="flex w-full items-center gap-2.5 rounded-md bg-nav-card p-3 text-start shadow-chip transition-shadow hover:shadow-card">
                     <span class="grid size-8 flex-none place-items-center rounded-full bg-brand text-[13px] font-bold text-white">
                         {{ Str::upper(Str::substr(auth()->user()->name, 0, 1)) }}
                     </span>
                     <span class="min-w-0">
-                        <span class="block truncate text-[13.5px] font-semibold leading-tight text-ink">{{ auth()->user()->name }}</span>
-                        <span class="block truncate text-[11.5px] capitalize text-muted">{{ auth()->user()->role }}</span>
+                        <span class="block truncate text-[13.5px] font-semibold leading-tight text-nav-ink">{{ auth()->user()->name }}</span>
+                        <span class="block truncate text-[11.5px] capitalize text-nav-muted">{{ str_replace('_', ' ', auth()->user()->role) }}</span>
                     </span>
                 </button>
 
