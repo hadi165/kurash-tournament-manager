@@ -8,6 +8,7 @@ use App\Support\BracketSeeding;
 use App\Support\Noc;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -31,12 +32,53 @@ class DrawCeremony extends Component
 {
     public WeightCategory $weightCategory;
 
+    /**
+     * True when an operator opened this to run a ceremony, rather than a
+     * projector showing the board of a draw already made.
+     *
+     * The difference is what happens before anybody presses anything: a
+     * ceremony waits to be started, a board simply shows where the draw got
+     * to.
+     */
+    public bool $ceremony = false;
+
     /** Seconds each position is held on screen before the next is revealed. */
     private const PACE = 3;
 
-    public function mount(WeightCategory $weightCategory): void
+    public function mount(WeightCategory $weightCategory, bool $ceremony = false): void
     {
         $this->weightCategory = $weightCategory->load('ageCategory.championship');
+        $this->ceremony = $ceremony;
+
+        if ($ceremony) {
+            Gate::authorize('presentation.operate');
+
+            // Only a table an admin approved is presented in public.
+            abort_unless(
+                $this->weightCategory->isDrawPublished() && $this->weightCategory->hasDraw(),
+                403,
+                __('This weight category has not been published yet.'),
+            );
+        }
+    }
+
+    /**
+     * Start the reveal, or run it again.
+     *
+     * Presentation state and nothing else: it stamps when the telling began,
+     * which is the only thing the board reads to decide how much of the draw
+     * the hall has seen. The draw itself was committed before this screen was
+     * ever opened and no method here can touch it.
+     */
+    public function startCeremony(): void
+    {
+        Gate::authorize('presentation.operate');
+
+        Cache::put(
+            self::paceKey($this->weightCategory->id),
+            ['at' => (int) now()->timestamp, 'per' => self::PACE],
+            now()->addHour(),
+        );
     }
 
     /** The cache key the draw stamps when it runs, so the reveal can be paced. */
@@ -57,7 +99,9 @@ class DrawCeremony extends Component
         $pace = Cache::get(self::paceKey($this->weightCategory->id));
 
         if (! is_array($pace) || ! isset($pace['at'])) {
-            return $total;
+            // A ceremony nobody has started shows nothing yet; a board with no
+            // ceremony behind it simply shows the draw as it stands.
+            return $this->ceremony ? 0 : $total;
         }
 
         $elapsed = max(0, (int) now()->timestamp - (int) $pace['at']);
@@ -102,6 +146,9 @@ class DrawCeremony extends Component
             'revealed' => $revealed,
             'drawing' => $drawing,
             'complete' => $total > 0 && $revealed >= $total,
+            // Waiting is a ceremony that has not begun, which is not the same
+            // as one with nothing in it.
+            'waiting' => $this->ceremony && $total > 0 && ! Cache::has(self::paceKey($this->weightCategory->id)),
             'pool' => $remaining
                 ->groupBy('noc_code')
                 ->map(fn (Collection $group, string $noc) => [

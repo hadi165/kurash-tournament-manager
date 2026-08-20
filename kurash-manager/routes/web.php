@@ -102,6 +102,12 @@ Route::middleware(['auth', 'verified', 'can:scoreboard.view'])->group(function (
 Route::middleware(['auth', 'verified', 'can:draw.view_published'])->group(function () {
     Route::get('operator/draws', OperatorDraws::class)->name('operator.draws.index');
     Route::get('operator/draws/{weightCategory}', OperatorPresentation::class)->name('operator.draws.show');
+
+    // The ceremony itself: the same board the venue projector runs, opened by
+    // whoever is presenting rather than left on a wall.
+    Route::get('operator/draws/{weightCategory}/ceremony', DrawCeremony::class)
+        ->defaults('ceremony', true)
+        ->name('operator.draws.ceremony');
 });
 
 Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
@@ -148,7 +154,7 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
         Route::get('athletes/{athlete}/accreditation.pdf', [ExportController::class, 'athleteAccreditation'])->name('accreditation.athlete');
     });
 
-    Route::prefix('exports')->name('exports.')->where(['format' => 'pdf|csv'])->group(function () {
+    Route::prefix('exports')->name('exports.')->where(['format' => 'pdf|csv|xlsx'])->group(function () {
         Route::get('weight-classes/{weightCategory}/weigh-in.{format}', [ExportController::class, 'confirmedWeighIn'])->name('weigh-in');
         Route::get('weight-classes/{weightCategory}/draw.{format}', [ExportController::class, 'drawSheet'])->name('draw');
         Route::get('weight-classes/{weightCategory}/draw-numbers.{format}', [ExportController::class, 'drawNumbers'])->name('draw-numbers');

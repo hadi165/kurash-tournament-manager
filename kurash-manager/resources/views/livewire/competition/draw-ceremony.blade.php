@@ -55,12 +55,17 @@
 
             @if ($size > 0)
                 <span class="dc-chip">{{ __('Bracket of :size', ['size' => $size]) }}</span>
+                {{-- Counted separately, because they are different numbers: the
+                     bracket has sixteen seats, the draw has twelve athletes. --}}
+                <span class="dc-chip">{{ trans_choice('{1}:count athlete|[2,*]:count athletes', $total, ['count' => $total]) }}</span>
             @endif
 
             @if ($complete)
                 <span class="dc-chip dc-chip-done"><span class="dc-dot"></span>{{ __('Draw complete') }}</span>
+            @elseif ($waiting)
+                <span class="dc-chip">{{ __('Official draw') }}</span>
             @else
-                <span class="dc-chip dc-chip-live"><span class="dc-dot"></span>{{ __('Draw in progress') }}</span>
+                <span class="dc-chip dc-chip-live"><span class="dc-dot"></span>{{ __('Live draw') }}</span>
             @endif
 
             <span class="dc-feed" :class="stale && 'dc-feed-stale'"
@@ -70,24 +75,50 @@
 
     <div class="dc-body">
         <aside class="dc-pool">
-            <div class="dc-kicker">{{ $complete ? __('Top seed') : __('Now drawing') }}</div>
+            <div class="dc-kicker">
+                {{ $waiting ? __('Official draw') : ($complete ? __('Top seed') : __('Now drawing')) }}
+            </div>
 
             {{-- On completion the panel holds the seed that leads the bracket,
                  so the space does not simply go blank at the moment the hall
                  looks at it hardest. --}}
             @php $spotlight = $drawing ?? ($seats[0]['athlete'] ?? null); @endphp
 
-            <div class="dc-panel dc-now">
-                <div class="dc-now-noc">{{ $spotlight ? \App\Support\Noc::normalise($spotlight->noc_code) : '—' }}</div>
-                <div class="dc-now-name">{{ $spotlight?->fullname ?? __('Waiting') }}</div>
-                <div class="dc-now-meta">
-                    @if ($drawing)
-                        {{ __('Position :n of :total', ['n' => $revealed + 1, 'total' => $total]) }}
-                    @elseif ($spotlight)
-                        {{ __('Seed :n', ['n' => $spotlight->draw_number]) }}
-                    @endif
+            @if ($waiting)
+                {{-- Nothing is revealed until somebody starts the ceremony. --}}
+                <div class="dc-panel dc-now dc-now-waiting">
+                    <div class="dc-now-name">{{ __('Ready to begin') }}</div>
+                    <div class="dc-now-meta">
+                        {{ trans_choice(
+                            '{1}:count athlete waiting to be drawn|[2,*]:count athletes waiting to be drawn',
+                            $total, ['count' => $total]
+                        ) }}
+                    </div>
                 </div>
-            </div>
+            @else
+                <div class="dc-panel dc-now" wire:key="now-{{ $revealed }}">
+                    <div class="dc-now-noc">{{ $spotlight ? \App\Support\Noc::normalise($spotlight->noc_code) : '—' }}</div>
+                    <div class="dc-now-name">{{ $spotlight?->fullname ?? __('Waiting') }}</div>
+                    <div class="dc-now-meta">
+                        @if ($drawing)
+                            {{ __('Position :n of :total', ['n' => $revealed + 1, 'total' => $total]) }}
+                        @elseif ($spotlight)
+                            {{ __('Seed :n', ['n' => $spotlight->draw_number]) }}
+                        @endif
+                    </div>
+                </div>
+            @endif
+
+            {{-- The only control on the screen, and it starts the telling
+                 rather than the draw: the bracket was decided before this page
+                 was opened. --}}
+            @if ($ceremony)
+                <div class="dc-start">
+                    <button type="button" class="dc-button dc-button-primary" wire:click="startCeremony">
+                        {{ $waiting ? __('Begin the draw') : __('Replay the draw') }}
+                    </button>
+                </div>
+            @endif
 
             <div class="dc-kicker">{{ $complete ? __('Pool drawn') : __('Still to be drawn') }}</div>
 
@@ -165,7 +196,11 @@
     <footer class="dc-foot">
         <div class="dc-foot-group">
             <span class="dc-foot-label">
-                {{ __('Position :n of :total drawn', ['n' => $revealed, 'total' => $total]) }}
+                {{ __(':n drawn', ['n' => $revealed]) }}
+                ·
+                {{ __(':n drawing', ['n' => $drawing ? 1 : 0]) }}
+                ·
+                {{ __(':n remaining', ['n' => $remainingCount]) }}
             </span>
 
             <div class="dc-track">

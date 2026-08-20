@@ -207,3 +207,117 @@ describe('the venue draw board', function () {
         expect(Cache::get(DrawCeremony::paceKey($this->category->id)))->toHaveKey('at');
     });
 });
+
+describe('the operator runs the ceremony', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(12);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+
+        $this->operator = User::factory()->official()->create();
+
+        Cache::forget(DrawCeremony::paceKey($this->category->id));
+    });
+
+    it('waits to be started rather than showing the answer', function () {
+        Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->assertSet('ceremony', true)
+            ->assertSee('Ready to begin')
+            ->assertViewHas('waiting', true)
+            ->assertViewHas('revealed', 0);
+    });
+
+    /** Starting tells the hall. It does not touch the draw. */
+    it('starts the telling without touching the draw', function () {
+        $before = $this->category->bouts()->pluck('athlete_a_id', 'id')->toArray();
+        $version = $this->category->draw_version;
+
+        Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->call('startCeremony');
+
+        expect(Cache::has(DrawCeremony::paceKey($this->category->id)))->toBeTrue()
+            ->and($this->category->refresh()->draw_version)->toBe($version)
+            ->and($this->category->bouts()->pluck('athlete_a_id', 'id')->toArray())->toBe($before);
+    });
+
+    it('counts athletes, not bracket seats', function () {
+        $board = Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true]);
+
+        // Twelve athletes in a bracket of sixteen: two different numbers.
+        expect($board->viewData('total'))->toBe(12)
+            ->and($board->viewData('size'))->toBe(16);
+    });
+
+    it('keeps drawn, drawing and remaining adding up at every step', function () {
+        foreach ([0, 3, 15, 33, 36] as $elapsed) {
+            Cache::put(
+                DrawCeremony::paceKey($this->category->id),
+                ['at' => now()->timestamp - $elapsed, 'per' => 3],
+                now()->addHour(),
+            );
+
+            $board = Livewire::actingAs($this->operator)
+                ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true]);
+
+            $drawn = $board->viewData('revealed');
+            $drawing = $board->viewData('drawing') === null ? 0 : 1;
+
+            expect($drawn + $drawing + $board->viewData('remainingCount'))->toBe(12);
+        }
+    });
+
+    /** The reveal is derived from the stamp, so a refresh lands where it left. */
+    it('shows the same positions after a refresh', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['at' => now()->timestamp - 18, 'per' => 3],
+            now()->addHour(),
+        );
+
+        $seats = fn () => collect(Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->viewData('seats'))
+            ->map(fn (array $seat) => [$seat['seed'], $seat['athlete']?->id])
+            ->all();
+
+        expect($seats())->toBe($seats());
+    });
+
+    it('reveals in the seeded order and never twice', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['at' => now()->timestamp - 3600, 'per' => 3],
+            now()->addHour(),
+        );
+
+        $seats = collect(Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->viewData('seats'));
+
+        expect($seats->pluck('seed')->all())->toBe(BracketSeeding::order(16));
+
+        $placed = $seats->pluck('athlete')->filter();
+
+        // Every athlete appears once, and only the twelve who exist.
+        expect($placed)->toHaveCount(12)
+            ->and($placed->pluck('id')->unique())->toHaveCount(12);
+    });
+
+    it('is refused for a draw that has not been published', function () {
+        $this->category->forceFill(['draw_published_at' => null])->save();
+
+        $this->actingAs($this->operator)
+            ->get(route('operator.draws.ceremony', $this->category->refresh()))
+            ->assertForbidden();
+    });
+
+    it('is refused for an account that may only watch a scoreboard', function () {
+        $this->actingAs(User::factory()->scoreboardViewer()->create())
+            ->get(route('operator.draws.ceremony', $this->category))
+            ->assertForbidden();
+    });
+});

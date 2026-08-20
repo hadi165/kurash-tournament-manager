@@ -94,9 +94,15 @@
 
                 <div class="flex flex-wrap items-center gap-2">
                     @if ($published)
-                        <flux:button variant="primary" :href="route('operator.draws.show', $category)" wire:navigate>
+                        <flux:button variant="primary" :href="route('operator.draws.ceremony', $category)">
                             {{ __('Present draw') }}
                         </flux:button>
+
+                        {{-- The table on its own, for somebody who wants to read
+                             it rather than present it. --}}
+                        <x-ui.chip :href="route('operator.draws.show', $category)" wire:navigate>
+                            {{ __('Draw table') }}
+                        </x-ui.chip>
                     @else
                         {{-- Disabled rather than hidden: an operator who cannot
                              find a category has no way to tell whether it is

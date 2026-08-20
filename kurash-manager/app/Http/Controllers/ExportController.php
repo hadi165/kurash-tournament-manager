@@ -18,11 +18,13 @@ use App\Exports\PdfDocument;
 use App\Exports\PdfWriter;
 use App\Exports\Report;
 use App\Exports\ResultsReport;
+use App\Exports\XlsxWriter;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Championship;
 use App\Models\WeightCategory;
 use App\Services\MedalTable;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -90,13 +92,13 @@ class ExportController extends Controller
         return $this->document->download('exports.accreditation', $cards->data(), $cards->filename());
     }
 
-    public function confirmedWeighIn(WeightCategory $weightCategory, string $format): Response
+    public function confirmedWeighIn(WeightCategory $weightCategory, string $format): Response|StreamedResponse
     {
         return $this->render(new ConfirmedWeighInReport($weightCategory->load('ageCategory.championship')), $format);
     }
 
     /** What the draw produced: one line per athlete, in draw order. */
-    public function drawNumbers(WeightCategory $weightCategory, string $format): Response
+    public function drawNumbers(WeightCategory $weightCategory, string $format): Response|StreamedResponse
     {
         return $this->render(new DrawNumbersReport($weightCategory->load('ageCategory.championship')), $format);
     }
@@ -124,7 +126,7 @@ class ExportController extends Controller
         return $format === 'xlsx' ? $writer->xlsx($sheet) : $writer->pdf($sheet);
     }
 
-    public function drawSheet(WeightCategory $weightCategory, string $format): Response
+    public function drawSheet(WeightCategory $weightCategory, string $format): Response|StreamedResponse
     {
         return $this->render(
             new DrawSheetReport($weightCategory->load('ageCategory.championship')),
@@ -133,27 +135,31 @@ class ExportController extends Controller
         );
     }
 
-    public function fightOrder(Championship $championship, string $format): Response
+    public function fightOrder(Championship $championship, string $format, Request $request): Response|StreamedResponse
     {
-        return $this->render(new FightOrderReport($championship), $format, orientation: 'landscape');
+        // Validated against the two the competition actually has: anything else
+        // prints the whole order rather than an empty sheet.
+        $gender = in_array($request->query('gender'), ['M', 'F'], true) ? $request->query('gender') : null;
+
+        return $this->render(new FightOrderReport($championship, $gender), $format, orientation: 'landscape');
     }
 
-    public function entriesByNoc(Championship $championship, string $format): Response
+    public function entriesByNoc(Championship $championship, string $format): Response|StreamedResponse
     {
         return $this->render(new EntriesByNocReport($championship), $format);
     }
 
-    public function entriesByWeight(Championship $championship, string $format): Response
+    public function entriesByWeight(Championship $championship, string $format): Response|StreamedResponse
     {
         return $this->render(new EntriesByWeightCategoryReport($championship), $format);
     }
 
-    public function results(Championship $championship, string $format): Response
+    public function results(Championship $championship, string $format): Response|StreamedResponse
     {
         return $this->render(new ResultsReport($championship, $this->medals), $format, orientation: 'landscape');
     }
 
-    public function medalStanding(Championship $championship, string $format): Response
+    public function medalStanding(Championship $championship, string $format): Response|StreamedResponse
     {
         return $this->render(new MedalStandingReport($championship, $this->medals), $format);
     }
@@ -163,10 +169,14 @@ class ExportController extends Controller
      * Named explicitly anyway rather than treating "anything that is not pdf"
      * as CSV, which would hand someone a .xlsx request a CSV without saying so.
      */
-    private function render(Report $report, string $format, string $orientation = 'portrait'): Response
+    private function render(Report $report, string $format, string $orientation = 'portrait'): Response|StreamedResponse
     {
         return match ($format) {
             'pdf' => $this->pdf->download($report, $orientation),
+            // Both spellings stay: xlsx is what the buttons ask for, csv is
+            // still there for anything that has to read the data rather than
+            // look at it.
+            'xlsx' => app(XlsxWriter::class)->download($report),
             'csv' => $this->csv->download($report),
             default => abort(404),
         };

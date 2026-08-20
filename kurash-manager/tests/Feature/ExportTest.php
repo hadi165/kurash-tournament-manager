@@ -326,9 +326,20 @@ describe('serving the files', function () {
     it('rejects a format it does not produce', function () {
         $category = weighedClass(4);
 
+        // pdf, xlsx and csv are the three; anything else is not a document
+        // this system makes.
         $this->actingAs($this->admin)
-            ->get("/exports/weight-classes/{$category->id}/weigh-in.xlsx")
+            ->get("/exports/weight-classes/{$category->id}/weigh-in.docx")
             ->assertNotFound();
+    });
+
+    it('produces the spreadsheet the Excel buttons ask for', function () {
+        $category = weighedClass(4);
+
+        $this->actingAs($this->admin)
+            ->get(route('exports.weigh-in', ['weightCategory' => $category, 'format' => 'xlsx']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     });
 });
 

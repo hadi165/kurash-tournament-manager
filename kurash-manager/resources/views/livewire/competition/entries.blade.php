@@ -85,7 +85,7 @@
                                         @can('manage-competition')
                                             <x-ui.chip :href="route('bracket.show', $category)" wire:navigate>{{ __('Open') }}</x-ui.chip>
                                         @elseif ($category->isDrawPublished())
-                                            <x-ui.chip :href="route('operator.draws.show', $category)" wire:navigate>{{ __('Present') }}</x-ui.chip>
+                                            <x-ui.chip :href="route('operator.draws.ceremony', $category)">{{ __('Present') }}</x-ui.chip>
                                         @endcan
                                     @elseif ($row['cleared'] >= 2)
                                         <x-ui.tag>{{ __('Not started') }}</x-ui.tag>
