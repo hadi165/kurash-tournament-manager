@@ -5,9 +5,10 @@ use App\Livewire\Competition\Courts;
 use App\Livewire\Competition\FightOrder;
 use App\Livewire\Competition\MatControl;
 use App\Livewire\Competition\Scoreboard;
-use App\Livewire\Scoreboard\Selection;
+use App\Livewire\Scoreboard\Viewer;
 use App\Livewire\Settings\Accounts;
 use App\Models\Bout;
+use App\Models\Court;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Hash;
@@ -273,13 +274,18 @@ describe('scope', function () {
         [$mine] = boutOnMat();
         [$theirs] = boutOnMat();
 
-        $scoped = User::factory()->scoreboardViewer($mine->championship)->create();
+        // Named explicitly: the factory draws from a small pool of titles, and
+        // two championships sharing one would make this assertion meaningless.
+        $mine->championship->update(['title' => 'Mine Championship']);
+        $theirs->championship->update(['title' => 'Theirs Championship']);
+
+        $scoped = User::factory()->scoreboardViewer($mine->championship->refresh())->create();
 
         $this->actingAs($scoped);
 
-        Livewire::test(Selection::class)
-            ->assertSee($mine->championship->title)
-            ->assertDontSee($theirs->championship->title);
+        Livewire::test(Viewer::class)
+            ->assertSee('Mine Championship')
+            ->assertDontSee('Theirs Championship');
     });
 });
 
@@ -323,5 +329,104 @@ describe('who else may read a board', function () {
         Livewire::test(MatControl::class, ['court' => $court])
             ->call('score', 'halal', 'a', 100)
             ->assertForbidden();
+    });
+});
+
+describe('the dedicated layout', function () {
+    /**
+     * The point of the whole thing: the sidebar is not hidden for this
+     * account, it is never rendered. Asserted on the response body, because
+     * that is where a determined viewer would go looking.
+     */
+    it('renders no application chrome for a scoreboard viewer', function () {
+        [$court] = boutOnMat();
+
+        $body = $this->actingAs($this->viewer)->get(route('scoreboard.show', $court))->getContent();
+
+        expect($body)->toContain('data-layout="scoreboard-viewer"')
+            ->and($body)->not->toContain('data-flux-sidebar')
+            ->and($body)->not->toContain(route('dashboard'))
+            ->and($body)->not->toContain(route('championships.index'))
+            ->and($body)->not->toContain(route('archive.index'))
+            ->and($body)->not->toContain(route('profile.edit'))
+            ->and($body)->not->toContain(route('accounts.index'))
+            ->and($body)->not->toContain(route('courts.index', $court->championship));
+    });
+
+    it('offers only the controls the role is allowed', function () {
+        [$court] = boutOnMat();
+
+        $this->actingAs($this->viewer)->get(route('scoreboard.show', $court))
+            ->assertOk()
+            ->assertSee('Read only')
+            ->assertSee('Fullscreen')
+            ->assertSee('Sign out')
+            ->assertDontSee('Bring on')
+            ->assertDontSee('Take back last call')
+            ->assertDontSee('Halal');
+    });
+
+    it('leaves the admin and operator shells alone', function () {
+        foreach ([$this->admin, User::factory()->official()->create()] as $user) {
+            $body = $this->actingAs($user)->get(route('dashboard'))->getContent();
+
+            expect($body)->toContain('data-flux-sidebar')
+                ->and($body)->not->toContain('data-layout="scoreboard-viewer"');
+        }
+    });
+});
+
+describe('choosing a mat', function () {
+    it('goes straight to the only mat there is', function () {
+        [$court] = boutOnMat();
+        $scoped = User::factory()->scoreboardViewer($court->championship)->create();
+
+        expect(Livewire::actingAs($scoped)->test(Viewer::class)->get('courtId'))->toBe($court->id);
+    });
+
+    it('asks which one when there are several', function () {
+        [$first] = boutOnMat();
+        $second = Court::factory()->create(['championship_id' => $first->championship_id, 'number' => 2]);
+
+        $scoped = User::factory()->scoreboardViewer($first->championship)->create();
+
+        Livewire::actingAs($scoped)->test(Viewer::class)
+            ->assertSet('courtId', null)
+            ->assertSee('Choose a mat')
+            ->call('selectMat', $second->id)
+            ->assertSet('courtId', $second->id);
+    });
+
+    it('says so when the account has no mat at all', function () {
+        Livewire::actingAs($this->viewer)->test(Viewer::class)
+            ->assertSee('No mats available')
+            ->assertSee('not assigned to a scoreboard yet');
+    });
+
+    /** The selector is a view of a scoped query, never a list to be trusted back. */
+    it('refuses a forged mat id', function () {
+        [$mine] = boutOnMat();
+        [$theirs] = boutOnMat();
+
+        $scoped = User::factory()->scoreboardViewer($mine->championship)->create();
+
+        Livewire::actingAs($scoped)->test(Viewer::class)
+            ->call('selectMat', $theirs->id)
+            ->assertForbidden();
+    });
+
+    it('drops a selection that stops being allowed', function () {
+        [$first] = boutOnMat();
+        $second = Court::factory()->create(['championship_id' => $first->championship_id, 'number' => 2]);
+
+        $scoped = User::factory()->scoreboardViewer($first->championship)->create();
+
+        $board = Livewire::actingAs($scoped)->test(Viewer::class)->call('selectMat', $second->id);
+
+        $second->update(['is_active' => false]);
+
+        // The mat is gone from the scoped query, so the board falls back to
+        // the one that is left rather than rendering a mat it may not show.
+        $board->call('$refresh')->assertSet('courtId', $first->id);
     });
 });

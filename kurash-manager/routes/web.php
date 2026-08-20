@@ -17,7 +17,7 @@ use App\Livewire\Competition\Medals;
 use App\Livewire\Competition\Registration;
 use App\Livewire\Competition\Scoreboard;
 use App\Livewire\Competition\WeighIn;
-use App\Livewire\Scoreboard\Selection as ScoreboardSelection;
+use App\Livewire\Scoreboard\Viewer as ScoreboardViewer;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -78,8 +78,8 @@ Route::middleware(AllowPublicDisplay::class)->prefix('display')->name('display.'
  | same door — and reaches nothing else through it.
  */
 Route::middleware(['auth', 'verified', 'can:scoreboard.view'])->group(function () {
-    Route::get('scoreboard', ScoreboardSelection::class)->name('scoreboard.index');
-    Route::get('scoreboard/mats/{court}', Scoreboard::class)->name('scoreboard.show');
+    Route::get('scoreboard', ScoreboardViewer::class)->name('scoreboard.index');
+    Route::get('scoreboard/mats/{court}', ScoreboardViewer::class)->name('scoreboard.show');
 });
 
 /*

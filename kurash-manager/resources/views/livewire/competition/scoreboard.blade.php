@@ -72,8 +72,9 @@
     <header class="head">
         <div class="head__id">
             {{-- The logo always sits on a white chip and is never recoloured:
-                 the artwork is the federation's. --}}
-            <div class="chip">
+                 the artwork is the federation's. It is dropped when the board
+                 is embedded, because the chrome around it already shows one. --}}
+            <div class="chip" @if ($embedded) hidden @endif>
                 @if ($hasBrandLogo)
                     <img src="{{ asset($brandLogo) }}" alt="{{ config('branding.short_name') }}">
                 @else
@@ -107,7 +108,7 @@
                 <div class="head__meta">{{ $bout ? $genderLabel : '' }}</div>
             </div>
 
-            @if ($readOnly)
+            @if ($readOnly && ! $embedded)
                 <span class="readonly">{{ __('Read only') }}</span>
             @endif
 

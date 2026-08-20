@@ -578,3 +578,145 @@
 
 .dc-select-name { font-size: 17.5px; font-weight: 600; }
 .dc-select-meta { font-size: 13px; color: var(--dc-muted); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   The signed-in scoreboard.
+
+   A wall display that happens to have an account behind it: a quiet header, a
+   mat selector, and a board that takes everything left. No navigation, because
+   there is nowhere else this account can go.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sbv {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--dc-bg);
+}
+
+.sbv-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--dc-line);
+}
+
+.sbv-head-id { display: flex; align-items: center; gap: 14px; min-width: 0; }
+
+.sbv-titles { display: flex; flex-direction: column; min-width: 0; }
+
+.sbv-champ {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.sbv-label {
+    font-size: 19px;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+}
+
+.sbv-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.sbv-select {
+    background: var(--dc-panel);
+    border: 1px solid var(--dc-line);
+    border-radius: var(--dc-radius-sm);
+    color: var(--dc-ink);
+    font: inherit;
+    font-size: 13.5px;
+    padding: 8px 12px;
+    max-width: 260px;
+}
+
+.sbv-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.sbv-status.-live { color: var(--dc-accent); }
+.sbv-status.-warn { color: var(--dc-gold); }
+.sbv-status.-off { color: #e0464f; }
+
+.sbv-readonly {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+    border: 1px solid var(--dc-line);
+    border-radius: var(--dc-radius-sm);
+    padding: 5px 10px;
+}
+
+.sbv-board { flex: 1; min-height: 0; display: flex; }
+
+.sbv-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.sbv-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+    width: 100%;
+    max-width: 900px;
+}
+
+.sbv-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 18px;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    border-left: 3px solid var(--dc-accent);
+}
+
+.sbv-card-no { font-size: 25px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.sbv-card-name { font-size: 16px; font-weight: 600; }
+.sbv-card-meta { font-size: 12.5px; color: var(--dc-muted); }
+
+/* Announced, not shown: the header already says which mat is on screen. */
+.sbv-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Embedded in the viewer chrome, the board fills what is left of the page
+   rather than claiming the whole viewport. */
+.sbv-board .board { height: auto; flex: 1; }
+
+@media (max-width: 720px) {
+    .sbv-head { padding: 10px 14px; }
+    .sbv-select { max-width: 160px; }
+    .sbv-readonly { display: none; }
+}

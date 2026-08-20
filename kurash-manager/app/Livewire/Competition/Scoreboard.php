@@ -29,7 +29,10 @@ class Scoreboard extends Component
 {
     public Court $court;
 
-    public function mount(Court $court): void
+    /** True when the board is nested inside the signed-in viewer's chrome. */
+    public bool $embedded = false;
+
+    public function mount(Court $court, bool $embedded = false): void
     {
         // Checked whenever somebody is signed in, on this route and on the
         // public display one alike: a scoped account must not reach another
@@ -41,6 +44,7 @@ class Scoreboard extends Component
         }
 
         $this->court = $court->load('championship');
+        $this->embedded = $embedded;
     }
 
     /**
