@@ -104,8 +104,12 @@
 
         <div class="head__division">
             <div class="head__titles head__titles--end">
-                <div class="head__strong">{{ $bout?->weightCategory?->label }}{{ $bout ? ' ' . __('kg') : '' }}</div>
-                <div class="head__meta">{{ $bout ? $genderLabel : '' }}</div>
+                <div class="head__strong">{{ $bout?->weightCategory?->label }}{{ $bout ? ' '.__('kg') : '' }}</div>
+                {{-- The division, not just the gender: two classes can share a
+                     weight label and be different competitions. --}}
+                <div class="head__meta">
+                    {{ $bout ? ($bout->weightCategory?->ageCategory?->name ?: $genderLabel) : '' }}
+                </div>
             </div>
 
             @if ($readOnly && ! $embedded)

@@ -34,7 +34,30 @@
                     </flux:button>
                 </div>
 
-                <flux:checkbox wire:model.live="hideCompleted" :label="__('Hide finished')" />
+                <div class="flex flex-wrap items-end gap-3">
+                    <div class="flex flex-col gap-[7px]">
+                        <label for="fo-division" class="text-[12.5px] font-semibold text-muted">{{ __('Division') }}</label>
+                        <flux:select id="fo-division" wire:model.live="ageCategory" size="sm" class="w-[190px]">
+                            <flux:select.option value="" :selected="$ageCategory === ''">{{ __('All divisions') }}</flux:select.option>
+                            @foreach ($ageCategories as $division)
+                                <flux:select.option value="{{ $division->id }}" :selected="(string) $division->id === $ageCategory">
+                                    {{ $division->name }}
+                                </flux:select.option>
+                            @endforeach
+                        </flux:select>
+                    </div>
+
+                    <div class="flex flex-col gap-[7px]">
+                        <label for="fo-gender" class="text-[12.5px] font-semibold text-muted">{{ __('Competition') }}</label>
+                        <flux:select id="fo-gender" wire:model.live="gender" size="sm" class="w-[150px]">
+                            <flux:select.option value="" :selected="$gender === ''">{{ __('Men and women') }}</flux:select.option>
+                            <flux:select.option value="M" :selected="$gender === 'M'">{{ __('Men') }}</flux:select.option>
+                            <flux:select.option value="F" :selected="$gender === 'F'">{{ __('Women') }}</flux:select.option>
+                        </flux:select>
+                    </div>
+
+                    <flux:checkbox wire:model.live="hideCompleted" :label="__('Hide finished')" />
+                </div>
             </div>
 
             {{-- Without a mat there is nowhere to send a bout, so the whole
@@ -110,7 +133,10 @@
                              contests still to come carry the eye. --}}
                         <tr @class(['opacity-50' => $bout->isDecided()]) wire:key="fo-{{ $bout->id }}">
                             <td class="num font-semibold">{{ $bout->fight_number }}</td>
-                            <td>{{ $bout->weightCategory->label }} {{ __('kg') }}</td>
+                            <td>
+                                <div class="font-semibold">{{ $bout->weightCategory->exportName() }} {{ __('kg') }}</div>
+                                <div class="text-[12.5px] text-muted">{{ $bout->weightCategory->ageCategory?->name }}</div>
+                            </td>
                             <td class="text-muted">{{ $bout->phase((int) ($roundsByCategory[$bout->weight_category_id] ?? $bout->round)) }}</td>
 
                             {{-- The corner colour is carried by a dot beside the

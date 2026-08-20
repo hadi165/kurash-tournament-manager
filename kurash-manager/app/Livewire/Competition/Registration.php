@@ -78,6 +78,19 @@ class Registration extends Component
             return;
         }
 
+        // Men's and women's classes are separate competitions even where they
+        // share a weight label, so the entry has to agree with the athlete.
+        // Checked against the stored class rather than the posted one: the
+        // browser's copy of the form is not the authority on eligibility.
+        if ($weightCategory->gender !== 'X' && $weightCategory->gender !== $this->gender) {
+            $this->addError('weight_category_id', __(':class is a :gender class.', [
+                'class' => $weightCategory->exportName(),
+                'gender' => strtolower($weightCategory->genderLabel()),
+            ]));
+
+            return;
+        }
+
         $attributes = [
             'fullname' => $this->fullname,
             'noc_code' => strtoupper($this->noc_code),

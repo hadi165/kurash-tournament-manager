@@ -8,6 +8,7 @@ use App\Models\Championship;
 use App\Services\FightOrderScheduler;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 class FightOrder extends Component
@@ -17,6 +18,13 @@ class FightOrder extends Component
     public int $minimumRest = FightOrderScheduler::DEFAULT_REST;
 
     public bool $hideCompleted = false;
+
+    /** Which competition the running order is being read for. */
+    #[Url]
+    public string $gender = '';
+
+    #[Url]
+    public string $ageCategory = '';
 
     public function mount(Championship $championship): void
     {
@@ -95,6 +103,14 @@ class FightOrder extends Component
         $bouts = $this->championship->bouts()
             ->whereNotNull('fight_number')
             ->when($this->hideCompleted, fn ($q) => $q->where('status', '!=', Bout::STATUS_COMPLETED))
+            // Filtered in the query, not in the row: a running order narrowed
+            // to the women's classes must not carry the men's bouts in the
+            // payload with the rows merely hidden.
+            ->when($this->gender !== '', fn ($q) => $q->whereHas(
+                'weightCategory',
+                fn ($category) => $category->where('gender', $this->gender)
+            ))
+            ->when($this->ageCategory !== '', fn ($q) => $q->where('age_category_id', $this->ageCategory))
             ->with(['athleteA', 'athleteB', 'winner', 'weightCategory.ageCategory', 'court'])
             ->orderBy('fight_number')
             ->get();
@@ -111,6 +127,7 @@ class FightOrder extends Component
             'courts' => $this->championship->courts()->where('is_active', true)->orderBy('number')->get(),
             'violations' => $scheduler->restViolations($this->championship, $this->minimumRest),
             'unscheduled' => $this->championship->bouts()->whereNull('fight_number')->where('is_bye', false)->count(),
+            'ageCategories' => $this->championship->ageCategories()->orderBy('sort_order')->get(),
         ]);
     }
 }
