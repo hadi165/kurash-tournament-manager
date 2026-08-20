@@ -339,6 +339,64 @@ describe('bracket screen', function () {
         expect($category->athletes()->pluck('draw_number')->sort()->values()->all())->toBe([1, 2, 3]);
     });
 
+    describe('deleting the bracket', function () {
+        it('throws the drawn bracket away and keeps the draw numbers', function () {
+            [$category, $athletes] = categoryWithAthletes(4);
+            app(BracketGenerator::class)->generate($category);
+
+            Livewire::test(Bracket::class, ['weightCategory' => $category])
+                ->call('deleteBracket');
+
+            expect($category->bouts()->count())->toBe(0)
+                ->and($athletes[1]->refresh()->draw_number)->toBe(1);
+        });
+
+        /** Which is the whole point: registration refuses while a bracket stands. */
+        it('lets an athlete be removed afterwards', function () {
+            [$category] = categoryWithAthletes(4);
+            app(BracketGenerator::class)->generate($category);
+
+            Livewire::test(Bracket::class, ['weightCategory' => $category])
+                ->call('deleteBracket');
+
+            $ageCategory = $category->ageCategory;
+            $athlete = $category->athletes()->firstOrFail();
+
+            Livewire::test(Registration::class, ['ageCategory' => $ageCategory])
+                ->call('delete', $athlete->id);
+
+            expect(Athlete::find($athlete->id))->toBeNull();
+        });
+
+        it('asks again before erasing a decided contest', function () {
+            [$category] = categoryWithAthletes(4);
+            app(BracketGenerator::class)->generate($category);
+            runTournament($category);
+
+            $component = Livewire::test(Bracket::class, ['weightCategory' => $category])
+                ->call('deleteBracket');
+
+            expect($category->bouts()->count())->toBeGreaterThan(0)
+                ->and($component->get('confirmingDelete'))->toBeTrue();
+
+            $component->call('deleteBracket', true);
+
+            expect($category->bouts()->count())->toBe(0);
+        });
+
+        /** A contest being scored would vanish from under the mat screen. */
+        it('refuses while a contest from the class is on a mat', function () {
+            [$court, $bout] = boutOnMat();
+            $category = $bout->weightCategory;
+
+            Livewire::test(Bracket::class, ['weightCategory' => $category])
+                ->call('deleteBracket')
+                ->assertSee('on a mat');
+
+            expect($category->bouts()->count())->toBeGreaterThan(0);
+        });
+    });
+
     /**
      * Regression: draw numbers are unique per category, and saveDraws() used
      * to write them one at a time in place. The moment two athletes swapped,

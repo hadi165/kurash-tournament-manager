@@ -40,6 +40,8 @@ class Bracket extends Component
 
     public bool $confirmingRegenerate = false;
 
+    public bool $confirmingDelete = false;
+
     public function mount(WeightCategory $weightCategory): void
     {
         $this->weightCategory = $weightCategory->load('ageCategory.championship');
@@ -180,6 +182,71 @@ class Bracket extends Component
             'rounds' => $result['rounds'],
             'byes' => $result['byes'],
         ]));
+    }
+
+    /**
+     * Throw the drawn bracket away.
+     *
+     * Registration refuses to remove an athlete once their class has been
+     * drawn, because deleting one out of a bracket leaves a tree with a hole
+     * in it. That is the right refusal, but it needs a way out: this is it.
+     * Draw numbers are deliberately kept, so the usual sequence — delete,
+     * correct the entry list, redraw — costs nobody the draw they already
+     * made.
+     *
+     * Deleted through the models rather than by one query, so the archived
+     * championship guard fires: a closed competition's results are not
+     * something a button should be able to erase.
+     */
+    public function deleteBracket(bool $discardResults = false): void
+    {
+        Gate::authorize('manage-competition');
+
+        if (! $this->weightCategory->bouts()->exists()) {
+            session()->flash('error', __('There is no bracket to delete.'));
+
+            return;
+        }
+
+        // A contest being scored right now would vanish from under the mat
+        // screen mid-bout, so that one is refused outright rather than
+        // confirmed.
+        if ($this->weightCategory->bouts()->where('status', Bout::STATUS_ON_COURT)->exists()) {
+            session()->flash('error', __('A contest from this class is on a mat. Take it off the mat before deleting the bracket.'));
+
+            return;
+        }
+
+        $decided = $this->weightCategory->bouts()
+            ->whereNotNull('winner_athlete_id')
+            ->where('is_bye', false)
+            ->count();
+
+        if ($decided > 0 && ! $discardResults) {
+            $this->confirmingDelete = true;
+
+            session()->flash('error', trans_choice(
+                '{1}:count contest has been decided in this class. Deleting the bracket erases it.'
+                .'|[2,*]:count contests have been decided in this class. Deleting the bracket erases them.',
+                $decided,
+                ['count' => $decided],
+            ));
+
+            return;
+        }
+
+        try {
+            DB::transaction(fn () => $this->weightCategory->bouts()->get()->each->delete());
+        } catch (Throwable $e) {
+            session()->flash('error', $e->getMessage());
+
+            return;
+        }
+
+        $this->confirmingDelete = false;
+        $this->confirmingRegenerate = false;
+
+        session()->flash('status', __('Bracket deleted. The draw numbers are kept, so this class can be drawn again.'));
     }
 
     /**

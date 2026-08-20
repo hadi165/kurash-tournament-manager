@@ -116,6 +116,25 @@
                     </flux:button>
                 @endif
 
+                {{-- The way out of "cannot remove: a bracket has already been
+                     drawn". Delete, correct the entry list, draw again — the
+                     draw numbers survive, so nobody loses the draw they
+                     made. --}}
+                @if ($bouts->isNotEmpty())
+                    <flux:button
+                        variant="ghost"
+                        class="!text-danger hover:!bg-danger-soft"
+                        wire:click="deleteBracket"
+                        wire:confirm="{{ __('Delete the drawn bracket for this weight class?') }}"
+                    >{{ __('Delete bracket') }}</flux:button>
+                @endif
+
+                @if ($confirmingDelete)
+                    <flux:button variant="danger" wire:click="deleteBracket(true)">
+                        {{ __('Erase results and delete') }}
+                    </flux:button>
+                @endif
+
                 @if ($drawnCount < 2)
                     <span class="text-sm text-ink/55">{{ __('At least two athletes need draw numbers.') }}</span>
                 @endif
