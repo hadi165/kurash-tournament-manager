@@ -109,6 +109,20 @@ class DrawCeremony extends Component
         return min($total, intdiv($elapsed, (int) ($pace['per'] ?? self::PACE)));
     }
 
+    /**
+     * When the telling began and how long each position is held.
+     *
+     * @return array{at:int, per:int}|null
+     */
+    private function pace(): ?array
+    {
+        $pace = Cache::get(self::paceKey($this->weightCategory->id));
+
+        return is_array($pace) && isset($pace['at'])
+            ? ['at' => (int) $pace['at'], 'per' => (int) ($pace['per'] ?? self::PACE)]
+            : null;
+    }
+
     public function render(): View
     {
         /** @var Collection<int, Athlete> $drawn keyed by draw number */
@@ -159,6 +173,10 @@ class DrawCeremony extends Component
                 ->sortByDesc('count')
                 ->values(),
             'remainingCount' => $remaining->count(),
+            // The clock the reveal is derived from, handed to the page so it
+            // can find the beat inside the current position without asking the
+            // server again. The draw itself is never recomputed from it.
+            'pace' => $this->pace(),
         ]);
     }
 }

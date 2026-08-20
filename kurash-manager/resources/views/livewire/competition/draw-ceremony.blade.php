@@ -26,15 +26,37 @@
         seen: Date.now(),
         stale: false,
         handle: null,
+        beat: null,
+        pace: @js($pace),
+        drawing: @js((bool) $drawing),
+        {{-- True for the first moment of a position, before the name lands.
+             Derived from the same stamp the server derives the reveal from, so
+             the page and the board can never disagree about where the draw is. --}}
+        anticipating: false,
+        watchBeat() {
+            clearInterval(this.beat)
+
+            if (! this.pace || ! this.drawing) { this.anticipating = false; return }
+
+            const tick = () => {
+                const elapsed = (Date.now() / 1000) - this.pace.at
+                this.anticipating = (elapsed % this.pace.per) < 1.1
+            }
+
+            tick()
+            this.beat = setInterval(tick, 200)
+        },
         init() {
+            this.watchBeat()
+
             {{-- The board runs between polls, so a dead feed leaves a
                  plausible but wrong draw on screen. Six seconds without an
                  update and the dot says so. --}}
             this.handle = setInterval(() => { this.stale = Date.now() - this.seen > 6000 }, 1000)
         },
-        destroy() { clearInterval(this.handle) },
+        destroy() { clearInterval(this.handle); clearInterval(this.beat) },
     }"
-    x-on:livewire:updated="seen = Date.now(); stale = false"
+    x-on:livewire:updated="seen = Date.now(); stale = false; drawing = @js((bool) $drawing); pace = @js($pace); watchBeat()"
 >
     <header class="dc-head">
         <div class="dc-head-id">
@@ -97,8 +119,15 @@
                 </div>
             @else
                 <div class="dc-panel dc-now" wire:key="now-{{ $revealed }}">
-                    <div class="dc-now-noc">{{ $spotlight ? \App\Support\Noc::normalise($spotlight->noc_code) : '—' }}</div>
-                    <div class="dc-now-name">{{ $spotlight?->fullname ?? __('Waiting') }}</div>
+                    <div class="dc-now-noc">
+                        <span x-show="! anticipating">{{ $spotlight ? \App\Support\Noc::normalise($spotlight->noc_code) : '—' }}</span>
+                        <span x-show="anticipating" x-cloak>{{ __('Drawing') }}</span>
+                    </div>
+
+                    {{-- Both are rendered; the beat only decides which shows, so
+                         a page with no script still reads the name. --}}
+                    <div class="dc-now-name" x-show="! anticipating">{{ $spotlight?->fullname ?? __('Waiting') }}</div>
+                    <div class="dc-now-name dc-now-drawing" x-show="anticipating" x-cloak>{{ __('Drawing…') }}</div>
                     <div class="dc-now-meta">
                         @if ($drawing)
                             {{ __('Position :n of :total', ['n' => $revealed + 1, 'total' => $total]) }}

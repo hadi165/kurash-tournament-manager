@@ -321,3 +321,51 @@ describe('the operator runs the ceremony', function () {
             ->assertForbidden();
     });
 });
+
+describe('the beat inside a position', function () {
+    it('hands the page the clock rather than a phase', function () {
+        [$category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($category);
+        $category->forceFill(['draw_published_at' => now()])->save();
+
+        Cache::put(DrawCeremony::paceKey($category->id), ['at' => now()->timestamp - 5, 'per' => 3], now()->addHour());
+
+        $board = Livewire::actingAs(User::factory()->official()->create())
+            ->test(DrawCeremony::class, ['weightCategory' => $category->refresh(), 'ceremony' => true]);
+
+        expect($board->viewData('pace'))->toBe(['at' => now()->timestamp - 5, 'per' => 3]);
+    });
+
+    /**
+     * Both states are rendered and the beat only decides which shows, so a
+     * page whose script never runs still reads the athlete's name.
+     */
+    it('renders the name whether or not the beat runs', function () {
+        [$category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($category);
+        $category->forceFill(['draw_published_at' => now()])->save();
+
+        Cache::put(DrawCeremony::paceKey($category->id), ['at' => now()->timestamp - 5, 'per' => 3], now()->addHour());
+
+        $board = Livewire::actingAs(User::factory()->official()->create())
+            ->test(DrawCeremony::class, ['weightCategory' => $category->refresh(), 'ceremony' => true]);
+
+        $drawing = $board->viewData('drawing');
+
+        $board->assertSee($drawing->fullname)->assertSee('Drawing');
+    });
+
+    it('has no beat to run once the draw is complete', function () {
+        [$category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($category);
+        $category->forceFill(['draw_published_at' => now()])->save();
+
+        Cache::put(DrawCeremony::paceKey($category->id), ['at' => now()->timestamp - 3600, 'per' => 3], now()->addHour());
+
+        $board = Livewire::actingAs(User::factory()->official()->create())
+            ->test(DrawCeremony::class, ['weightCategory' => $category->refresh(), 'ceremony' => true]);
+
+        expect($board->viewData('drawing'))->toBeNull()
+            ->and($board->viewData('complete'))->toBeTrue();
+    });
+});
