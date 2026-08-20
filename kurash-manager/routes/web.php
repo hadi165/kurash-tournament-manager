@@ -142,6 +142,7 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::prefix('exports')->name('exports.')->where(['format' => 'pdf|csv'])->group(function () {
         Route::get('weight-classes/{weightCategory}/weigh-in.{format}', [ExportController::class, 'confirmedWeighIn'])->name('weigh-in');
         Route::get('weight-classes/{weightCategory}/draw.{format}', [ExportController::class, 'drawSheet'])->name('draw');
+        Route::get('weight-classes/{weightCategory}/draw-numbers.{format}', [ExportController::class, 'drawNumbers'])->name('draw-numbers');
 
         Route::get('championships/{championship}/fight-order.{format}', [ExportController::class, 'fightOrder'])->name('fight-order');
         Route::get('championships/{championship}/entries-by-noc.{format}', [ExportController::class, 'entriesByNoc'])->name('entries-noc');

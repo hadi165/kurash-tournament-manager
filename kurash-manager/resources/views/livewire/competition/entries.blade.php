@@ -61,6 +61,14 @@
                                         <x-ui.chip :href="route('exports.draw', ['weightCategory' => $category, 'format' => 'pdf'])">
                                             {{ __('Draw') }}
                                         </x-ui.chip>
+
+                                        {{-- What the draw gave each athlete, in draw order.
+                                             The weigh-in list is the sheet the numbers are
+                                             written onto and leaves the column blank; this is
+                                             what came back off it. --}}
+                                        <x-ui.chip :href="route('exports.draw-numbers', ['weightCategory' => $category, 'format' => 'pdf'])">
+                                            {{ __('Numbers') }}
+                                        </x-ui.chip>
                                     @endif
                                 </div>
                             </td>

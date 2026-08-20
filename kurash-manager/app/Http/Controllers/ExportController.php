@@ -6,6 +6,7 @@ use App\Exports\AccreditationCards;
 use App\Exports\CertificateSheet;
 use App\Exports\ConfirmedWeighInReport;
 use App\Exports\CsvWriter;
+use App\Exports\DrawNumbersReport;
 use App\Exports\DrawSheetReport;
 use App\Exports\EntriesByNocReport;
 use App\Exports\EntriesByWeightCategoryReport;
@@ -89,6 +90,12 @@ class ExportController extends Controller
     public function confirmedWeighIn(WeightCategory $weightCategory, string $format): Response
     {
         return $this->render(new ConfirmedWeighInReport($weightCategory->load('ageCategory.championship')), $format);
+    }
+
+    /** What the draw produced: one line per athlete, in draw order. */
+    public function drawNumbers(WeightCategory $weightCategory, string $format): Response
+    {
+        return $this->render(new DrawNumbersReport($weightCategory->load('ageCategory.championship')), $format);
     }
 
     public function drawSheet(WeightCategory $weightCategory, string $format): Response

@@ -2,6 +2,7 @@
 
 use App\Exports\ConfirmedWeighInReport;
 use App\Exports\DocumentReference;
+use App\Exports\DrawNumbersReport;
 use App\Exports\DrawSheetReport;
 use App\Exports\EntriesByWeightCategoryReport;
 use App\Exports\FightOrderReport;
@@ -408,5 +409,67 @@ describe('the printed sheet', function () {
             ->toContain('Nothing to report yet.')
             ->and(renderedSheet(new EntriesByWeightCategoryReport($championship)))
             ->not->toContain('Total weighed in');
+    });
+});
+
+describe('the draw numbers', function () {
+    beforeEach(fn () => $this->actingAs($this->admin));
+
+    it('lists everybody holding a number, in draw order', function () {
+        $category = weighedClass(6);
+        app(BracketGenerator::class)->generate($category);
+
+        $report = new DrawNumbersReport($category->refresh());
+        $rows = $report->rows();
+
+        expect($rows)->toHaveCount(6)
+            ->and(array_column($rows, 0))->toBe([1, 2, 3, 4, 5, 6])
+            ->and($rows[0][1])->toBe('Athlete 1');
+    });
+
+    /**
+     * The confirmed weigh-in list leaves the column blank on purpose — it is
+     * the sheet the numbers are written onto. This is the other half.
+     */
+    it('is the answer sheet, where the weigh-in list is the blank one', function () {
+        $category = weighedClass(4);
+
+        $weighIn = (new ConfirmedWeighInReport($category))->rows();
+        $numbers = (new DrawNumbersReport($category))->rows();
+
+        expect(array_column($weighIn, 5))->each->toBe('')
+            ->and(array_filter(array_column($numbers, 0)))->toHaveCount(4);
+    });
+
+    it('says how each number was arrived at', function () {
+        $category = weighedClass(4);
+        $category->athletes()->update(['draw_number_source' => 'random']);
+
+        expect((new DrawNumbersReport($category->refresh()))->rows()[0][5])->toBe('Random draw');
+    });
+
+    it('leaves out anybody who was never drawn', function () {
+        $category = weighedClass(5);
+        $category->athletes()->orderByDesc('draw_number')->first()->update(['draw_number' => null]);
+
+        expect((new DrawNumbersReport($category->refresh()))->rows())->toHaveCount(4);
+    });
+
+    it('downloads in both formats', function () {
+        $category = weighedClass(4);
+
+        $this->get(route('exports.draw-numbers', ['weightCategory' => $category, 'format' => 'pdf']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $this->get(route('exports.draw-numbers', ['weightCategory' => $category, 'format' => 'csv']))
+            ->assertOk();
+    });
+
+    it('reports the bracket the draw was actually built for', function () {
+        $category = weighedClass(6);
+        app(BracketGenerator::class)->generate($category);
+
+        expect((new DrawNumbersReport($category->refresh()))->meta()['Bracket'])->toBe('Bracket of 8');
     });
 });

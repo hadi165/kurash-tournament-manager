@@ -2,12 +2,26 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Database\Factories\WeightCategoryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * The cast columns are declared here because static analysis reads the
+ * migration, where they are timestamps, and cannot see that casts() turns them
+ * into date objects.
+ *
+ * @property CarbonImmutable|null $draw_generated_at
+ * @property CarbonImmutable|null $draw_published_at
+ * @property CarbonImmutable|null $draw_locked_at
+ * @property int|null $draw_athlete_count
+ * @property int|null $draw_bucket_size
+ * @property int|null $draw_bye_count
+ * @property int $draw_version
+ */
 class WeightCategory extends Model
 {
     /** @use HasFactory<WeightCategoryFactory> */
