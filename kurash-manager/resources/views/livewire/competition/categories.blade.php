@@ -77,7 +77,10 @@
          subject of the screen, not a masthead over it. --}}
     <x-slot:hero>
         <div class="flex max-w-[1180px] flex-col items-start gap-[18px] px-2">
-            <section class="flex w-full flex-wrap items-end justify-between gap-8 rounded-lg bg-surface px-8 py-7 shadow-card">
+            {{-- The hero carries the lead hue as a wash. Everything on it sits
+                 on surface, so the tint reads as the page's subject rather
+                 than as a state. --}}
+            <section class="flex w-full flex-wrap items-end justify-between gap-8 rounded-lg bg-brand-soft px-8 py-7 shadow-card">
                 <div>
                     @if ($championship->isArchived())
                         <x-ui.tag>
@@ -100,9 +103,9 @@
                 </div>
 
                 <x-ui.stats :items="[
-                    ['value' => $ageCategories->count(), 'label' => __('Categories')],
-                    ['value' => $totalAthletes, 'label' => __('Athletes')],
-                    ['value' => $totalWeights, 'label' => __('Weight classes')],
+                    ['value' => $ageCategories->count(), 'label' => __('Categories'), 'hue' => 'brand'],
+                    ['value' => $totalAthletes, 'label' => __('Athletes'), 'hue' => 'info'],
+                    ['value' => $totalWeights, 'label' => __('Weight classes'), 'hue' => 'amber'],
                 ]" />
             </section>
 
@@ -198,19 +201,29 @@
             // same way the edit form reads it back.
             $gender = $ageCategory->weightCategories->first()->gender ?? 'X';
 
-            [$genderLabel, $genderVariant] = match ($gender) {
-                'M' => [__('Men'), 'info'],
-                'F' => [__('Women'), 'brand'],
-                default => [__('Mixed'), 'muted'],
+            // Each age category owns a hue, so a long page of them stays
+            // scannable: men blue, women green, anything else neutral. The rail
+            // is the bright end and the label the readable -deep one.
+            [$genderLabel, $rail, $tint, $ink] = match ($gender) {
+                // The ink is forced: it lands on a tag that already carries the
+                // neutral variant's colour, and two utilities of equal weight
+                // are settled by stylesheet order, not by call site.
+                'M' => [__('Men'), 'border-info', 'bg-info-soft', '!text-info-deep'],
+                'F' => [__('Women'), 'border-brand', 'bg-brand-soft', '!text-brand-deep'],
+                default => [__('Mixed'), 'border-line', 'bg-ground', ''],
             };
         @endphp
 
-        <x-ui.card wire:key="age-{{ $ageCategory->id }}">
-            <div class="flex flex-wrap items-start justify-between gap-4">
+        <x-ui.card flush class="border-t-[5px] {{ $rail }}" wire:key="age-{{ $ageCategory->id }}">
+            <div class="flex flex-wrap items-start justify-between gap-4 px-7 py-[22px] {{ $tint }}">
                 <div>
                     <div class="flex items-center gap-2.5">
                         <h2 class="m-0 text-[21px]">{{ $ageCategory->name }}</h2>
-                        <x-ui.tag :variant="$genderVariant">{{ $genderLabel }}</x-ui.tag>
+
+                        {{-- Surface, not the hue's soft tint: the header is
+                             already that tint, and a pill the colour of its
+                             own background is not a pill. --}}
+                        <x-ui.tag class="!bg-surface {{ $ink }}">{{ $genderLabel }}</x-ui.tag>
                     </div>
 
                     <p class="mt-1.5 text-[13.5px] text-muted">
@@ -247,7 +260,7 @@
                 </div>
             </div>
 
-            <div class="mt-5 grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(158px,1fr))]">
+            <div class="grid gap-2.5 px-7 py-6 [grid-template-columns:repeat(auto-fit,minmax(158px,1fr))]">
                 @forelse ($ageCategory->weightCategories as $weightCategory)
                     @php
                         $count = $weightCategory->athletes_count;
