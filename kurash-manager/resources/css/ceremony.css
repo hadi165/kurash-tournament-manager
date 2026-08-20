@@ -38,6 +38,12 @@
 
 /* ── Shared vocabulary ──────────────────────────────────────────────────── */
 
+/* Anything Alpine hides on load has to be hidden before Alpine boots. These
+   pages load this stylesheet and nothing else, so the rule lives here too —
+   without it both sides of an x-show pair paint for a frame, which on a venue
+   screen means the board briefly shows a name and DRAWING… at once. */
+[x-cloak] { display: none !important; }
+
 .dc-panel {
     background: var(--dc-panel);
     border: 1px solid var(--dc-line);

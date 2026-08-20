@@ -50,9 +50,12 @@
         succeed() {
             if (! this.busy) return
 
+            {{-- The overlay covers the wait and then gets out of the way. An
+                 admin drawing a bracket wants the bracket, not a ceremony:
+                 the celebration belongs on the venue screen, in front of a
+                 hall that came to watch it. --}}
             this.clear()
-            this.phase = 'complete'
-            this.queue(() => this.finish(), this.reduced ? 400 : 900)
+            this.finish()
         },
 
         fail(message) {
@@ -164,16 +167,6 @@
                 <h2 class="dc-heading">{{ __('Drawing') }}</h2>
                 <p class="dc-sub">{{ __('Waiting for the draw to be recorded') }}</p>
                 <div class="dc-progress"><span></span></div>
-            </div>
-        </template>
-
-        {{-- Phase 4 — complete. Only ever reached from the server event. --}}
-        <template x-if="phase === 'complete'">
-            <div class="flex flex-col items-center gap-6">
-                <span class="dc-chip dc-chip-done"><span class="dc-dot"></span>{{ __('Draw complete') }}</span>
-                <h2 class="dc-heading">{{ __('Draw complete') }}</h2>
-                <p class="dc-sub">{{ __('The bracket below is the recorded draw.') }}</p>
-                <div class="dc-progress dc-progress-done"><span></span></div>
             </div>
         </template>
 

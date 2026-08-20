@@ -141,11 +141,19 @@
             {{-- The only control on the screen, and it starts the telling
                  rather than the draw: the bracket was decided before this page
                  was opened. --}}
-            @if ($ceremony)
+            {{-- One control, and it moves the telling forward: begin, then the
+                 next position, then nothing once every position is placed. --}}
+            @if ($ceremony && ! $complete)
                 <div class="dc-start">
-                    <button type="button" class="dc-button dc-button-primary" wire:click="startCeremony">
-                        {{ $waiting ? __('Begin the draw') : __('Replay the draw') }}
-                    </button>
+                    @if ($waiting)
+                        <button type="button" class="dc-button dc-button-primary" wire:click="startCeremony">
+                            {{ __('Begin draw') }}
+                        </button>
+                    @else
+                        <button type="button" class="dc-button dc-button-primary" wire:click="nextDraw">
+                            {{ __('Next draw') }}
+                        </button>
+                    @endif
                 </div>
             @endif
 

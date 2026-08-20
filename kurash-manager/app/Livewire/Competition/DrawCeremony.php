@@ -63,21 +63,41 @@ class DrawCeremony extends Component
     }
 
     /**
-     * Start the reveal, or run it again.
+     * Begin the ceremony.
      *
-     * Presentation state and nothing else: it stamps when the telling began,
-     * which is the only thing the board reads to decide how much of the draw
-     * the hall has seen. The draw itself was committed before this screen was
-     * ever opened and no method here can touch it.
+     * Presentation state and nothing else: it records that the telling has
+     * started and that nothing has been placed yet. The draw itself was
+     * committed before this screen was ever opened, and no method here can
+     * touch it.
      */
     public function startCeremony(): void
     {
         Gate::authorize('presentation.operate');
 
+        $this->setRevealed(0);
+    }
+
+    /**
+     * Place the position being drawn, and move to the next.
+     *
+     * The person announcing the draw sets the pace — a hall does not run to a
+     * three-second timer, and a position that needs a moment gets one.
+     */
+    public function nextDraw(): void
+    {
+        Gate::authorize('presentation.operate');
+
+        $total = $this->weightCategory->drawnAthletes()->count();
+
+        $this->setRevealed(min($total, $this->revealed($total) + 1));
+    }
+
+    private function setRevealed(int $revealed): void
+    {
         Cache::put(
             self::paceKey($this->weightCategory->id),
-            ['at' => (int) now()->timestamp, 'per' => self::PACE],
-            now()->addHour(),
+            ['revealed' => $revealed],
+            now()->addHours(6),
         );
     }
 
@@ -98,15 +118,22 @@ class DrawCeremony extends Component
     {
         $pace = Cache::get(self::paceKey($this->weightCategory->id));
 
-        if (! is_array($pace) || ! isset($pace['at'])) {
-            // A ceremony nobody has started shows nothing yet; a board with no
-            // ceremony behind it simply shows the draw as it stands.
-            return $this->ceremony ? 0 : $total;
+        // Announced: the operator has placed this many, one press at a time.
+        if (is_array($pace) && isset($pace['revealed'])) {
+            return min($total, max(0, (int) $pace['revealed']));
         }
 
-        $elapsed = max(0, (int) now()->timestamp - (int) $pace['at']);
+        // Paced: a draw run from the mat screen reveals itself on a clock, and
+        // a board reopened mid-ceremony works out where it had got to.
+        if (is_array($pace) && isset($pace['at'])) {
+            $elapsed = max(0, (int) now()->timestamp - (int) $pace['at']);
 
-        return min($total, intdiv($elapsed, (int) ($pace['per'] ?? self::PACE)));
+            return min($total, intdiv($elapsed, (int) ($pace['per'] ?? self::PACE)));
+        }
+
+        // A ceremony nobody has started shows nothing yet; a board with no
+        // ceremony behind it simply shows the draw as it stands.
+        return $this->ceremony ? 0 : $total;
     }
 
     /**
@@ -118,7 +145,9 @@ class DrawCeremony extends Component
     {
         $pace = Cache::get(self::paceKey($this->weightCategory->id));
 
-        return is_array($pace) && isset($pace['at'])
+        // Only a clock-paced ceremony has a beat to find; an announced one
+        // changes when somebody presses, which the poll already carries.
+        return is_array($pace) && isset($pace['at']) && ! isset($pace['revealed'])
             ? ['at' => (int) $pace['at'], 'per' => (int) ($pace['per'] ?? self::PACE)]
             : null;
     }

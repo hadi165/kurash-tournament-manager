@@ -369,3 +369,107 @@ describe('the beat inside a position', function () {
             ->and($board->viewData('complete'))->toBeTrue();
     });
 });
+
+describe('the operator paces the reveal', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(4);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+
+        $this->operator = User::factory()->official()->create();
+        Cache::forget(DrawCeremony::paceKey($this->category->id));
+
+        $this->board = fn () => Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true]);
+    });
+
+    it('offers Begin draw first and Next draw after that', function () {
+        ($this->board)()->assertSee('Begin draw')->assertDontSee('Next draw');
+
+        Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->call('startCeremony')
+            ->assertSee('Next draw')
+            ->assertDontSee('Begin draw');
+    });
+
+    it('places one position per press', function () {
+        $board = ($this->board)();
+
+        $board->call('startCeremony');
+        expect($board->viewData('revealed'))->toBe(0);
+
+        foreach ([1, 2, 3, 4] as $expected) {
+            $board->call('nextDraw');
+            expect($board->viewData('revealed'))->toBe($expected);
+        }
+    });
+
+    it('stops at the last position rather than counting past it', function () {
+        $board = ($this->board)();
+        $board->call('startCeremony');
+
+        foreach (range(1, 8) as $ignored) {
+            $board->call('nextDraw');
+        }
+
+        expect($board->viewData('revealed'))->toBe(4)
+            ->and($board->viewData('complete'))->toBeTrue();
+
+        // Nothing left to press once every position is placed.
+        $board->assertDontSee('Next draw');
+    });
+
+    it('keeps the counters adding up as it goes', function () {
+        $board = ($this->board)();
+        $board->call('startCeremony');
+
+        foreach (range(0, 4) as $ignored) {
+            $drawn = $board->viewData('revealed');
+            $drawing = $board->viewData('drawing') === null ? 0 : 1;
+
+            expect($drawn + $drawing + $board->viewData('remainingCount'))->toBe(4);
+
+            $board->call('nextDraw');
+        }
+    });
+
+    /** Pressing is telling, not drawing: the bracket cannot move. */
+    it('never changes the draw by pressing', function () {
+        $before = $this->category->bouts()->pluck('athlete_a_id', 'id')->toArray();
+        $version = $this->category->draw_version;
+
+        $board = ($this->board)();
+        $board->call('startCeremony');
+        $board->call('nextDraw');
+        $board->call('nextDraw');
+
+        expect($this->category->refresh()->draw_version)->toBe($version)
+            ->and($this->category->bouts()->pluck('athlete_a_id', 'id')->toArray())->toBe($before);
+    });
+
+    it('is refused for anybody who may not present', function () {
+        Livewire::actingAs(User::factory()->scoreboardViewer()->create())
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category])
+            ->call('nextDraw')
+            ->assertForbidden();
+    });
+});
+
+describe('the admin draw screen', function () {
+    /**
+     * The overlay covers the wait and then gets out of the way. The
+     * celebration belongs on the venue screen, in front of a hall that came to
+     * watch it.
+     */
+    it('has no completion celebration on it', function () {
+        $overlay = file_get_contents(resource_path('views/components/draw/ceremony.blade.php'));
+
+        expect(str_contains($overlay, "phase === 'complete'"))->toBeFalse()
+            ->and(str_contains($overlay, 'Draw complete'))->toBeFalse()
+            // It still says when a draw could not be made, which is not a
+            // celebration.
+            ->and(str_contains($overlay, 'Draw could not be completed'))->toBeTrue();
+    });
+});
