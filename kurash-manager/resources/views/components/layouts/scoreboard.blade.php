@@ -22,6 +22,13 @@
 
     @livewireStyles
 
+    {{-- Loaded by the layout rather than by the component that needs it: a
+         stylesheet link emitted inside a component view is a second root
+         element, and Livewire binds to the first root it finds. It bound to
+         the link, which left every control on the page outside the component
+         and doing nothing when pressed. --}}
+    @vite('resources/css/ceremony.css')
+
     @unless ($pinnedTheme)
         {{-- Applied before first paint, so a light-themed board does not flash
              black on every poll-driven reload. --}}

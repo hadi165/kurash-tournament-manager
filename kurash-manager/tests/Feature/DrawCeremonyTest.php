@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Services\BracketGenerator;
 use App\Support\BracketSeeding;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\File;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -471,5 +472,53 @@ describe('the admin draw screen', function () {
             // It still says when a draw could not be made, which is not a
             // celebration.
             ->and(str_contains($overlay, 'Draw could not be completed'))->toBeTrue();
+    });
+});
+
+describe('the component is bound to its markup', function () {
+    /**
+     * Regression: the view emitted its stylesheet with @vite, which put a
+     * <link> in front of the markup. A component view has one root element,
+     * and Livewire binds to the first it finds — it bound to the link, so
+     * every button on the page sat outside the component and did nothing when
+     * pressed, and the poll never ran either. The stylesheet belongs to the
+     * layout.
+     */
+    it('binds to the board, not to a stylesheet link', function () {
+        [$category] = categoryWithAthletes(6);
+        app(BracketGenerator::class)->generate($category);
+        $category->forceFill(['draw_published_at' => now()])->save();
+
+        $html = $this->actingAs(User::factory()->official()->create())
+            ->get(route('operator.draws.ceremony', $category->refresh()))
+            ->getContent();
+
+        preg_match('/<([a-z]+)[^>]*wire:id=/', $html, $root);
+
+        expect($root[1] ?? null)->toBe('div');
+
+        // And the control is inside the component that carries the action.
+        expect($html)->toContain('wire:click="startCeremony"');
+    });
+
+    it('binds the scoreboard viewer to its board too', function () {
+        [$court] = boutOnMat();
+
+        $html = $this->actingAs(User::factory()->scoreboardViewer()->create())
+            ->get(route('scoreboard.show', $court))
+            ->getContent();
+
+        preg_match('/<([a-z]+)[^>]*wire:id=/', $html, $root);
+
+        expect($root[1] ?? null)->toBe('div');
+    });
+
+    /** No component view may emit a stylesheet: that is what caused it. */
+    it('keeps stylesheet links out of every component view', function () {
+        $offenders = collect(File::allFiles(resource_path('views/livewire')))
+            ->filter(fn ($file) => str_contains(File::get($file->getPathname()), '@vite('))
+            ->map(fn ($file) => $file->getRelativePathname());
+
+        expect($offenders)->toBeEmpty();
     });
 });

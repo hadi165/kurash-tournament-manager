@@ -17,8 +17,6 @@
     $columns = '300px repeat('.max(1, $rounds).', 150px) 210px';
 @endphp
 
-@vite('resources/css/ceremony.css')
-
 <div
     wire:poll.2s
     class="dc dc-board-page {{ $size >= 32 ? 'dc-board-32' : '' }} {{ $complete ? 'dc-complete' : '' }}"
