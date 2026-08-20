@@ -340,6 +340,51 @@ describe('bracket screen', function () {
     });
 
     /**
+     * Regression: draw numbers are unique per category, and saveDraws() used
+     * to write them one at a time in place. The moment two athletes swapped,
+     * the first update tried to take a number the second was still holding and
+     * the screen died on the constraint rather than saving.
+     */
+    it('lets two athletes swap draw numbers after the draw', function () {
+        [$category, $athletes] = categoryWithAthletes(4);
+
+        app(BracketGenerator::class)->generate($category);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->set("draws.{$athletes[1]->id}", '2')
+            ->set("draws.{$athletes[2]->id}", '1')
+            ->call('saveDraws');
+
+        expect($athletes[1]->refresh()->draw_number)->toBe(2)
+            ->and($athletes[2]->refresh()->draw_number)->toBe(1);
+    });
+
+    it('says the bracket needs redrawing when the numbers change under one', function () {
+        [$category, $athletes] = categoryWithAthletes(4);
+
+        app(BracketGenerator::class)->generate($category);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->set("draws.{$athletes[1]->id}", '2')
+            ->set("draws.{$athletes[2]->id}", '1')
+            ->call('saveDraws')
+            // Asserted on what the operator actually sees: Livewire's test
+            // harness ages the flash before session('status') can be read back.
+            ->assertSee('Redraw the bracket for the new order to take effect.');
+    });
+
+    it('clears a draw number that is emptied', function () {
+        [$category, $athletes] = categoryWithAthletes(3);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->set("draws.{$athletes[3]->id}", '')
+            ->call('saveDraws');
+
+        expect($athletes[3]->refresh()->draw_number)->toBeNull()
+            ->and($athletes[1]->refresh()->draw_number)->toBe(1);
+    });
+
+    /**
      * Regression: the redraw used to write through models loaded before the
      * draw numbers were cleared. Eloquent persists only dirty attributes, so
      * an athlete redrawn the same number they already held looked unchanged

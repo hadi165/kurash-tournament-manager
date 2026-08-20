@@ -87,16 +87,36 @@ class Bracket extends Component
             $seen[$number] = $athleteId;
         }
 
-        foreach ($this->athletes() as $athlete) {
-            $value = $this->draws[$athlete->id] ?? '';
+        // Cleared first, then written, and both inside one transaction. Draw
+        // numbers are unique per category, so writing them one at a time in
+        // place fails the moment two athletes swap: the first update tries to
+        // take a number the second is still holding.
+        //
+        // Written by query rather than through the loaded models for the same
+        // reason drawAtRandom() does: an Eloquent model only persists *dirty*
+        // attributes, and these were loaded before the clear, so an athlete
+        // keeping the number they already had would look unchanged and be left
+        // at NULL.
+        DB::transaction(function () use ($seen) {
+            $this->weightCategory->athletes()->update(['draw_number' => null, 'draw_number_source' => null]);
 
-            $athlete->update([
-                'draw_number' => $value === '' ? null : (int) $value,
-                'draw_number_source' => $value === '' ? null : 'manual',
-            ]);
-        }
+            foreach ($seen as $number => $athleteId) {
+                Athlete::whereKey($athleteId)->update([
+                    'draw_number' => $number,
+                    'draw_number_source' => 'manual',
+                ]);
+            }
+        });
 
-        session()->flash('status', __('Draw numbers saved.'));
+        $this->syncDraws();
+
+        // Changing the numbers does not move anybody in a bracket that already
+        // exists — the draw is what the bracket was built from, not something
+        // it reads live. Saying so beats leaving an official to wonder why the
+        // tree on screen did not move.
+        session()->flash('status', $this->weightCategory->bouts()->exists()
+            ? __('Draw numbers saved. Redraw the bracket for the new order to take effect.')
+            : __('Draw numbers saved.'));
     }
 
     /** Assign draw numbers at random to everyone who passed the scale. */
