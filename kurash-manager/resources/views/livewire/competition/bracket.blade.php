@@ -9,6 +9,12 @@
     $subtitle = $projectedSize
         ? $drawn.' · '.__('bracket of :size', ['size' => $projectedSize])
         : $drawn;
+
+    // Handed to the ceremony overlay: the athletes this class actually holds,
+    // and the seeding the generator will use. Both are real — the overlay
+    // invents nobody and predicts nothing.
+    $ceremonyNames = $athletes->pluck('fullname')->all();
+    $ceremonyPairs = $projectedSize ? \App\Support\BracketSeeding::firstRoundPairs($projectedSize) : [];
 @endphp
 
 <x-page
@@ -73,9 +79,14 @@
     @can('manage-competition')
         <x-ui.card :title="__('Draw numbers')">
             <x-slot:head>
-                <flux:button size="sm" wire:click="drawAtRandom" wire:confirm="{{ __('Replace all draw numbers in this class with a random draw?') }}">
-                    {{ __('Draw at random') }}
-                </flux:button>
+                <flux:button
+                    size="sm"
+                    wire:click="drawAtRandom"
+                    wire:confirm="{{ __('Replace all draw numbers in this class with a random draw?') }}"
+                    wire:loading.attr="disabled"
+                    wire:target="drawAtRandom,generate"
+                    x-on:click="$dispatch('draw-started', { mode: 'positions' })"
+                >{{ __('Draw at random') }}</flux:button>
                 <flux:button size="sm" variant="primary" wire:click="saveDraws">{{ __('Save draw numbers') }}</flux:button>
             </x-slot:head>
 
@@ -107,13 +118,20 @@
                 <flux:button
                     variant="primary"
                     wire:click="generate"
+                    wire:loading.attr="disabled"
+                    wire:target="drawAtRandom,generate"
+                    x-on:click="$dispatch('draw-started', { mode: 'bracket' })"
                     :disabled="$drawnCount < 2"
                 >{{ $bouts->isEmpty() ? __('Draw the bracket') : __('Redraw the bracket') }}</flux:button>
 
                 @if ($confirmingRegenerate)
-                    <flux:button variant="danger" wire:click="generate(true)">
-                        {{ __('Erase results and redraw') }}
-                    </flux:button>
+                    <flux:button
+                        variant="danger"
+                        wire:click="generate(true)"
+                        wire:loading.attr="disabled"
+                        wire:target="drawAtRandom,generate"
+                        x-on:click="$dispatch('draw-started', { mode: 'bracket' })"
+                    >{{ __('Erase results and redraw') }}</flux:button>
                 @endif
 
                 {{-- The way out of "cannot remove: a bracket has already been
@@ -233,4 +251,5 @@
             </div>
         </x-ui.card>
     @endif
+    <x-draw.ceremony :names="$ceremonyNames" :pairs="$ceremonyPairs" />
 </x-page>

@@ -10,6 +10,10 @@ export default defineConfig({
         laravel({
             input: [
                 'resources/css/app.css',
+                // Its own entry, not an import of app.css: the venue draw
+                // board runs on the chrome-less layout, which never loads the
+                // admin bundle.
+                'resources/css/ceremony.css',
                 'resources/js/app.js',
                 'resources/js/passkeys.js',
             ],

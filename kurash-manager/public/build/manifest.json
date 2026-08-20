@@ -1,11 +1,20 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-DNv2_evC.css",
+    "file": "assets/app-Yf-Wo0hM.css",
     "name": "app",
     "names": [
       "app.css"
     ],
     "src": "resources/css/app.css",
+    "isEntry": true
+  },
+  "resources/css/ceremony.css": {
+    "file": "assets/ceremony-BD-ghjcc.css",
+    "name": "ceremony",
+    "names": [
+      "ceremony.css"
+    ],
+    "src": "resources/css/ceremony.css",
     "isEntry": true
   },
   "resources/js/app.js": {

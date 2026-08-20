@@ -1,6 +1,11 @@
 @import 'tailwindcss';
 @import '../../vendor/livewire/flux/dist/flux.css';
 
+/* The draw ceremony's own palette, scoped to .dc. Imported rather than
+   duplicated: the venue draw board loads the same file as a standalone entry,
+   and two copies of a palette are two palettes waiting to disagree. */
+@import './ceremony.css';
+
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../vendor/livewire/flux-pro/stubs/**/*.blade.php';

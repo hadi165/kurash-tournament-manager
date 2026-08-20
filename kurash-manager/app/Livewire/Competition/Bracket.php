@@ -132,7 +132,7 @@ class Bracket extends Component
             ->shuffle();
 
         if ($eligibleIds->isEmpty()) {
-            session()->flash('error', __('Nobody in this class has passed the weigh-in.'));
+            $this->drawFailed(__('Nobody in this class has passed the weigh-in.'));
 
             return;
         }
@@ -156,6 +156,8 @@ class Bracket extends Component
 
         $this->syncDraws();
         session()->flash('status', __('Drew :count athlete(s) at random.', ['count' => $eligibleIds->count()]));
+
+        $this->dispatch('draw-completed', mode: 'positions');
     }
 
     public function generate(bool $discardResults = false): void
@@ -166,22 +168,38 @@ class Bracket extends Component
             $result = app(BracketGenerator::class)->generate($this->weightCategory, $discardResults);
         } catch (BracketHasResultsException $e) {
             $this->confirmingRegenerate = true;
-            session()->flash('error', $e->getMessage());
+            $this->drawFailed($e->getMessage());
 
             return;
         } catch (Throwable $e) {
-            session()->flash('error', $e->getMessage());
+            $this->drawFailed($e->getMessage());
 
             return;
         }
 
         $this->confirmingRegenerate = false;
 
+        $this->dispatch('draw-completed', mode: 'bracket');
+
         session()->flash('status', __('Bracket drawn: :bouts bouts across :rounds rounds, :byes bye(s).', [
             'bouts' => $result['bouts'],
             'rounds' => $result['rounds'],
             'byes' => $result['byes'],
         ]));
+    }
+
+    /**
+     * Tell the ceremony overlay the draw did not run.
+     *
+     * Flashed as well as dispatched: the overlay is decoration and the flash
+     * is the record, so the message survives on the screen after the overlay
+     * is dismissed.
+     */
+    private function drawFailed(string $message): void
+    {
+        session()->flash('error', $message);
+
+        $this->dispatch('draw-failed', message: $message);
     }
 
     /**
