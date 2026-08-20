@@ -68,7 +68,17 @@
                                 <div class="flex items-center gap-2">
                                     @if ($row['drawn'])
                                         <x-ui.tag variant="brand">{{ __('Done') }}</x-ui.tag>
-                                        <x-ui.chip :href="route('bracket.show', $category)" wire:navigate>{{ __('Open') }}</x-ui.chip>
+
+                                        {{-- Open goes to the working draw screen, which belongs
+                                             to the people who run the draw. Everybody else is
+                                             offered the published table instead, when there is
+                                             one — a link nobody can follow is worse than no
+                                             link at all. --}}
+                                        @can('manage-competition')
+                                            <x-ui.chip :href="route('bracket.show', $category)" wire:navigate>{{ __('Open') }}</x-ui.chip>
+                                        @elseif ($category->isDrawPublished())
+                                            <x-ui.chip :href="route('operator.draws.show', $category)" wire:navigate>{{ __('Present') }}</x-ui.chip>
+                                        @endcan
                                     @elseif ($row['cleared'] >= 2)
                                         <x-ui.tag>{{ __('Not started') }}</x-ui.tag>
                                         @can('manage-competition')

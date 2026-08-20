@@ -1,4 +1,6 @@
 @php
+    use Illuminate\Support\Facades\Gate;
+
     // Hero figures, derived from the collection the component already loads —
     // no new queries and no change to Categories.php.
     $totalAthletes = $ageCategories->sum('athletes_count');
@@ -275,11 +277,24 @@
                         };
                     @endphp
 
+                    @php
+                        // The tile leads where the reader may actually go: the
+                        // draw screen for the people who run it, the published
+                        // table for everybody else, and nowhere at all when
+                        // there is nothing they are allowed to open.
+                        $tileHref = Gate::allows('manage-competition')
+                            ? route('bracket.show', $weightCategory)
+                            : ($weightCategory->isDrawPublished() ? route('operator.draws.show', $weightCategory) : null);
+                    @endphp
+
                     <a
-                        href="{{ route('bracket.show', $weightCategory) }}"
-                        wire:navigate
+                        @if ($tileHref) href="{{ $tileHref }}" wire:navigate @endif
                         wire:key="weight-{{ $weightCategory->id }}"
-                        class="block rounded-md border border-line bg-ground px-4 py-3.5 no-underline transition-all hover:-translate-y-px hover:shadow-card"
+                        @class([
+                            'block rounded-md border border-line bg-ground px-4 py-3.5 no-underline transition-all',
+                            'hover:-translate-y-px hover:shadow-card' => $tileHref !== null,
+                            'cursor-default' => $tileHref === null,
+                        ])
                     >
                         <div class="flex items-baseline justify-between gap-2">
                             <span class="text-lg font-bold text-ink">{{ $weightCategory->label }}</span>

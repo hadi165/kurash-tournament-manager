@@ -1,6 +1,7 @@
 <?php
 
 use App\Livewire\Competition\Bracket;
+use App\Livewire\Competition\Dashboard;
 use App\Livewire\Operator\Draws;
 use App\Livewire\Operator\Presentation;
 use App\Models\Athlete;
@@ -343,5 +344,62 @@ describe('publication is the admin\'s decision', function () {
         ]);
 
         expect($category->refresh()->drawIsStale())->toBeTrue();
+    });
+});
+
+describe('links an operator can actually follow', function () {
+    beforeEach(fn () => $this->actingAs($this->operator));
+
+    /**
+     * The screen that prompted this: a drawn class offered Open, which goes to
+     * the working draw screen. An operator following it got a 403 — a link
+     * nobody can follow is worse than no link at all.
+     */
+    it('offers Present instead of Open on the entries board', function () {
+        $category = publishedClass(8);
+        $championship = $category->ageCategory->championship;
+
+        $this->get(route('entries.index', $championship))
+            ->assertOk()
+            ->assertSee('Present')
+            ->assertDontSee(route('bracket.show', $category));
+    });
+
+    it('offers nothing at all while the draw is unpublished', function () {
+        [$category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($category);
+
+        $this->get(route('entries.index', $category->ageCategory->championship))
+            ->assertOk()
+            ->assertDontSee(route('bracket.show', $category))
+            ->assertDontSee(route('operator.draws.show', $category));
+    });
+
+    it('points the weight tiles at the published table', function () {
+        $category = publishedClass(8);
+
+        $this->get(route('championships.show', $category->ageCategory->championship))
+            ->assertOk()
+            ->assertSee(route('operator.draws.show', $category))
+            ->assertDontSee(route('bracket.show', $category));
+    });
+
+    it('keeps Open for the people who run the draw', function () {
+        $category = publishedClass(8);
+
+        $this->actingAs($this->admin)
+            ->get(route('entries.index', $category->ageCategory->championship))
+            ->assertOk()
+            ->assertSee('Open')
+            ->assertSee(route('bracket.show', $category));
+    });
+
+    it('does not offer to draw a bracket from the dashboard', function () {
+        [$category] = categoryWithAthletes(8);
+
+        $steps = collect(Livewire::test(Dashboard::class)->viewData('championships'))
+            ->flatMap(fn (array $row) => $row['next_steps'] ?? []);
+
+        expect($steps->pluck('route'))->not->toContain('bracket.show');
     });
 });
