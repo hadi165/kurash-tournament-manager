@@ -13,6 +13,7 @@ use App\Services\BracketHasResultsException;
 use App\Services\MedalTable;
 use App\Support\BracketSeeding;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -153,6 +154,16 @@ class Bracket extends Component
                 ]);
             }
         });
+
+        // The ceremony board reads this stamp to pace its reveal. The draw
+        // itself is already committed above — what is paced is the telling of
+        // it, never the drawing, so a hall watching position 4 appear is
+        // watching a result that has been final for ten seconds.
+        Cache::put(
+            DrawCeremony::paceKey($this->weightCategory->id),
+            ['at' => (int) now()->timestamp, 'per' => 3],
+            now()->addHour(),
+        );
 
         $this->syncDraws();
         session()->flash('status', __('Drew :count athlete(s) at random.', ['count' => $eligibleIds->count()]));

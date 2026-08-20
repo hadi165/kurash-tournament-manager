@@ -239,3 +239,303 @@
         to { opacity: 1; }
     }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   The venue draw board.
+
+   1920×1080 furniture: fixed gutters, fixed row heights, no fluid type. It is
+   read from the back of a hall, so nothing here reflows on a narrow window —
+   it scrolls instead, which is honest about what it is.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dc-board-page {
+    --dc-conn: rgb(255 255 255 / 0.14);
+    --dc-row: 46px;
+
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--dc-bg);
+}
+
+/* A bracket of 32 does not fit a 1080 screen at 46px a row. The rows shrink
+   rather than the sheet scrolling, because a draw board that has to be
+   scrolled in front of a hall is not a draw board. */
+.dc-board-32 { --dc-row: 30px; }
+
+.dc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 26px 56px;
+    border-bottom: 1px solid var(--dc-line);
+}
+
+/* The board loads this stylesheet and nothing else — no Tailwind, no
+   application bundle — so every rule it needs lives here, including the plain
+   layout ones. Self-contained is the point: the venue screen cannot drift when
+   the admin theme changes because it never reads it. */
+.dc-logo {
+    background: #fff;
+    padding: 6px;
+    border-radius: var(--dc-radius-sm);
+    line-height: 0;
+    flex: none;
+}
+
+.dc-logo img {
+    display: block;
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+}
+
+.dc-head-id {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-width: 0;
+}
+
+.dc-chips {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: none;
+}
+
+.dc-pool-list {
+    display: flex;
+    flex-direction: column;
+    margin-top: 12px;
+}
+
+.dc-foot-group {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    min-width: 0;
+}
+
+.dc-board-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px;
+}
+
+.dc-org {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-accent);
+}
+
+.dc-champ {
+    font-size: 29px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    margin-top: 4px;
+}
+
+.dc-body {
+    flex: 1;
+    display: flex;
+    gap: 40px;
+    padding: 32px 56px;
+    min-height: 0;
+}
+
+/* ── Pool panel ─────────────────────────────────────────────────────────── */
+
+.dc-pool { width: 340px; flex: none; }
+
+.dc-now {
+    padding: 20px;
+    margin: 12px 0 28px;
+    border-left: 3px solid var(--dc-accent);
+}
+
+.dc-now-noc {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.dc-now-name {
+    font-size: 31px;
+    font-weight: 900;
+    text-transform: uppercase;
+    line-height: 1.05;
+    margin-top: 6px;
+}
+
+.dc-now-meta { font-size: 13px; color: var(--dc-muted); margin-top: 8px; }
+
+.dc-pool-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--dc-line);
+    font-size: 14px;
+}
+
+.dc-pool-noc { font-weight: 700; min-width: 42px; }
+.dc-pool-name { color: var(--dc-muted); flex: 1; min-width: 0; }
+.dc-pool-count { font-variant-numeric: tabular-nums; font-weight: 700; }
+.dc-pool-empty { padding: 14px 12px; font-size: 14px; color: var(--dc-muted); }
+
+/* ── The tree ───────────────────────────────────────────────────────────── */
+
+.dc-board { flex: 1; min-width: 0; overflow-x: auto; }
+
+.dc-heads { display: grid; margin-bottom: 10px; }
+
+.dc-head-col {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+    padding-left: 2px;
+}
+
+.dc-grid { display: grid; }
+
+.dc-seat-row {
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: var(--dc-row);
+    padding: 0 14px;
+    border-left: 3px solid transparent;
+    border-bottom: 1px solid var(--dc-line);
+}
+
+.dc-seat-filled { border-left-color: rgb(18 194 104 / 0.55); }
+
+/* The slot just filled: gold rail, a wash of gold behind it, gold numeral —
+   the newest fact on the board, and the only thing that moves. */
+.dc-seat-new {
+    border-left-color: var(--dc-gold);
+    background: rgb(217 169 74 / 0.1);
+    animation: dc-rise var(--dc-enter) var(--dc-ease) both;
+}
+
+.dc-seat-new .dc-seat-no { color: var(--dc-gold); }
+
+.dc-seat-no {
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--dc-muted);
+    min-width: 26px;
+}
+
+.dc-seat-name { font-size: 17.5px; font-weight: 600; flex: 1; min-width: 0; }
+.dc-seat-empty { color: var(--dc-dim); }
+.dc-seat-noc { font-size: 13px; font-weight: 700; color: var(--dc-muted); }
+
+.dc-match {
+    border-left: 1px solid var(--dc-conn);
+    position: relative;
+}
+
+.dc-match::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 16px;
+    border-top: 1px solid var(--dc-conn);
+}
+
+.dc-champion {
+    grid-row: 1 / -1;
+    align-self: center;
+    padding: 0 18px;
+}
+
+.dc-champion-kicker {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.dc-champion-slot {
+    margin-top: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--dc-conn);
+    font-size: 17.5px;
+    font-weight: 600;
+    color: var(--dc-dim);
+}
+
+.dc-complete .dc-champion-kicker,
+.dc-complete .dc-champion-slot { color: var(--dc-gold); }
+.dc-complete .dc-champion-slot { border-bottom-color: var(--dc-gold); }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+.dc-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 26px;
+    padding: 20px 56px;
+    border-top: 1px solid var(--dc-line);
+}
+
+.dc-foot-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dc-track {
+    width: 420px;
+    max-width: 40vw;
+    height: 4px;
+    border-radius: 2px;
+    background: rgb(255 255 255 / 0.08);
+    overflow: hidden;
+}
+
+.dc-fill { height: 100%; background: var(--dc-accent); }
+.dc-complete .dc-fill { background: var(--dc-gold); }
+
+.dc-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+    color: var(--dc-muted);
+}
+
+.dc-legend-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--dc-gold); }
+
+/* The feed dot, as on the scoreboard: this board runs on a poll, and a frozen
+   draw board in front of a hall is as dangerous as a frozen clock. */
+.dc-feed { width: 10px; height: 10px; border-radius: 999px; background: var(--dc-accent); flex: none; }
+.dc-feed-stale { background: #e0464f; animation: dc-pulse 1s ease-in-out infinite; }
+
+@keyframes dc-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dc-seat-new { animation: dc-fade 120ms linear both; }
+    .dc-feed-stale { animation: none; }
+}

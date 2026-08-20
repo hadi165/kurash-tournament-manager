@@ -9,6 +9,7 @@ use App\Livewire\Competition\Categories;
 use App\Livewire\Competition\Championships;
 use App\Livewire\Competition\Courts;
 use App\Livewire\Competition\Dashboard;
+use App\Livewire\Competition\DrawCeremony;
 use App\Livewire\Competition\Entries;
 use App\Livewire\Competition\FightOrder;
 use App\Livewire\Competition\MatControl;
@@ -55,6 +56,15 @@ Route::middleware(AllowPublicDisplay::class)->prefix('display')->name('display.'
      | opposite trade from a bracket two thousand people are reading.
      */
     Route::get('mats/{court}/scoreboard', Scoreboard::class)->name('scoreboard');
+
+    /*
+     | The draw ceremony board, shown while positions are being pulled.
+     |
+     | Same gate and same trade as the scoreboard: one projector, updating
+     | itself, in front of a hall that is watching a draw being made. Read-only
+     | — the draw itself is made and committed on the admin screen.
+     */
+    Route::get('weight-classes/{weightCategory}/draw-ceremony', DrawCeremony::class)->name('draw-ceremony');
 });
 
 Route::middleware(['auth', 'verified'])->group(function () {

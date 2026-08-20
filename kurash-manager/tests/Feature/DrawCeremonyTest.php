@@ -1,8 +1,11 @@
 <?php
 
 use App\Livewire\Competition\Bracket;
+use App\Livewire\Competition\DrawCeremony;
 use App\Models\User;
 use App\Services\BracketGenerator;
+use App\Support\BracketSeeding;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -116,5 +119,91 @@ describe('reduced motion', function () {
 
         expect($css)->toContain('@media (prefers-reduced-motion: reduce)')
             ->and($css)->toContain('dc-fade');
+    });
+});
+
+describe('the venue draw board', function () {
+    beforeEach(function () {
+        $this->category = categoryWithAthletes(12)[0];
+    });
+
+    /** Same gate as the scoreboard: it hangs in the same hall. */
+    it('is closed to anonymous viewers unless public displays are on', function () {
+        auth()->logout();
+
+        config()->set('display.public', false);
+        $this->get(route('display.draw-ceremony', $this->category))->assertRedirect(route('login'));
+
+        config()->set('display.public', true);
+        $this->get(route('display.draw-ceremony', $this->category))->assertOk();
+    });
+
+    /**
+     * The invariant the whole board rests on: every panel divides the same
+     * revealed count, so placed, drawing and still-to-come always add up to
+     * the entry list. Two panels on a public draw board must never contradict
+     * each other.
+     */
+    it('keeps placed, drawing and remaining adding up to the entry list', function () {
+        Cache::put(DrawCeremony::paceKey($this->category->id), ['at' => now()->timestamp - 21, 'per' => 3], now()->addHour());
+
+        $board = Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category]);
+
+        $revealed = $board->viewData('revealed');
+        $drawing = $board->viewData('drawing') === null ? 0 : 1;
+        $remaining = $board->viewData('remainingCount');
+
+        expect($revealed)->toBe(7)
+            ->and($revealed + $drawing + $remaining)->toBe($board->viewData('total'));
+    });
+
+    it('paces the reveal from the stamp the draw left', function () {
+        Cache::put(DrawCeremony::paceKey($this->category->id), ['at' => now()->timestamp - 9, 'per' => 3], now()->addHour());
+
+        expect(Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category])->viewData('revealed'))->toBe(3);
+    });
+
+    /** A draw entered by hand, or one made yesterday, is simply on the board. */
+    it('shows a draw that was never paced in full', function () {
+        $board = Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category]);
+
+        expect($board->viewData('revealed'))->toBe(12)
+            ->and($board->viewData('complete'))->toBeTrue()
+            ->and($board->viewData('drawing'))->toBeNull();
+
+        $board->assertSee('Every position has been drawn.');
+    });
+
+    it('seats the board in the real seeding order', function () {
+        $seeds = collect(Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category])->viewData('seats'))
+            ->pluck('seed')
+            ->all();
+
+        expect($seeds)->toBe(BracketSeeding::order(16));
+    });
+
+    it('marks only the position just filled', function () {
+        Cache::put(DrawCeremony::paceKey($this->category->id), ['at' => now()->timestamp - 15, 'per' => 3], now()->addHour());
+
+        $justFilled = collect(Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category])->viewData('seats'))
+            ->filter(fn (array $seat) => $seat['justFilled']);
+
+        expect($justFilled)->toHaveCount(1)
+            ->and($justFilled->first()['seed'])->toBe(5);
+    });
+
+    it('says so when nothing has been drawn', function () {
+        $this->category->athletes()->update(['draw_number' => null]);
+
+        Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category->refresh()])
+            ->assertSee('No draw numbers have been given out');
+    });
+
+    it('is stamped by the random draw so the hall sees it position by position', function () {
+        Cache::forget(DrawCeremony::paceKey($this->category->id));
+
+        Livewire::test(Bracket::class, ['weightCategory' => $this->category])->call('drawAtRandom');
+
+        expect(Cache::get(DrawCeremony::paceKey($this->category->id)))->toHaveKey('at');
     });
 });
