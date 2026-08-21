@@ -1,4 +1,5 @@
 @php
+    use App\Support\BracketSeeding;
     use Illuminate\Support\Facades\Gate;
 
     // Hero figures, derived from the collection the component already loads —
@@ -6,10 +7,6 @@
     $totalAthletes = $ageCategories->sum('athletes_count');
     $totalWeights = $ageCategories->sum(fn ($c) => $c->weightCategories->count());
 
-    // The capacity bar reads a class's entry count against a full bracket. 16 is
-    // the draw the federation's classes are built around; a class beyond it
-    // simply reads full rather than overflowing the cell.
-    $capacity = 16;
 
     $tabs = [
         ['label' => __('Categories'), 'href' => route('championships.show', $championship), 'active' => true],
@@ -283,14 +280,23 @@
                 @forelse ($ageCategory->weightCategories as $weightCategory)
                     @php
                         $count = $weightCategory->athletes_count;
-                        $fill = min(100, (int) round($count / $capacity * 100));
 
-                        // Grey until the class is half drawn, blue while it
-                        // fills, green once it can run a full bracket.
+                        // The draw this class actually opens at, measured off
+                        // its own entry list. Reading every class against a
+                        // fixed sixteen made a three-athlete class look a tenth
+                        // full when it is a complete x/4 with one bye.
+                        $bracketSize = BracketSeeding::size($count);
+                        $level = BracketSeeding::level($count);
+
+                        // How much of that draw is athletes rather than byes.
+                        $fill = $bracketSize > 0 ? (int) round($count / $bracketSize * 100) : 0;
+
+                        // Grey while a class cannot fight at all, blue while
+                        // its draw carries byes, green once it is full.
                         $bar = match (true) {
+                            $bracketSize < 2 => 'bg-muted',
                             $fill >= 100 => 'bg-brand',
-                            $fill >= 50 => 'bg-info',
-                            default => 'bg-muted',
+                            default => 'bg-info',
                         };
                     @endphp
 
@@ -315,11 +321,19 @@
                     >
                         <div class="flex items-baseline justify-between gap-2">
                             <span class="text-lg font-bold text-ink">{{ $weightCategory->label }}</span>
-                            <span class="text-[12.5px] font-semibold tabular-nums text-muted">{{ $count }}/{{ $capacity }}</span>
+                            <span class="text-[12.5px] font-semibold tabular-nums text-muted">
+                                {{ $bracketSize >= 2 ? $count.'/'.$bracketSize : $count }}
+                            </span>
                         </div>
 
                         <div class="mt-3 h-1.5 overflow-hidden rounded-full bg-line">
                             <div class="h-1.5 rounded-full {{ $bar }}" style="width: {{ $fill }}%"></div>
+                        </div>
+
+                        {{-- The bracket level the class will draw at, so the
+                             desk can see it before the draw is made. --}}
+                        <div class="mt-2 text-[11.5px] font-semibold uppercase tracking-wider text-muted">
+                            {{ $level }}
                         </div>
                     </a>
                 @empty

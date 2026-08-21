@@ -29,7 +29,7 @@
                             <td class="font-semibold">{{ $category->exportName() }}</td>
                             <td class="text-muted">{{ $category->ageCategory?->name }}</td>
                             <td class="num">{{ $category->draw_athlete_count ?? $category->athletes_count }}</td>
-                            <td class="num">{{ $category->draw_bucket_size ?? '—' }}</td>
+                            <td class="num">{{ $category->draw_bucket_size ? 'x/'.$category->draw_bucket_size : '—' }}</td>
                             <td class="num">{{ $category->draw_bye_count ?? '—' }}</td>
                             <td class="num">{{ $category->bouts_count }}</td>
                             <td>
@@ -42,15 +42,16 @@
                                             {{ __('Excel') }}
                                         </x-ui.chip>
 
-                                        @can('manage-competition')
-                                            <x-ui.chip variant="ghost" :href="route('bracket.show', $category)" wire:navigate>
-                                                {{ __('Open') }}
-                                            </x-ui.chip>
-                                        @elseif ($category->isDrawPublished())
+                                        {{-- No Open here. This screen is the
+                                             drawn tree and the paperwork that
+                                             comes off it; the draw itself is
+                                             run from Entries, and two doors
+                                             into it was one too many. --}}
+                                        @if ($category->isDrawPublished())
                                             <x-ui.chip variant="ghost" :href="route('operator.draws.show', $category)" wire:navigate>
                                                 {{ __('Present') }}
                                             </x-ui.chip>
-                                        @endcan
+                                        @endif
                                     </div>
                                 @else
                                     <span class="text-muted">{{ __('Not drawn yet') }}</span>
