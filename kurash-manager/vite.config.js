@@ -28,7 +28,24 @@ export default defineConfig({
         tailwindcss(),
     ],
     server: {
+        // Every interface, not just loopback. `npm run dev` serves the assets
+        // the pages ask for, so a dev server bound to localhost leaves every
+        // other machine on the network loading a page with no stylesheet —
+        // which looks like a broken application rather than an unreachable
+        // asset server. Set VITE_DEV_HOST to pin it to one address.
+        host: process.env.VITE_DEV_HOST || '0.0.0.0',
+
+        // Laravel serves the page from :8000 and this serves the assets from
+        // :5173, so they are different origins even on the same machine.
         cors: true,
+
+        // Left to infer the address from whatever the browser is looking at,
+        // so a tablet on the network reconnects to the network address rather
+        // than to a localhost that means itself.
+        hmr: {
+            host: process.env.VITE_DEV_HOST || undefined,
+        },
+
         watch: {
             ignored: ['**/storage/framework/views/**'],
         },
