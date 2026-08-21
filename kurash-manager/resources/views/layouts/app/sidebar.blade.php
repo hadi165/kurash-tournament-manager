@@ -88,18 +88,11 @@
                      as the full one with items hidden, because a menu whose
                      items would all refuse is not a menu. --}}
                 @php
-                    $refereeCourts = \App\Models\Court::query()
-                        ->where('is_active', true)
-                        ->whereHas('championship', function ($query) {
-                            $query->whereNull('archived_at');
-
-                            if (auth()->user()->scoreboard_championship_id !== null) {
-                                $query->whereKey(auth()->user()->scoreboard_championship_id);
-                            }
-                        })
-                        ->orderBy('championship_id')
-                        ->orderBy('number')
-                        ->get();
+                    // The same scoped query the landing page and the scoreboard
+                    // selector read. A menu built from a different rule than
+                    // the one enforcing access is a menu that eventually offers
+                    // a door that refuses.
+                    $refereeCourts = \App\Support\AssignedCourts::for(auth()->user());
                 @endphp
 
                 <nav class="flex flex-col gap-1">
@@ -113,7 +106,14 @@
                         {{ __('Score Board') }}
                     </x-nav-item>
 
-                    @if ($refereeCourts->isNotEmpty())
+                    @if ($refereeCourts->isEmpty())
+                        {{-- An account with no mat assigned reaches nothing,
+                             which is the secure default and also confusing if
+                             it is left unexplained. --}}
+                        <div class="px-4 pt-4 text-[11.5px] leading-relaxed text-nav-muted">
+                            {{ __('No mat has been assigned to this account yet. An administrator assigns one.') }}
+                        </div>
+                    @else
                         <div class="kicker px-4 pb-1.5 pt-4 !text-nav-muted">{{ __('Score a mat') }}</div>
 
                         @foreach ($refereeCourts as $refereeCourt)

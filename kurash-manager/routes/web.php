@@ -138,7 +138,12 @@ Route::middleware(['auth', 'verified', 'can:draw.view_published'])->group(functi
  */
 Route::middleware(['auth', 'verified', 'can:mat.view'])->group(function () {
     Route::get('referee/mats', RefereeMats::class)->name('referee.mats');
-    Route::get('mats/{court}/live', MatControl::class)->name('mats.live');
+    // The gate is given the mat by name, so the refusal happens in middleware
+    // rather than after the component has begun to build. Without the
+    // parameter it could only ever ask the general question.
+    Route::get('mats/{court}/live', MatControl::class)
+        ->middleware('can:mat.view,court')
+        ->name('mats.live');
 });
 
 Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {

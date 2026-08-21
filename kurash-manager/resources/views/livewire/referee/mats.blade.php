@@ -14,9 +14,9 @@
 
     @if ($courts->isEmpty())
         <x-ui.card class="px-6 py-10 text-center">
-            <h3 class="m-0 text-2xl">{{ __('No mats are open') }}</h3>
+            <h3 class="m-0 text-2xl">{{ __('No mat assigned') }}</h3>
             <p class="mt-2 text-[13px] text-ink/55">
-                {{ __('A mat appears here once the competition desk has opened one.') }}
+                {{ __('An administrator assigns the mat you work. Until one is assigned, there is nothing here to open.') }}
             </p>
         </x-ui.card>
     @else

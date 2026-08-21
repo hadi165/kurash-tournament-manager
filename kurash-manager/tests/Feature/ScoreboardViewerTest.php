@@ -11,6 +11,7 @@ use App\Models\Bout;
 use App\Models\Court;
 use App\Models\User;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 
@@ -215,12 +216,6 @@ describe('what a scoreboard viewer cannot reach', function () {
      */
     it('is refused every mutation it could forge', function () {
         $calls = [
-            [MatControl::class, ['court' => $this->court], 'score', ['khalol', 'a', 120]],
-            [MatControl::class, ['court' => $this->court], 'voidLast', []],
-            [MatControl::class, ['court' => $this->court], 'publishClock', [90, true]],
-            [MatControl::class, ['court' => $this->court], 'finishOnTime', []],
-            [MatControl::class, ['court' => $this->court], 'awardDecision', ['a']],
-            [MatControl::class, ['court' => $this->court], 'bringOn', [$this->bout->id]],
             [Bracket::class, ['weightCategory' => $this->category], 'saveDraws', []],
             [Bracket::class, ['weightCategory' => $this->category], 'drawAtRandom', []],
             [Bracket::class, ['weightCategory' => $this->category], 'generate', []],
@@ -241,12 +236,20 @@ describe('what a scoreboard viewer cannot reach', function () {
         }
     });
 
-    it('leaves the contest exactly as it was', function () {
+    /**
+     * The mat screen refuses before it is built, not after a control on it is
+     * pressed. A scoreboard account cannot reach a mat at all, so there is no
+     * component for a forged call to arrive at.
+     */
+    it('cannot even open the mat screen to forge a call at it', function () {
         $before = $this->bout->only(['winner_athlete_id', 'status', 'court_id', 'clock_seconds_left']);
 
-        Livewire::test(MatControl::class, ['court' => $this->court])
-            ->call('score', 'khalol', 'a', 100)
-            ->assertForbidden();
+        // Refused by the route's own gate, before a component exists for a
+        // forged call to arrive at.
+        $this->get(route('mats.live', $this->court))->assertForbidden();
+
+        expect(Gate::forUser($this->viewer)->allows('mat.view', $this->court))->toBeFalse()
+            ->and(Gate::forUser($this->viewer)->allows('score-bout', $this->court))->toBeFalse();
 
         expect($this->bout->refresh()->only(array_keys($before)))->toBe($before)
             ->and($this->bout->events()->count())->toBe(0);

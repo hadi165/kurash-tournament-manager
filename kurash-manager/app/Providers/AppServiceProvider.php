@@ -145,8 +145,20 @@ class AppServiceProvider extends ServiceProvider
          | same door. Every write on the mat screen is checked against this, so
          | a role added later inherits the separation instead of having to
          | remember it.
+         |
+         | Passed a mat, it asks the harder question: not "may this account
+         | score" but "may this account score *here*". A referee holding the
+         | role and not the assignment is refused, which is what stops mat
+         | three being reached by editing a number in the address bar. Called
+         | without one it answers the general question, for the places that ask
+         | before a mat is in hand.
          */
-        Gate::define('score-bout', fn (User $user): bool => $user->canScoreBouts());
+        Gate::define(
+            'score-bout',
+            fn (User $user, ?Court $court = null): bool => $court === null
+                ? $user->canScoreBouts()
+                : $user->mayRefereeCourt($court)
+        );
 
         /*
          | Opening a mat screen, as opposed to scoring on one.
@@ -159,8 +171,23 @@ class AppServiceProvider extends ServiceProvider
          */
         Gate::define(
             'mat.view',
-            fn (User $user): bool => $user->canScoreBouts()
-                || ($user->is_active && ! $user->isConfinedToMat())
+            function (User $user, ?Court $court = null): bool {
+                // Named a mat, this is the question that matters: not whether
+                // the account works mats but whether it works *this* one.
+                if ($court !== null && $user->isReferee()) {
+                    return $user->mayRefereeCourt($court);
+                }
+
+                // Asked without one — the landing page, a menu — it is the
+                // general question, and a referee with no assignment still
+                // reaches the page that explains they have none.
+                if ($user->isReferee()) {
+                    return $user->is_active;
+                }
+
+                return $user->canScoreBouts()
+                    || ($user->is_active && ! $user->isConfinedToMat());
+            }
         );
 
         Gate::define(
@@ -173,9 +200,19 @@ class AppServiceProvider extends ServiceProvider
             fn (User $user, WeightCategory $category): bool => $user->mayViewChampionship($category->ageCategory?->championship)
         );
 
+        /*
+         | Reading one mat's board.
+         |
+         | A referee's scope is their assignment rather than the championship
+         | the mat sits in, so the board follows the same rule the mat screen
+         | does — otherwise an account barred from scoring on mat three could
+         | still watch it, which is not what "assigned to mat one" means.
+         */
         Gate::define(
             'scoreboard.select_court',
-            fn (User $user, Court $court): bool => $user->mayViewChampionship($court->championship)
+            fn (User $user, Court $court): bool => $user->isReferee()
+                ? $user->mayRefereeCourt($court)
+                : $user->mayViewChampionship($court->championship)
         );
     }
 

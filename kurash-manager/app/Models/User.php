@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Str;
@@ -147,6 +148,64 @@ class User extends Authenticatable implements PasskeyUser
         return $this->role === self::ROLE_REFEREE;
     }
 
+    /**
+     * The mats this account has been assigned to work.
+     *
+     * @return BelongsToMany<Court, $this>
+     */
+    public function courts(): BelongsToMany
+    {
+        return $this->belongsToMany(Court::class, 'court_referee')->withTimestamps();
+    }
+
+    /**
+     * May this account referee on this mat?
+     *
+     * Two questions, and both have to pass. Holding the referee role says what
+     * kind of work the account does; the assignment says where. A role on its
+     * own would let the referee on mat one score the final on mat three by
+     * editing a number in the address bar, which is the whole thing this
+     * guards against.
+     *
+     * Everyone else who may score — an admin, a supervisor — is not assigned
+     * to mats at all and reaches every one, because running the competition is
+     * what their role is for.
+     */
+    public function mayRefereeCourt(?Court $court): bool
+    {
+        if (! $this->canScoreBouts() || $court === null) {
+            return false;
+        }
+
+        if (! $this->isReferee()) {
+            return true;
+        }
+
+        // Read through the relation so an assignment revoked mid-session bites
+        // on the next request rather than at the next sign-in.
+        return $this->courts()->whereKey($court->getKey())->exists();
+    }
+
+    /**
+     * The mat ids this account may work, or null for an account that is not
+     * limited to any.
+     *
+     * Null and an empty list mean opposite things and must not be confused: an
+     * admin is unrestricted, a referee with nothing assigned reaches nothing.
+     *
+     * @return list<int>|null
+     */
+    public function refereeCourtIds(): ?array
+    {
+        if (! $this->isReferee()) {
+            return null;
+        }
+
+        // array_values keeps it a list: pluck preserves the collection's keys,
+        // and a gap in them is not something the callers are prepared for.
+        return array_values($this->courts()->pluck('courts.id')->map(fn ($id) => (int) $id)->all());
+    }
+
     /** May this account record calls and declare a winner on a mat? */
     public function canScoreBouts(): bool
     {
@@ -180,6 +239,15 @@ class User extends Authenticatable implements PasskeyUser
     {
         if (! $this->canViewScoreboard()) {
             return false;
+        }
+
+        // A referee's scope is their mats, and a mat belongs to exactly one
+        // championship — so the championship they may read is whichever their
+        // assignments are in. An account with no assignment reaches nothing,
+        // which is the point of the assignment.
+        if ($this->isReferee()) {
+            return $championship !== null
+                && $this->courts()->where('championship_id', $championship->getKey())->exists();
         }
 
         return $this->scoreboard_championship_id === null

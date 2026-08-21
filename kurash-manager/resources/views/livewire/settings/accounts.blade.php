@@ -34,6 +34,9 @@
                         <flux:select.option value="official" :selected="$role === 'official'">
                             {{ __('Operator — works the competition screens') }}
                         </flux:select.option>
+                        <flux:select.option value="referee" :selected="$role === 'referee'">
+                            {{ __('Mat referee — scores the mats assigned below') }}
+                        </flux:select.option>
                         <flux:select.option value="scoreboard_viewer" :selected="$role === 'scoreboard_viewer'">
                             {{ __('Scoreboard viewer — can only watch a scoreboard') }}
                         </flux:select.option>
@@ -52,6 +55,41 @@
 
                 {{-- Scope is only meaningful for an account that watches, and
                      the component clears it for anything else on save. --}}
+                {{-- The mats this referee works. Holding the role is not
+                     access on its own — an account with nothing ticked here
+                     reaches no mat at all, which is the secure default rather
+                     than an oversight. --}}
+                @if ($role === 'referee')
+                    <div class="flex flex-col gap-[7px]">
+                        <span class="text-[12.5px] font-semibold text-muted">{{ __('Assigned mats') }}</span>
+
+                        @if ($courts->isEmpty())
+                            <p class="text-xs text-muted">
+                                {{ __('No mats exist yet. Add one to a championship before assigning a referee.') }}
+                            </p>
+                        @else
+                            <div class="flex flex-wrap gap-2">
+                                @foreach ($courts as $court)
+                                    <label class="flex cursor-pointer items-center gap-2 rounded-md border border-line bg-ground px-3 py-2 text-[13px]
+                                                  has-[:checked]:border-brand has-[:checked]:bg-brand-soft has-[:checked]:text-brand-deep
+                                                  has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand">
+                                        <input type="checkbox" wire:model="courtIds" value="{{ $court->id }}" class="accent-brand">
+                                        <span class="font-semibold">{{ $court->label() }}</span>
+                                        <span class="text-muted">{{ Str::limit($court->championship->title, 22) }}</span>
+                                    </label>
+                                @endforeach
+                            </div>
+
+                            <p class="text-xs text-muted">
+                                {{ __('The referee sees only these mats and the contests on them. Unticking a mat revokes it.') }}
+                            </p>
+                        @endif
+
+                        @error('courtIds') <p class="text-[13px] text-danger-deep">{{ $message }}</p> @enderror
+                        @error('courtIds.*') <p class="text-[13px] text-danger-deep">{{ $message }}</p> @enderror
+                    </div>
+                @endif
+
                 @if ($role === 'scoreboard_viewer')
                     <div class="flex flex-col gap-[7px] md:col-span-2">
                         <label for="acc-scope" class="text-[12.5px] font-semibold text-muted">{{ __('Scoreboard scope') }}</label>
@@ -100,12 +138,31 @@
                             <td class="font-semibold">{{ $account->name }}</td>
                             <td class="font-mono text-xs text-muted">{{ $account->email }}</td>
                             <td>
-                                <x-ui.tag :variant="$account->role === 'official' ? 'info' : 'muted'">
-                                    {{ $account->role === 'official' ? __('Operator') : __('Scoreboard viewer') }}
+                                <x-ui.tag :variant="match ($account->role) {
+                                    'official' => 'info',
+                                    'referee' => 'brand',
+                                    default => 'muted',
+                                }">
+                                    {{ match ($account->role) {
+                                        'official' => __('Operator'),
+                                        'referee' => __('Mat referee'),
+                                        default => __('Scoreboard viewer'),
+                                    } }}
                                 </x-ui.tag>
                             </td>
                             <td class="text-muted">
-                                {{ $account->scoreboardChampionship?->title ?? __('All championships') }}
+                                @if ($account->role === 'referee')
+                                    {{-- What the account may actually reach,
+                                         which for a referee is a list of mats
+                                         rather than a championship. --}}
+                                    @if ($account->courts->isEmpty())
+                                        <span class="text-danger-deep">{{ __('No mat assigned') }}</span>
+                                    @else
+                                        {{ $account->courts->map(fn ($court) => $court->label())->join(', ') }}
+                                    @endif
+                                @else
+                                    {{ $account->scoreboardChampionship?->title ?? __('All championships') }}
+                                @endif
                             </td>
                             <td>
                                 <x-ui.tag :variant="$account->is_active ? 'brand' : 'danger'">

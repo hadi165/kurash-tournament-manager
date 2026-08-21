@@ -3,6 +3,7 @@
 namespace App\Livewire\Settings;
 
 use App\Models\Championship;
+use App\Models\Court;
 use App\Models\User;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
@@ -32,6 +33,17 @@ class Accounts extends Component
     /** Optional: pins a scoreboard viewer to one championship. Null is all of them. */
     public ?string $scopeChampionshipId = null;
 
+    /**
+     * The mats a referee works, as ids from the form.
+     *
+     * Strings because that is what a checkbox posts, and validated against the
+     * courts table rather than trusted — the browser's copy of the list is
+     * never the authority on which mats exist.
+     *
+     * @var list<string>
+     */
+    public array $courtIds = [];
+
     public ?int $editingId = null;
 
     public function mount(): void
@@ -51,6 +63,8 @@ class Accounts extends Component
             // Only ever these two, whatever the browser sends.
             'role' => ['required', Rule::in(User::ASSIGNABLE_ROLES)],
             'scopeChampionshipId' => ['nullable', Rule::exists(Championship::class, 'id')],
+            'courtIds' => ['array'],
+            'courtIds.*' => [Rule::exists(Court::class, 'id')],
             'password' => [$this->editingId ? 'nullable' : 'required', 'string', 'min:8'],
         ];
     }
@@ -93,9 +107,18 @@ class Accounts extends Component
 
         $user->save();
 
+        // Assignments are replaced wholesale rather than added to, so clearing
+        // every box revokes every mat — which is what an admin unticking them
+        // means, and what §30.6 calls revoking access.
+        $user->courts()->sync(
+            $data['role'] === User::ROLE_REFEREE
+                ? array_map('intval', $data['courtIds'])
+                : []
+        );
+
         $this->audit($existing ? 'account.updated' : 'account.created', $user);
 
-        $this->reset('name', 'email', 'password', 'editingId', 'scopeChampionshipId');
+        $this->reset('name', 'email', 'password', 'editingId', 'scopeChampionshipId', 'courtIds');
         $this->role = User::ROLE_SCOREBOARD_VIEWER;
 
         session()->flash('status', $existing ? __('Account updated.') : __('Account created.'));
@@ -114,12 +137,15 @@ class Accounts extends Component
         $this->scopeChampionshipId = $user->scoreboard_championship_id
             ? (string) $user->scoreboard_championship_id
             : null;
+        $this->courtIds = array_values(
+            $user->courts()->pluck('courts.id')->map(fn ($id) => (string) $id)->all()
+        );
         $this->password = '';
     }
 
     public function cancelEdit(): void
     {
-        $this->reset('name', 'email', 'password', 'editingId', 'scopeChampionshipId');
+        $this->reset('name', 'email', 'password', 'editingId', 'scopeChampionshipId', 'courtIds');
         $this->role = User::ROLE_SCOREBOARD_VIEWER;
         $this->resetValidation();
     }
@@ -153,6 +179,9 @@ class Accounts extends Component
             'role' => $user->role,
             'is_active' => $user->is_active,
             'scoreboard_championship_id' => $user->scoreboard_championship_id,
+            // Which mats an account may work is a permission, so a change to it
+            // belongs in the record beside the role it qualifies.
+            'court_ids' => $user->courts()->pluck('courts.id')->all(),
             'by_user_id' => auth()->id(),
         ]);
     }
@@ -162,10 +191,19 @@ class Accounts extends Component
         return view('livewire.settings.accounts', [
             'accounts' => User::query()
                 ->whereIn('role', User::ASSIGNABLE_ROLES)
-                ->with('scoreboardChampionship')
+                ->with(['scoreboardChampionship', 'courts.championship'])
                 ->orderBy('name')
                 ->get(),
             'championships' => Championship::query()->whereNull('archived_at')->orderBy('title')->get(),
+            // Only mats of a live championship can be handed out: assigning a
+            // referee to an archived event's mat would be assigning them to
+            // nothing.
+            'courts' => Court::query()
+                ->whereHas('championship', fn ($q) => $q->whereNull('archived_at'))
+                ->with('championship')
+                ->orderBy('championship_id')
+                ->orderBy('number')
+                ->get(),
         ]);
     }
 }

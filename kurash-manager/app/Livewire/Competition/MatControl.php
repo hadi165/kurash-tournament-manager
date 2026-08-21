@@ -43,6 +43,12 @@ class MatControl extends Component
 
     public function mount(Court $court): void
     {
+        // The mat named in the URL is authorised before it is accepted. The
+        // route's own gate can only ask whether this account works mats at
+        // all; this asks whether it works *this* one, which is the question a
+        // referee typing another mat's number is trying to skip.
+        Gate::authorize('mat.view', $court);
+
         $this->court = $court->load('championship');
     }
 
@@ -104,7 +110,7 @@ class MatControl extends Component
      */
     public function score(string $call, string $side, ?int $clock = null): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         if (! in_array($call, KurashScore::CALLS, true) || ! in_array($side, ['a', 'b'], true)) {
             return;
@@ -150,7 +156,7 @@ class MatControl extends Component
      */
     public function decrease(string $call, string $side): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         if (! in_array($call, KurashScore::CALLS, true) || ! in_array($side, ['a', 'b'], true)) {
             return;
@@ -191,7 +197,7 @@ class MatControl extends Component
      */
     public function voidLast(): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $bout = $this->bout();
 
@@ -239,7 +245,7 @@ class MatControl extends Component
      */
     public function publishClock(int $secondsLeft, bool $running): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $bout = $this->bout();
 
@@ -266,7 +272,7 @@ class MatControl extends Component
      */
     public function resetClock(): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $bout = $this->bout();
 
@@ -285,7 +291,7 @@ class MatControl extends Component
     /** Record that the referee stopped the contest — tuxta. */
     public function stoppage(?int $clock = null): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $bout = $this->bout();
 
@@ -315,7 +321,7 @@ class MatControl extends Component
      */
     public function callJazzo(?int $clock = null): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $bout = $this->bout();
 
@@ -362,7 +368,7 @@ class MatControl extends Component
      */
     public function resume(?int $clock = null): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $bout = $this->bout();
 
@@ -403,7 +409,7 @@ class MatControl extends Component
      */
     public function finishOnTime(): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $bout = $this->bout();
 
@@ -428,7 +434,7 @@ class MatControl extends Component
     /** The referees' call on a contest that finished level. */
     public function awardDecision(string $side): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $this->declare($side, 'decision');
     }
@@ -443,7 +449,7 @@ class MatControl extends Component
      */
     public function declareWinner(string $side): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $this->declare($side, 'manual');
     }
@@ -543,7 +549,7 @@ class MatControl extends Component
      */
     public function reopen(): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
         $bout = $this->justDecided();
 
@@ -593,9 +599,22 @@ class MatControl extends Component
     /** Put the next contest waiting for this mat onto it. */
     public function bringOn(int $boutId): void
     {
-        Gate::authorize('score-bout');
+        Gate::authorize('score-bout', $this->court);
 
-        $bout = Bout::where('championship_id', $this->court->championship_id)->findOrFail($boutId);
+        $bout = Bout::where('championship_id', $this->court->championship_id)
+            // Loose, or already this mat's. A contest standing on another mat
+            // belongs to whoever is running that mat, and pulling it across
+            // from here would take it out from under them. Scoped in the query
+            // so a forged id finds nothing rather than being caught after.
+            ->where(fn ($q) => $q->whereNull('court_id')->orWhere('court_id', $this->court->id))
+            ->whereKey($boutId)
+            ->first();
+
+        if ($bout === null) {
+            session()->flash('error', __('That contest is not available to this mat.'));
+
+            return;
+        }
 
         if (! $bout->isReadyToFight()) {
             session()->flash('error', __('That contest is not ready — both athletes must be known.'));

@@ -4,6 +4,7 @@ namespace App\Livewire\Referee;
 
 use App\Models\Bout;
 use App\Models\Court;
+use App\Support\AssignedCourts;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -30,30 +31,16 @@ class Mats extends Component
     /**
      * Mats this account may work.
      *
-     * Scoped by the account's championship where it has one, the same way the
-     * scoreboard viewer's list is — a referee assigned to one event should not
-     * be offered another's mats, and the scope is applied in the query rather
-     * than filtered afterwards.
+     * The same scoped query the sidebar and the scoreboard selector read, so
+     * the three cannot come to disagree about which mats an account has — and
+     * scoped in the query rather than filtered afterwards, so a tampered id
+     * finds nothing rather than being caught later.
      *
      * @return Collection<int, Court>
      */
     private function courts(): Collection
     {
-        $user = auth()->user();
-
-        return Court::query()
-            ->where('is_active', true)
-            ->whereHas('championship', function ($query) use ($user) {
-                $query->whereNull('archived_at');
-
-                if ($user?->scoreboard_championship_id !== null) {
-                    $query->whereKey($user->scoreboard_championship_id);
-                }
-            })
-            ->with('championship')
-            ->orderBy('championship_id')
-            ->orderBy('number')
-            ->get();
+        return AssignedCourts::for(auth()->user());
     }
 
     public function render(): View

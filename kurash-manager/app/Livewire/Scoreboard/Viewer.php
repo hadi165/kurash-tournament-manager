@@ -3,6 +3,7 @@
 namespace App\Livewire\Scoreboard;
 
 use App\Models\Court;
+use App\Support\AssignedCourts;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -62,21 +63,7 @@ class Viewer extends Component
      */
     private function availableCourts(): Collection
     {
-        $user = auth()->user();
-
-        return Court::query()
-            ->where('is_active', true)
-            ->whereHas('championship', function ($query) use ($user) {
-                $query->whereNull('archived_at');
-
-                if ($user?->scoreboard_championship_id !== null) {
-                    $query->whereKey($user->scoreboard_championship_id);
-                }
-            })
-            ->with('championship')
-            ->orderBy('championship_id')
-            ->orderBy('number')
-            ->get();
+        return AssignedCourts::for(auth()->user());
     }
 
     /**
