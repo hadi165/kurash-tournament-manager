@@ -4,6 +4,7 @@ namespace App\Livewire\Competition;
 
 use App\Models\AgeCategory;
 use App\Models\Athlete;
+use App\Services\WeightValidator;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -48,22 +49,36 @@ class WeighIn extends Component
         // absent. Reading it through the key states that plainly.
         $category = $athlete->weight_category_id === null ? null : $athlete->weightCategory;
 
-        // The category itself decides whether the weight passes, so the rule
-        // lives in one place instead of being re-parsed from a label string.
-        // Someone with no class yet cannot pass a class they are not in.
-        $status = $category !== null && $category->admits($kg) ? 'pass' : 'fail';
+        // One engine answers this, at the scale and everywhere else. It returns
+        // the reason and the band that would have passed as well as the
+        // verdict, because "failed" on its own is not something an official at
+        // the scale can act on.
+        $verdict = app(WeightValidator::class)->check($category, $kg);
 
         $athlete->update([
             'weighin_kg' => $kg,
-            'weighin_status' => $status,
+            'weighin_status' => $verdict->status(),
             'weighin_at' => now(),
         ]);
 
-        $label = $category !== null ? $category->label : __('no weight class');
+        // An athlete with no class is never accepted, so the two conditions
+        // always agree — stated together rather than reached for with a
+        // nullsafe, which would suggest they might not.
+        if ($verdict->accepted && $category !== null) {
+            session()->flash('status', __(':name weighed in at :kg kg — inside :label.', [
+                'name' => $athlete->fullname,
+                'kg' => $kg,
+                'label' => $category->label,
+            ]));
 
-        session()->flash('status', $status === 'pass'
-            ? __(':name weighed in at :kg kg — inside :label.', ['name' => $athlete->fullname, 'kg' => $kg, 'label' => $label])
-            : __(':name weighed :kg kg — outside :label.', ['name' => $athlete->fullname, 'kg' => $kg, 'label' => $label]));
+            return;
+        }
+
+        session()->flash('error', __(':name: :reason Accepted range is :range.', [
+            'name' => $athlete->fullname,
+            'reason' => $verdict->reason,
+            'range' => $verdict->range->label(),
+        ]));
     }
 
     /** @return Collection<int, Athlete> */

@@ -271,8 +271,14 @@ describe('registration', function () {
 describe('weigh-in', function () {
     beforeEach(fn () => $this->actingAs($this->admin));
 
+    /**
+     * The class runs from its floor to its ceiling, with 500 grams of grace
+     * below the floor — not a 500-gram window below the ceiling, which is what
+     * the rule used to be and which rejected most of the class. The bands
+     * themselves are covered in detail in WeightValidationTest.
+     */
     it('passes a weight inside the class and fails one outside', function (float $kg, string $expected) {
-        [$category] = categoryWithAthletes(1);   // -66 class, min 60 max 66
+        [$category] = categoryWithAthletes(1);   // -66 class, floor 60, ceiling 66
         $athlete = $category->athletes()->first();
 
         Livewire::test(WeighIn::class, ['ageCategory' => $category->ageCategory])
@@ -282,10 +288,12 @@ describe('weigh-in', function () {
         expect($athlete->refresh()->weighin_status)->toBe($expected)
             ->and((float) $athlete->weighin_kg)->toBe($kg);
     })->with([
-        'at the limit' => [66.0, 'pass'],
-        'inside tolerance' => [65.6, 'pass'],
-        'below tolerance' => [64.9, 'fail'],
-        'over the limit' => [66.4, 'fail'],
+        'at the ceiling' => [66.0, 'pass'],
+        'just under the ceiling' => [65.6, 'pass'],
+        'well inside the class' => [64.9, 'pass'],
+        'inside the tolerance below the floor' => [59.6, 'pass'],
+        'below the tolerance' => [59.4, 'fail'],
+        'over the ceiling' => [66.4, 'fail'],
     ]);
 
     it('rejects a non-numeric entry without touching the record', function () {

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Services\WeightValidator;
+use App\Support\WeightRange;
 use Carbon\CarbonImmutable;
 use Database\Factories\WeightCategoryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -131,23 +133,22 @@ class WeightCategory extends Model
     }
 
     /**
-     * Does a measured weight fall inside this category, allowing the standard
-     * 0.5kg tolerance below an upper bound?
+     * Does a measured weight fall inside this category?
+     *
+     * Delegated rather than answered here. The rule needs the classes either
+     * side of this one to know where the band starts, which is a question about
+     * the division and not about this row — and the previous answer, which used
+     * only this row, accepted a 500-gram window below the ceiling instead of a
+     * weight class.
      */
-    public function admits(float $kg, float $tolerance = 0.5): bool
+    public function admits(float $kg, float $tolerance = WeightValidator::TOLERANCE_KG): bool
     {
-        if ($this->min_kg !== null && $kg < (float) $this->min_kg) {
-            return false;
-        }
+        return app(WeightValidator::class)->rangeFor($this, $tolerance)->admits($kg);
+    }
 
-        if ($this->max_kg !== null && $kg > (float) $this->max_kg) {
-            return false;
-        }
-
-        if ($this->max_kg !== null && $kg < (float) $this->max_kg - $tolerance) {
-            return false;
-        }
-
-        return true;
+    /** The band this class accepts, tolerance included. */
+    public function weightRange(float $tolerance = WeightValidator::TOLERANCE_KG): WeightRange
+    {
+        return app(WeightValidator::class)->rangeFor($this, $tolerance);
     }
 }
