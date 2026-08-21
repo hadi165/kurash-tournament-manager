@@ -65,6 +65,16 @@ class User extends Authenticatable implements PasskeyUser
     /** Reads one scoreboard and nothing else. */
     public const ROLE_SCOREBOARD_VIEWER = 'scoreboard_viewer';
 
+    /**
+     * Scores contests on a mat, and reaches nothing else.
+     *
+     * Deliberately not a variant of official, which reads every competition
+     * screen but may change none of them. A referee is the reverse: they change
+     * the one thing that matters most — the result — and should not be able to
+     * open the draw it sits in.
+     */
+    public const ROLE_REFEREE = 'referee';
+
     /** Roles allowed to change competition data. */
     public const MANAGING_ROLES = [self::ROLE_ADMIN, self::ROLE_SUPERVISOR];
 
@@ -75,7 +85,7 @@ class User extends Authenticatable implements PasskeyUser
      * the request as-is: admin is absent on purpose, so no form post can mint
      * an account that can mint accounts.
      */
-    public const ASSIGNABLE_ROLES = [self::ROLE_OFFICIAL, self::ROLE_SCOREBOARD_VIEWER];
+    public const ASSIGNABLE_ROLES = [self::ROLE_OFFICIAL, self::ROLE_REFEREE, self::ROLE_SCOREBOARD_VIEWER];
 
     /**
      * Roles that may read a scoreboard.
@@ -90,7 +100,25 @@ class User extends Authenticatable implements PasskeyUser
         self::ROLE_OFFICIAL,
         self::ROLE_VIEWER,
         self::ROLE_SCOREBOARD_VIEWER,
+        self::ROLE_REFEREE,
     ];
+
+    /**
+     * Roles that may score a contest on a mat.
+     *
+     * Separate from MANAGING_ROLES on purpose. Scoring and running the
+     * competition were the same permission until referees had accounts of their
+     * own, and collapsing them again would hand every referee the draw.
+     */
+    public const SCORING_ROLES = [self::ROLE_ADMIN, self::ROLE_SUPERVISOR, self::ROLE_REFEREE];
+
+    /**
+     * Roles confined to a mat and a board.
+     *
+     * The two accounts that have no business on a competition screen, for the
+     * opposite reasons: one may only watch, and one may only score.
+     */
+    public const CONFINED_ROLES = [self::ROLE_SCOREBOARD_VIEWER, self::ROLE_REFEREE];
 
     /**
      * Every capability check goes through is_active first.
@@ -112,6 +140,28 @@ class User extends Authenticatable implements PasskeyUser
     public function isScoreboardViewer(): bool
     {
         return $this->role === self::ROLE_SCOREBOARD_VIEWER;
+    }
+
+    public function isReferee(): bool
+    {
+        return $this->role === self::ROLE_REFEREE;
+    }
+
+    /** May this account record calls and declare a winner on a mat? */
+    public function canScoreBouts(): bool
+    {
+        return $this->is_active && in_array($this->role, self::SCORING_ROLES, true);
+    }
+
+    /**
+     * Is this account confined to a mat and a board?
+     *
+     * What keeps a referee and a scoreboard viewer out of the competition
+     * screens by typing a URL, rather than by not being shown a link.
+     */
+    public function isConfinedToMat(): bool
+    {
+        return in_array($this->role, self::CONFINED_ROLES, true);
     }
 
     public function canManageUsers(): bool

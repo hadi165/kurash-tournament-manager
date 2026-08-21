@@ -55,15 +55,21 @@ class AppServiceProvider extends ServiceProvider
         /*
          | Where an account lands after signing in.
          |
-         | A scoreboard account goes to its board rather than to a dashboard it
-         | is not allowed to open — and deliberately not to the intended URL,
-         | which for this role can only be somewhere it would be refused.
+         | A confined account goes where it may actually work — a referee to the
+         | mats they score, a scoreboard account to its board — rather than to a
+         | dashboard it is not allowed to open. Deliberately not to the intended
+         | URL, which for these roles can only be somewhere they would be
+         | refused.
          */
         $this->app->singleton(LoginResponse::class, fn (): LoginResponse => new class implements LoginResponse
         {
             public function toResponse($request): RedirectResponse
             {
                 $user = $request->user();
+
+                if ($user?->isReferee()) {
+                    return redirect()->route('referee.mats');
+                }
 
                 return $user?->isScoreboardViewer()
                     ? redirect()->route('scoreboard.index')
@@ -111,7 +117,7 @@ class AppServiceProvider extends ServiceProvider
          | account is not a working role, and this is what keeps it out of the
          | admin surface by typing a URL rather than by hiding a link.
          */
-        Gate::define('access-admin', fn (User $user): bool => $user->is_active && ! $user->isScoreboardViewer());
+        Gate::define('access-admin', fn (User $user): bool => $user->is_active && ! $user->isConfinedToMat());
 
         /*
          | The published draw.
@@ -122,13 +128,40 @@ class AppServiceProvider extends ServiceProvider
          | manage-competition. Reading a draw grants nothing towards drawing
          | one, which is the same separation the scoreboard permissions keep.
          */
-        Gate::define('draw.view_published', fn (User $user): bool => $user->is_active && ! $user->isScoreboardViewer());
+        Gate::define('draw.view_published', fn (User $user): bool => $user->is_active && ! $user->isConfinedToMat());
 
-        Gate::define('presentation.operate', fn (User $user): bool => $user->is_active && ! $user->isScoreboardViewer());
+        Gate::define('presentation.operate', fn (User $user): bool => $user->is_active && ! $user->isConfinedToMat());
 
         Gate::define('draw.publish', fn (User $user): bool => $user->canManageCompetition());
 
         Gate::define('scoreboard.view', fn (User $user): bool => $user->canViewScoreboard());
+
+        /*
+         | Scoring a contest.
+         |
+         | Its own permission rather than a corner of manage-competition, which
+         | also opens the entry list, the draw and the bracket. A referee holds
+         | this and nothing else; an admin holds both and reaches the mat by the
+         | same door. Every write on the mat screen is checked against this, so
+         | a role added later inherits the separation instead of having to
+         | remember it.
+         */
+        Gate::define('score-bout', fn (User $user): bool => $user->canScoreBouts());
+
+        /*
+         | Opening a mat screen, as opposed to scoring on one.
+         |
+         | Everybody who works the competition may watch a mat — an official
+         | following the session needs the screen in front of them, and took no
+         | permission away from anybody by having it. The buttons on it are a
+         | separate question, answered by score-bout above, so a viewer who
+         | opens this reaches a board with nothing to press.
+         */
+        Gate::define(
+            'mat.view',
+            fn (User $user): bool => $user->canScoreBouts()
+                || ($user->is_active && ! $user->isConfinedToMat())
+        );
 
         Gate::define(
             'scoreboard.select_event',

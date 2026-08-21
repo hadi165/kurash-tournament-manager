@@ -28,6 +28,21 @@ class Categories extends Component
     #[Validate('required|in:M,F,X')]
     public string $gender = 'M';
 
+    /**
+     * How long a contest in this division runs, in minutes.
+     *
+     * Typed in minutes because that is how a federation states it — "cadets
+     * fight three" — and stored in seconds because that is what a clock counts.
+     * Blank means the configured default for the weight class's gender, which
+     * is what every category had before this field existed.
+     *
+     * A string rather than a number: an empty text input posts "", and a
+     * nullable numeric property would take that as zero and put every cadet
+     * contest on a clock of no length at all.
+     */
+    #[Validate('nullable|numeric|min:0.5|max:20')]
+    public string $boutMinutes = '';
+
     public ?int $editingId = null;
 
     public function mount(Championship $championship): void
@@ -45,11 +60,14 @@ class Categories extends Component
         $this->ageCategoryName = $ageCategory->name;
         $this->weightLabels = $ageCategory->weightCategories->pluck('label')->implode(', ');
         $this->gender = $ageCategory->weightCategories->first()->gender ?? 'M';
+        $this->boutMinutes = $ageCategory->bout_seconds === null
+            ? ''
+            : rtrim(rtrim(number_format($ageCategory->bout_seconds / 60, 2, '.', ''), '0'), '.');
     }
 
     public function cancelEdit(): void
     {
-        $this->reset('editingId', 'ageCategoryName', 'weightLabels');
+        $this->reset('editingId', 'ageCategoryName', 'weightLabels', 'boutMinutes');
         $this->gender = 'M';
         $this->resetValidation();
     }
@@ -71,7 +89,14 @@ class Categories extends Component
             ? $this->championship->ageCategories()->findOrFail($this->editingId)
             : $this->championship->ageCategories()->make();
 
-        $ageCategory->fill(['name' => $this->ageCategoryName])->save();
+        $ageCategory->fill([
+            'name' => $this->ageCategoryName,
+            // Rounded to the second on the way in, so a clock never counts down
+            // from a fraction it cannot show.
+            'bout_seconds' => $this->boutMinutes === ''
+                ? null
+                : (int) round(((float) $this->boutMinutes) * 60),
+        ])->save();
 
         $this->syncWeightCategories($ageCategory, $labels);
 

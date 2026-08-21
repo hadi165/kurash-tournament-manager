@@ -105,7 +105,7 @@ describe('what it shows', function () {
         [$court, $bout] = boutOnMat();
 
         $this->actingAs($this->admin);
-        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'halal', 'a', 150);
+        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'khalol', 'a', 150);
 
         $component = Livewire::test(Scoreboard::class, ['court' => $court->refresh()]);
 
@@ -193,7 +193,7 @@ describe('the shared clock', function () {
         $bout->update(['clock_seconds_left' => 90, 'clock_running' => true, 'clock_updated_at' => now()]);
 
         $this->actingAs($this->admin);
-        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'halal', 'b', 88);
+        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'khalol', 'b', 88);
 
         expect(Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
             ->viewData('clockRunning'))->toBeFalse();

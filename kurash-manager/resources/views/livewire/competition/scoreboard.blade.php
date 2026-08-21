@@ -2,11 +2,14 @@
     The federation's scoreboard, as it reads in the hall.
 
     Mat, contest number and phase top left; the contest clock in the middle;
-    weight class and division top right. Below that each athlete is a pane of
-    their own, carrying a full-height corner bar in the colour of their
-    yakhtak, their flag, their name, and their counts as separated tiles.
-    Y / C / D / T — yonbosh, chala, dakki, tanbeh. There is no halal column
-    because a halal ends the contest, and an ended contest shows WINNER.
+    weight class and division top right. Below that each athlete has a pane in
+    the colour of their yakhtak — a blue panel and a green panel, not two grey
+    boxes with a coloured word on them, because at thirty metres the colour is
+    what carries and the word is the caption.
+
+    Six counters per side. G / Y / C are set in yellow, D / T in red, and M
+    counts the madichal that ends the contest on the third. There is no khalol
+    column because a khalol ends the contest, and an ended contest shows WINNER.
 
     Polls for the score; runs the clock locally between polls. Two rates on
     purpose: the score only changes when a referee calls something, but a clock
@@ -57,13 +60,30 @@
             default => __('Open'),
         };
 
-        // Top athlete first, as the board is read. Each carries the counts its
-        // pane shows; dakki is derived from tanbeh rather than counted
-        // separately, so the D tile is the state, not a tally.
+        // Top pane first, as the board is read. Blue is side A and green is
+        // side B throughout the system — the yakhtak the bracket assigned, not
+        // a decoration chosen per screen.
         $sides = $bout === null ? [] : [
-            ['athlete' => $bout->athleteA, 'tally' => $tally['a'], 'id' => $bout->athlete_a_id, 'corner' => 'blue'],
-            ['athlete' => $bout->athleteB, 'tally' => $tally['b'], 'id' => $bout->athlete_b_id, 'corner' => 'green'],
+            ['athlete' => $bout->athleteA, 'tally' => $tally['a'], 'id' => $bout->athlete_a_id, 'yakhtak' => 'blue'],
+            ['athlete' => $bout->athleteB, 'tally' => $tally['b'], 'id' => $bout->athlete_b_id, 'yakhtak' => 'green'],
         ];
+
+        // How the contest was won, in the federation's own words. Shown beside
+        // the winner rather than left for the hall to infer from the counts.
+        $methodOfVictory = match ($winType) {
+            'khalol' => __('KHALOL'),
+            'yonbosh' => __('YONBOSH'),
+            'chala' => __('CHALA'),
+            'girrom' => __('GIRROM'),
+            'madichal' => __('MADICHAL'),
+            'dakki' => __('DAKKI'),
+            'technique' => __('TECHNIQUE'),
+            'warnings' => __('WARNINGS'),
+            'decision' => __('DECISION'),
+            'manual' => __('REFEREE'),
+            'bye' => __('BYE'),
+            default => $winType ? Str::upper(str_replace('_', ' ', $winType)) : null,
+        };
 
         $brandLogo = config('branding.logo');
         $hasBrandLogo = $brandLogo && is_file(public_path($brandLogo));
@@ -91,15 +111,11 @@
         </div>
 
         <div class="head__clock">
+            {{-- One contest, one clock. The period row that used to sit under
+                 it is gone: a kurash contest as this system runs it is a single
+                 round, and a dot labelled "Period 1" that could never become a
+                 Period 2 was furniture claiming to be information. --}}
             <div class="clock" :class="urgent && '-urgent'" x-text="display">{{ sprintf('%02d:%02d', intdiv($secondsLeft, 60), $secondsLeft % 60) }}</div>
-
-            {{-- One dot per period. A kurash contest as this system runs it is a
-                 single period, so there is one — the row is here so a rules
-                 edition that splits the contest has somewhere to say so. --}}
-            <div class="periods">
-                <span class="periods__dot -on"></span>
-                <span class="periods__label">{{ __('Period :n', ['n' => 1]) }}</span>
-            </div>
         </div>
 
         <div class="head__division">
@@ -134,8 +150,8 @@
                     $iso = \App\Support\Noc::iso($side['athlete']?->noc_code);
                 @endphp
 
-                <div class="pane {{ $isWinner ? '-winner -winner-' . $side['corner'] : '' }}">
-                    <span class="pane__bar -{{ $side['corner'] }}"></span>
+                <div class="pane -{{ $side['yakhtak'] }} {{ $isWinner ? '-winner' : '' }}">
+                    <span class="pane__bar"></span>
 
                     <div class="pane__who">
                         {{-- The flag is rendered here rather than through
@@ -154,8 +170,8 @@
 
                         <div class="pane__titles">
                             <div class="tags">
-                                <span class="tag -{{ $side['corner'] }}">
-                                    {{ $side['corner'] === 'blue' ? __('Blue corner') : __('Green corner') }}
+                                <span class="tag">
+                                    {{ $side['yakhtak'] === 'blue' ? __('Yakhtak Blue') : __('Yakhtak Green') }}
                                 </span>
 
                                 @if ($isWinner)
@@ -163,8 +179,13 @@
                                          transformed: this word is the result,
                                          and it should read as the result in
                                          the markup a screen reader reaches
-                                         too. --}}
+                                         too. The method sits beside it, so the
+                                         hall is told how as well as who. --}}
                                     <span class="tag -winner">{{ __('WINNER') }}</span>
+
+                                    @if ($methodOfVictory)
+                                        <span class="tag -method">{{ $methodOfVictory }}</span>
+                                    @endif
                                 @endif
                             </div>
 
@@ -173,25 +194,31 @@
                         </div>
                     </div>
 
-                    {{-- A decided contest drops the two tiles that only matter
+                    {{-- A decided contest drops the counters that only matter
                          while it is running, so the counts that stand are the
                          only counts on the board. --}}
                     @php
                         $cells = $isWinner
-                            ? [['Y', $side['tally']->yonbosh], ['T', $side['tally']->tanbeh]]
+                            ? [
+                                ['Y', $side['tally']->yonbosh, 'yellow'],
+                                ['C', $side['tally']->chala, 'yellow'],
+                            ]
                             : [
-                                ['Y', $side['tally']->yonbosh],
-                                ['C', $side['tally']->chala],
-                                ['D', $side['tally']->isDakki() ? 1 : 0],
-                                ['T', $side['tally']->tanbeh],
+                                ['G', $side['tally']->girrom, 'yellow'],
+                                ['Y', $side['tally']->yonbosh, 'yellow'],
+                                ['C', $side['tally']->chala, 'yellow'],
+                                ['D', $side['tally']->dakki, 'red'],
+                                ['T', $side['tally']->tanbeh, 'red'],
+                                ['M', $side['tally']->madichal, 'red'],
                             ];
                     @endphp
 
                     <div class="cells">
-                        @foreach ($cells as [$key, $value])
-                            {{-- A zero dakki or tanbeh count dims, so the
-                                 referee's eye goes to what actually scored. --}}
-                            <div class="cell {{ in_array($key, ['D', 'T'], true) && $value === 0 ? '-dim' : '' }}">
+                        @foreach ($cells as [$key, $value, $tone])
+                            {{-- A counter at zero dims to the plate colour, so
+                                 the hall's eye goes to what actually happened
+                                 rather than to a row of noughts. --}}
+                            <div class="cell -{{ $tone }} {{ $value === 0 ? '-dim' : '' }}">
                                 <div class="cell__value">{{ $value }}</div>
                                 <div class="cell__key">{{ $key }}</div>
                             </div>
@@ -199,6 +226,17 @@
                     </div>
                 </div>
             @endforeach
+
+            {{-- Jazzo sits over the middle of the two panes: half the contest
+                 gone with nothing scored, and the referee has stopped it. It
+                 stays until the mat resumes, which is what tells a hall that
+                 sees a stopped clock why it stopped. --}}
+            @if ($inJazzo)
+                <div class="jazzo" role="status">
+                    <div class="jazzo__word">{{ __('JAZZO') }}</div>
+                    <div class="jazzo__sub">{{ __('Half time · no score') }}</div>
+                </div>
+            @endif
         </div>
 
         {{-- Athletes and coaches at this mat should not have to find another
@@ -227,8 +265,15 @@
 
         <footer class="foot">
             <div class="legend">
-                @foreach ([['Y', __('Yonbosh')], ['C', __('Chala')], ['D', __('Dakki')], ['T', __('Tanbeh')]] as [$key, $word])
-                    <span class="legend__item"><span class="legend__key">{{ $key }}</span>{{ $word }}</span>
+                @foreach ([
+                    ['G', __('Girrom'), 'yellow'],
+                    ['Y', __('Yonbosh'), 'yellow'],
+                    ['C', __('Chala'), 'yellow'],
+                    ['D', __('Dakki'), 'red'],
+                    ['T', __('Tanbeh'), 'red'],
+                    ['M', __('Madichal'), 'red'],
+                ] as [$key, $word, $tone])
+                    <span class="legend__item"><span class="legend__key -{{ $tone }}">{{ $key }}</span>{{ $word }}</span>
                 @endforeach
             </div>
 
@@ -273,18 +318,21 @@
         min-width: 0;
     }
 
+    /* The federation's mark, at the size it is meant to be read at. It shares
+       the header with the mat name rather than being tucked into a corner of
+       it: this is whose competition the board belongs to. */
     .chip {
         flex: none;
         background: #fff;
-        padding: 0.65vh;
-        border-radius: 1.1vh;
+        padding: 0.9vh;
+        border-radius: 1.3vh;
         border: 0.19vh solid var(--line);
         line-height: 0;
     }
 
     .chip img {
-        width: 5.6vh;
-        height: 5.6vh;
+        width: 9.2vh;
+        height: 9.2vh;
         object-fit: contain;
         display: block;
     }
@@ -292,9 +340,9 @@
     .chip__text {
         display: grid;
         place-items: center;
-        width: 5.6vh;
-        height: 5.6vh;
-        font-size: 1.8vh;
+        width: 9.2vh;
+        height: 9.2vh;
+        font-size: 2.6vh;
         font-weight: 900;
         color: #046830;
         line-height: 1;
@@ -325,7 +373,7 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 0.9vh;
+        justify-content: center;
     }
 
     /* Light-on-dark in both themes, and a system monospace stack rather than a
@@ -333,7 +381,7 @@
        nobody can read at thirty metres. */
     .clock {
         font-family: ui-monospace, 'DejaVu Sans Mono', 'Courier New', monospace;
-        font-size: 9.3vh;
+        font-size: 10.5vh;
         font-weight: 700;
         line-height: 1;
         color: var(--clock-text);
@@ -348,33 +396,6 @@
     .clock.-urgent {
         color: var(--clock-urgent);
         border-color: var(--clock-urgent);
-    }
-
-    .periods {
-        display: flex;
-        align-items: center;
-        gap: 0.9vh;
-    }
-
-    .periods__dot {
-        width: 1.7vh;
-        height: 1.7vh;
-        border-radius: 999px;
-        border: 0.19vh solid var(--dim);
-    }
-
-    .periods__dot.-on {
-        background: var(--green);
-        border-color: var(--green);
-    }
-
-    .periods__label {
-        font-size: 1.95vh;
-        font-weight: 700;
-        color: var(--muted);
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
-        margin-left: 0.55vh;
     }
 
     .head__division {
@@ -429,6 +450,7 @@
     /* ── Athlete panes ──────────────────────────────────────────────────── */
 
     .panes {
+        position: relative;
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -437,6 +459,9 @@
         min-height: 0;
     }
 
+    /* Each pane is its athlete's yakhtak. The tint is the panel, not a stripe
+       on a grey panel: the two sides have to be told apart from the back of a
+       hall, and colour is the only thing that carries that far. */
     .pane {
         flex: 1 1 0;
         display: flex;
@@ -444,23 +469,36 @@
         min-height: 0;
         overflow: hidden;
         border-radius: 2vh;
-        border: 0.19vh solid var(--line);
+        border: 0.28vh solid var(--line);
         background: var(--pane);
     }
 
-    .pane.-winner-blue { background: var(--blue-tint); border-color: var(--blue); }
-    .pane.-winner-green { background: var(--green-tint); border-color: var(--green); }
+    .pane.-blue {
+        background: var(--blue-tint);
+        border-color: var(--blue);
+    }
+
+    .pane.-green {
+        background: var(--green-tint);
+        border-color: var(--green);
+    }
+
+    /* The winner's pane is the same colour, lit. A board that recoloured the
+       result would be saying the winner changed sides. */
+    .pane.-winner {
+        box-shadow: inset 0 0 0 0.65vh var(--gold);
+    }
 
     /* Kurash wrestlers wear a blue or a green yakhtak and the bracket decides
-       which, so the bar is the athlete's corner rather than decoration. */
+       which, so the bar is the athlete's yakhtak rather than decoration. */
     .pane__bar {
-        width: 1.85vh;
+        width: 2.4vh;
         align-self: stretch;
         flex: none;
     }
 
-    .pane__bar.-blue { background: var(--blue); }
-    .pane__bar.-green { background: var(--green); }
+    .pane.-blue .pane__bar { background: var(--blue); }
+    .pane.-green .pane__bar { background: var(--green); }
 
     .pane__who {
         flex: 1;
@@ -501,29 +539,40 @@
         gap: 1.3vh;
     }
 
+    /* The yakhtak label, at a size that reads from the floor. It names the
+       colour the athlete is wearing, which is how the hall, the coaches and
+       the referee all refer to them. */
     .tag {
         display: inline-flex;
-        padding: 0.46vh 1.7vh;
+        padding: 0.55vh 2vh;
         border-radius: 999px;
         color: #fff;
-        font-size: 1.95vh;
-        font-weight: 700;
-        letter-spacing: 0.12em;
+        font-size: 2.8vh;
+        font-weight: 900;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
         white-space: nowrap;
     }
 
-    .tag.-blue { background: var(--blue); }
-    .tag.-green { background: var(--green); }
+    .pane.-blue .tag { background: var(--blue); }
+    .pane.-green .tag { background: var(--green); }
 
-    .tag.-winner {
+    .pane .tag.-winner {
         background: var(--text);
         color: var(--bg);
-        font-size: 2.3vh;
+        font-size: 3vh;
         font-weight: 900;
         letter-spacing: 0.08em;
-        padding: 0.46vh 2vh;
+        padding: 0.55vh 2.2vh;
         text-transform: none;
+    }
+
+    /* How the contest was won, beside who won it. */
+    .pane .tag.-method {
+        background: var(--gold);
+        color: #1a1204;
+        font-size: 2.6vh;
+        letter-spacing: 0.12em;
     }
 
     .pane__name {
@@ -539,8 +588,8 @@
     }
 
     .pane__country {
-        font-size: 2.4vh;
-        font-weight: 600;
+        font-size: 2.7vh;
+        font-weight: 700;
         color: var(--muted);
         margin-top: 0.2vh;
     }
@@ -550,22 +599,46 @@
     .cells {
         display: flex;
         align-self: stretch;
-        gap: 1.3vh;
+        gap: 1vh;
         padding: 1.3vh 1.3vh 1.3vh 0;
     }
 
     .cell {
-        width: 15.2vh;
+        width: 11.5vh;
         border-radius: 1.5vh;
         background: var(--cell);
-        border: 0.19vh solid var(--cell-line);
+        border: 0.28vh solid var(--cell-line);
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
     }
 
-    .cell.-dim { background: var(--cell-dim); }
+    /* G, Y and C in yellow; D, T and M in red. The federation's own
+       convention, and the one thing on this board that must not be read
+       wrongly at distance. */
+    .cell.-yellow {
+        border-color: var(--score-yellow);
+        background: var(--score-yellow-fill);
+    }
+
+    .cell.-red {
+        border-color: var(--score-red);
+        background: var(--score-red-fill);
+    }
+
+    .cell.-yellow .cell__value, .cell.-yellow .cell__key { color: var(--score-yellow); }
+    .cell.-red .cell__value, .cell.-red .cell__key { color: var(--score-red); }
+
+    /* A counter at nought is not news. It keeps its place so the row never
+       reflows mid-contest, and drops back to the plate colour. */
+    .cell.-dim {
+        background: var(--cell-dim);
+        border-color: var(--cell-line);
+    }
+
+    .cell.-dim .cell__value,
+    .cell.-dim .cell__key { color: var(--dim); }
 
     .cell__value {
         font-size: 9.6vh;
@@ -574,16 +647,52 @@
         font-variant-numeric: tabular-nums;
     }
 
+    /* The letter under the number, large enough to be read rather than
+       inferred: a board where only the digits are legible tells a hall a
+       number and not what it counts. */
     .cell__key {
-        font-size: 2vh;
-        font-weight: 700;
-        letter-spacing: 0.14em;
-        color: var(--muted);
-        margin-top: 0.37vh;
+        font-size: 3.2vh;
+        font-weight: 900;
+        letter-spacing: 0.1em;
+        margin-top: 0.4vh;
+        line-height: 1;
     }
 
-    .cell.-dim .cell__value,
-    .cell.-dim .cell__key { color: var(--dim); }
+    /* ── Jazzo ──────────────────────────────────────────────────────────── */
+
+    /* Centred over both panes, because it is the state of the contest rather
+       than of either athlete. */
+    .jazzo {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        z-index: 2;
+        background: var(--jazzo-fill);
+        border: 0.65vh solid var(--jazzo-line);
+        border-radius: 2vh;
+        padding: 2.2vh 6vh;
+        text-align: center;
+        box-shadow: 0 1.5vh 4vh rgb(0 0 0 / 0.45);
+    }
+
+    .jazzo__word {
+        font-size: 8.5vh;
+        font-weight: 900;
+        line-height: 1;
+        letter-spacing: 0.08em;
+        color: var(--jazzo-text);
+    }
+
+    .jazzo__sub {
+        margin-top: 0.9vh;
+        font-size: 2.4vh;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--jazzo-text);
+        opacity: 0.75;
+    }
 
     /* ── Footer and idle ────────────────────────────────────────────────── */
 
@@ -629,7 +738,7 @@
     .legend {
         display: flex;
         align-items: center;
-        gap: 3.5vh;
+        gap: 2.8vh;
     }
 
     .legend__item {
@@ -643,10 +752,13 @@
     }
 
     .legend__key {
-        font-size: 2.2vh;
+        font-size: 2.4vh;
         font-weight: 900;
         color: var(--text);
     }
+
+    .legend__key.-yellow { color: var(--score-yellow); }
+    .legend__key.-red { color: var(--score-red); }
 
     .foot__meta {
         font-size: 1.95vh;

@@ -398,7 +398,7 @@ class Bracket extends Component
             app(BoutAdvancer::class)->recordResult(
                 bout: $bout,
                 winnerAthleteId: $winnerId,
-                winType: 'halal',
+                winType: 'khalol',
                 user: auth()->user(),
                 source: 'operator',
             );

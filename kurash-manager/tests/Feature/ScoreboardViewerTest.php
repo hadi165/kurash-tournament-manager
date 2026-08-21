@@ -215,7 +215,7 @@ describe('what a scoreboard viewer cannot reach', function () {
      */
     it('is refused every mutation it could forge', function () {
         $calls = [
-            [MatControl::class, ['court' => $this->court], 'score', ['halal', 'a', 120]],
+            [MatControl::class, ['court' => $this->court], 'score', ['khalol', 'a', 120]],
             [MatControl::class, ['court' => $this->court], 'voidLast', []],
             [MatControl::class, ['court' => $this->court], 'publishClock', [90, true]],
             [MatControl::class, ['court' => $this->court], 'finishOnTime', []],
@@ -245,7 +245,7 @@ describe('what a scoreboard viewer cannot reach', function () {
         $before = $this->bout->only(['winner_athlete_id', 'status', 'court_id', 'clock_seconds_left']);
 
         Livewire::test(MatControl::class, ['court' => $this->court])
-            ->call('score', 'halal', 'a', 100)
+            ->call('score', 'khalol', 'a', 100)
             ->assertForbidden();
 
         expect($this->bout->refresh()->only(array_keys($before)))->toBe($before)
@@ -327,7 +327,7 @@ describe('who else may read a board', function () {
         $this->actingAs($operator);
 
         Livewire::test(MatControl::class, ['court' => $court])
-            ->call('score', 'halal', 'a', 100)
+            ->call('score', 'khalol', 'a', 100)
             ->assertForbidden();
     });
 });

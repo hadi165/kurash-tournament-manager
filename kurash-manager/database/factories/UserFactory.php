@@ -73,6 +73,21 @@ class UserFactory extends Factory
         ]);
     }
 
+    /**
+     * A referee: scores one mat and reaches nothing else.
+     *
+     * Takes the same optional scope a scoreboard viewer does, because the
+     * column is the same question — which championship's mats this account
+     * belongs to.
+     */
+    public function referee(?Championship $scope = null): static
+    {
+        return $this->state(fn (): array => [
+            'role' => User::ROLE_REFEREE,
+            'scoreboard_championship_id' => $scope?->getKey(),
+        ]);
+    }
+
     /** The operator: works the competition screens, changes nothing by right. */
     public function official(): static
     {

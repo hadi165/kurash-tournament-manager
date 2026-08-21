@@ -220,9 +220,9 @@
     </table>
 
     <div class="foot">
-        <span class="key" style="background: #1a9fd8;"></span> {{ __('Blue corner') }}
+        <span class="key" style="background: #1a9fd8;"></span> {{ __('Yakhtak Blue') }}
         &nbsp;&nbsp;
-        <span class="key" style="background: #019a44;"></span> {{ __('Green corner') }}
+        <span class="key" style="background: #019a44;"></span> {{ __('Yakhtak Green') }}
         &nbsp;&nbsp;·&nbsp;&nbsp;
         {{ __('Fight numbers follow the published running order.') }}
         &nbsp;&nbsp;·&nbsp;&nbsp;

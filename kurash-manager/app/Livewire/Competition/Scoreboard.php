@@ -57,7 +57,7 @@ class Scoreboard extends Component
     private function bout(): ?Bout
     {
         return $this->court->bouts()
-            ->with(['athleteA', 'athleteB', 'weightCategory', 'events'])
+            ->with(['athleteA', 'athleteB', 'ageCategory', 'weightCategory.ageCategory', 'events'])
             ->whereIn('status', [Bout::STATUS_ON_COURT, Bout::STATUS_COMPLETED])
             ->orderByRaw('winner_athlete_id is not null')   // live contest first
             ->orderByDesc('updated_at')
@@ -110,6 +110,13 @@ class Scoreboard extends Component
             'secondsLeft' => $bout?->secondsRemaining($seconds) ?? $seconds,
             'clockRunning' => (bool) ($bout?->clock_running && ! $bout->isDecided()),
             'winner' => $bout?->isDecided() ? $bout->winner : null,
+            // How it was won, spelled out. A hall watching a contest end wants
+            // to know it was a khalol rather than a decision, and a board that
+            // only names the winner leaves everybody to guess.
+            'winType' => $bout?->isDecided() ? $bout->win_type : null,
+            // Jazzo puts a yellow box in the middle of the board and leaves it
+            // there until the contest is resumed.
+            'inJazzo' => (bool) $bout?->isInJazzo(),
             'nextBout' => $this->nextBout($bout),
             // The board carries no controls for anybody, but an account that
             // may only read one should be told so rather than left to infer it

@@ -33,7 +33,7 @@ function postResult(string $playCode, string $winnerSide, array $extra = [], ?st
         'winner_side' => $winnerSide,
         'score_a' => $winnerSide === 'a' ? 10 : 0,
         'score_b' => $winnerSide === 'b' ? 10 : 0,
-        'win_type' => 'halal',
+        'win_type' => 'khalol',
     ], $extra), $token === null ? [] : ['X-Scoreboard-Token' => $token]);
 }
 

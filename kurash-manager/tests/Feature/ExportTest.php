@@ -156,7 +156,7 @@ describe('the fight order sheet', function () {
         app(BoutAdvancer::class)->recordResult(
             bout: $bout,
             winnerAthleteId: $bout->athlete_a_id,
-            winType: 'halal',
+            winType: 'khalol',
             user: $this->admin,
             source: 'operator',
         );
@@ -217,7 +217,7 @@ describe('results and medal standing', function () {
                     $advancer->recordResult(
                         bout: $bout,
                         winnerAthleteId: $bout->athlete_a_id,
-                        winType: 'halal',
+                        winType: 'khalol',
                         user: null,
                         source: 'operator',
                     );

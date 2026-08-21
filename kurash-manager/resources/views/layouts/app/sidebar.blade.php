@@ -16,7 +16,17 @@
                     $hasBrandLogo = $brandLogo && is_file(public_path($brandLogo));
                 @endphp
 
-                <a href="{{ route('dashboard') }}" wire:navigate class="flex min-w-0 items-center gap-2.5 no-underline">
+                @php
+                    // A referee has no dashboard to be sent to, so the mark
+                    // points at the screen they actually start from. Sending
+                    // them to a 403 from the brand in the corner reads as a
+                    // broken system rather than as a role.
+                    $homeRoute = auth()->user()?->isReferee()
+                        ? route('referee.mats')
+                        : route('dashboard');
+                @endphp
+
+                <a href="{{ $homeRoute }}" wire:navigate class="flex min-w-0 items-center gap-2.5 no-underline">
                     {{-- The logo always sits on a white chip and is never
                          recoloured: the artwork is the federation's. --}}
                     <span class="flex-none rounded-md bg-white p-[5px] shadow-chip">
@@ -72,6 +82,49 @@
                     ->all();
             @endphp
 
+            @if (auth()->user()?->isReferee())
+                {{-- The referee's whole application: the mats they work and the
+                     board that shows them. Rendered as its own nav rather than
+                     as the full one with items hidden, because a menu whose
+                     items would all refuse is not a menu. --}}
+                @php
+                    $refereeCourts = \App\Models\Court::query()
+                        ->where('is_active', true)
+                        ->whereHas('championship', function ($query) {
+                            $query->whereNull('archived_at');
+
+                            if (auth()->user()->scoreboard_championship_id !== null) {
+                                $query->whereKey(auth()->user()->scoreboard_championship_id);
+                            }
+                        })
+                        ->orderBy('championship_id')
+                        ->orderBy('number')
+                        ->get();
+                @endphp
+
+                <nav class="flex flex-col gap-1">
+                    <div class="kicker px-4 pb-1.5 pt-2.5 !text-nav-muted">{{ __('Judging') }}</div>
+
+                    <x-nav-item :href="route('referee.mats')" :active="request()->routeIs('referee.*')">
+                        {{ __('Mats') }}
+                    </x-nav-item>
+
+                    <x-nav-item :href="route('scoreboard.index')" :active="request()->routeIs('scoreboard.*')">
+                        {{ __('Score Board') }}
+                    </x-nav-item>
+
+                    @if ($refereeCourts->isNotEmpty())
+                        <div class="kicker px-4 pb-1.5 pt-4 !text-nav-muted">{{ __('Score a mat') }}</div>
+
+                        @foreach ($refereeCourts as $refereeCourt)
+                            <x-nav-item
+                                :href="route('mats.live', $refereeCourt)"
+                                :active="request()->routeIs('mats.live') && request()->route('court')?->is($refereeCourt)"
+                            >{{ $refereeCourt->label() }}</x-nav-item>
+                        @endforeach
+                    @endif
+                </nav>
+            @else
             <nav class="flex flex-col gap-1">
                 <div class="kicker px-4 pb-1.5 pt-2.5 !text-nav-muted">{{ __('Platform') }}</div>
 
@@ -143,6 +196,7 @@
                     </x-nav-item>
                 @endif
             </nav>
+            @endif
 
             <flux:spacer />
 

@@ -136,7 +136,7 @@ function runTournament(WeightCategory $category): int
             $drawB = $bout->athleteB->draw_number;
             $winnerId = $drawA < $drawB ? $bout->athlete_a_id : $bout->athlete_b_id;
 
-            $advancer->recordResult($bout, $winnerId, ['score_a' => 10, 'score_b' => 0], 'halal', null, 'scoreboard');
+            $advancer->recordResult($bout, $winnerId, ['score_a' => 10, 'score_b' => 0], 'khalol', null, 'scoreboard');
             $fought++;
         }
     }

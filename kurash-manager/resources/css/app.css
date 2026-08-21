@@ -296,6 +296,29 @@
        decoration would cost it its meaning. */
     --color-amber: #c98a00;
 
+    /* The scoring yellow.
+
+       The federation's own convention for the board: G, Y and C are set in
+       yellow, D and T in red. It is the medal amber opened into a scale rather
+       than a fourth hue, because a board carrying two yellows is a board where
+       neither means anything. */
+    --color-warn: #c98a00;
+    --color-warn-100: #fdf3dd;
+    --color-warn-200: #f8e3ae;
+    --color-warn-300: #efcb6e;
+    --color-warn-400: #e0a83c;
+    --color-warn-500: #c98a00;
+    --color-warn-600: #a97200;
+    --color-warn-700: #855a00;
+    --color-warn-800: #614200;
+    --color-warn-900: #402c00;
+
+    /* Two more steps on the red, for text that has to hold on a dark panel
+       without the 500 vibrating against it. */
+    --color-danger-300: #f0a3ae;
+    --color-danger-400: #e5687c;
+    --color-danger-600: #b41d31;
+
     /* Soft and rounded. Flux's components read this same scale, so overriding
        it here is what gives its inputs, buttons and menus the new shape:
        8px on anything you type into, 12px on inner cells, 18px on cards. */

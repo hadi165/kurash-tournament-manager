@@ -20,6 +20,7 @@ use App\Livewire\Competition\Scoreboard;
 use App\Livewire\Competition\WeighIn;
 use App\Livewire\Operator\Draws as OperatorDraws;
 use App\Livewire\Operator\Presentation as OperatorPresentation;
+use App\Livewire\Referee\Mats as RefereeMats;
 use App\Livewire\Scoreboard\Viewer as ScoreboardViewer;
 use Illuminate\Support\Facades\Route;
 
@@ -31,9 +32,25 @@ use Illuminate\Support\Facades\Route;
  | page — which is what the specification asks for anyway: a login before any
  | competition data.
  */
-Route::get('/', fn () => auth()->check()
-    ? redirect()->route('dashboard')
-    : redirect()->route('login'))->name('home');
+Route::get('/', function () {
+    $user = auth()->user();
+
+    if ($user === null) {
+        return redirect()->route('login');
+    }
+
+    // A confined account has no dashboard. Sending it to one would be a 403 on
+    // the front door, which reads as a broken system rather than as a role.
+    if ($user->isReferee()) {
+        return redirect()->route('referee.mats');
+    }
+
+    if ($user->isScoreboardViewer()) {
+        return redirect()->route('scoreboard.index');
+    }
+
+    return redirect()->route('dashboard');
+})->name('home');
 
 /*
  | Venue display screens.
@@ -110,6 +127,20 @@ Route::middleware(['auth', 'verified', 'can:draw.view_published'])->group(functi
         ->name('operator.draws.ceremony');
 });
 
+/*
+ | Scoring a mat.
+ |
+ | Its own group, behind mat.view rather than access-admin, because a referee
+ | account reaches this and nothing else while an official still needs to be
+ | able to watch a mat they cannot score. The buttons are behind score-bout
+ | inside the screen, so the two questions stay separate — the separation is on
+ | the permissions, not on two copies of the mat screen.
+ */
+Route::middleware(['auth', 'verified', 'can:mat.view'])->group(function () {
+    Route::get('referee/mats', RefereeMats::class)->name('referee.mats');
+    Route::get('mats/{court}/live', MatControl::class)->name('mats.live');
+});
+
 Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('dashboard', Dashboard::class)->name('dashboard');
     Route::get('archive', Archive::class)->name('archive.index');
@@ -120,7 +151,6 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('championships/{championship}/entries', Entries::class)->name('entries.index');
     Route::get('championships/{championship}/medals', Medals::class)->name('medals.index');
     Route::get('championships/{championship}/mats', Courts::class)->name('courts.index');
-    Route::get('mats/{court}/live', MatControl::class)->name('mats.live');
     Route::get('championships/{championship}/brackets', Brackets::class)->name('brackets.index');
     Route::get('championships/{championship}/fight-order', FightOrder::class)->name('fight-order.index');
 

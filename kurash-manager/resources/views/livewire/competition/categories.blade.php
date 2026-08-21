@@ -145,7 +145,7 @@
             <div x-show="open || @js((bool) $editingId)" x-cloak>
                 <x-ui.card :title="$editingId ? __('Edit age category') : __('New age category')">
                     <form wire:submit="save">
-                        <div class="grid items-start gap-[18px] md:grid-cols-[1fr_2fr_auto]">
+                        <div class="grid items-start gap-[18px] md:grid-cols-[1fr_2fr_auto_auto]">
                             <div class="flex flex-col gap-[7px]">
                                 <label for="cat-name" class="text-[12.5px] font-semibold text-muted">{{ __('Name') }}</label>
                                 <flux:input id="cat-name" wire:model="ageCategoryName" placeholder="{{ __('Men Senior') }}" required />
@@ -157,6 +157,17 @@
                                 <p class="text-xs text-muted">
                                     {{ __('Comma separated, in display order. Use + for an open upper class.') }}
                                 </p>
+                            </div>
+
+                            {{-- Contest length, where the competition is
+                                 defined. Cadets, juniors and seniors do not
+                                 fight for the same time, and this is the level
+                                 the distinction is actually drawn at. --}}
+                            <div class="flex flex-col gap-[7px]">
+                                <label for="cat-minutes" class="text-[12.5px] font-semibold text-muted">{{ __('Contest length') }}</label>
+                                <flux:input id="cat-minutes" wire:model="boutMinutes" type="number" step="0.5" min="0.5" max="20"
+                                            class="w-28" placeholder="{{ __('Default') }}" />
+                                <p class="text-xs text-muted">{{ __('Minutes. Blank uses the default.') }}</p>
                             </div>
 
                             <div class="flex flex-col gap-[7px]">
@@ -179,6 +190,10 @@
                         </div>
 
                         @error('weightLabels')
+                            <p class="mt-3 text-[13px] text-danger">{{ $message }}</p>
+                        @enderror
+
+                        @error('boutMinutes')
                             <p class="mt-3 text-[13px] text-danger">{{ $message }}</p>
                         @enderror
 
@@ -232,6 +247,8 @@
                         {{ trans_choice('{0}No athletes registered|{1}:count athlete registered|[2,*]:count athletes registered', $ageCategory->athletes_count, ['count' => $ageCategory->athletes_count]) }}
                         ·
                         {{ trans_choice('{0}no weight classes|{1}:count weight class|[2,*]:count weight classes', $ageCategory->weightCategories->count(), ['count' => $ageCategory->weightCategories->count()]) }}
+                        ·
+                        {{ __('contest :length', ['length' => $ageCategory->boutSecondsLabel()]) }}
                     </p>
                 </div>
 

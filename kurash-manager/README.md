@@ -16,10 +16,12 @@ functional reference: every screen ported here is checked against it.
 | Screens: championships, categories, registration, weigh-in, draw, bracket, medals | Done |
 | Roles and the manage-competition gate | Done |
 | Scoreboard integration | Done — push, result webhook, mats screen |
+| Match rules: khalol, yonbosh, chala, tanbeh, dakki, girrom, madichal, jazzo | Done |
+| Referee role, scoped to a mat and a board | Done |
 | Fight-order scheduling across mats | Done |
 | PDF and Excel exports | Not started |
 
-315 tests passing.
+661 tests passing.
 
 ## Running it
 
@@ -218,13 +220,69 @@ php artisan kurash:create-admin --email=you@example.com
 The password is generated and printed once unless you pass `--password`. There
 is no shipped default, so there is nothing to forget to change.
 
-`users.role` is one of `admin`, `supervisor`, `official`, `viewer`. Everything
-that changes competition data goes through the `manage-competition` gate, which
-admits admins and supervisors. Everyone signed in can read every screen.
+`users.role` is one of `admin`, `supervisor`, `official`, `viewer`,
+`referee`, `scoreboard_viewer`. Four gates separate what they may do:
+
+| Gate | Admits | Opens |
+| --- | --- | --- |
+| `manage-competition` | admin, supervisor | Anything that changes competition data — entries, weigh-ins, draws, brackets, the fight order |
+| `score-bout` | admin, supervisor, referee | Every write on the mat screen: calls, the clock, jazzo, declaring a winner |
+| `mat.view` | everyone except `scoreboard_viewer` | Opening a mat screen. An official watches a mat they cannot score on |
+| `scoreboard.view` | every active role | Reading a board |
+
+`referee` and `scoreboard_viewer` are *confined*: they reach a mat and a board
+and no other screen in the system, and `access-admin` is what keeps them out by
+typing a URL rather than by hiding a link. A referee signs in and lands on
+`/referee/mats`; a scoreboard account lands on its board.
+
+Scoring is deliberately not a corner of `manage-competition`. A referee is
+trusted with the result and should not be able to regenerate the draw it sits
+in.
 
 The original system had a role column and a `kurash-access-guard.php` that
 checked it, but no file ever included the guard — so every account had full
-access. The gate is enforced in each Livewire action and asserted in tests.
+access. The gates are enforced in each Livewire action and asserted in tests.
+
+## Match rules
+
+Scoring is derived from `bout_events` rather than held in counters, so a call
+can be taken back and the tally recomputed to exactly what it would have been
+had the call never been made.
+
+| Call | Effect |
+| --- | --- |
+| `khalol` | Ends the contest |
+| `yonbosh` | Half a score; two make a khalol, however each was reached |
+| `chala` | The smallest score, and it never accumulates |
+| `tanbeh` | The opponent is given a chala |
+| `dakki` | The opponent is given a yonbosh, and the automatic chala the superseded tanbeh gave them is taken back — an *earned* chala is untouched |
+| `girrom` | The contest is awarded to the opponent on the spot |
+| `madichal` | Transfers nothing; the third one loses the contest |
+
+Every automatic award names the penalty that caused it in `parent_event_id`,
+which is what lets a dakki find the chala it supersedes and lets a withdrawn
+penalty take its consequences with it. `origin` records whether a score was
+`TECHNIQUE`, `MANUAL`, `AUTO_FROM_T` or `AUTO_FROM_D`; `sequence_number` gives
+the log a total order, because two calls inside the same second are
+indistinguishable by `created_at` and the rules turn on order.
+
+A contest that reaches time is decided on yonbosh, then chala, then score
+origin — the side that earned its scores over one handed the same numbers by
+the opponent's penalties — and then on the latest warning, where whoever was
+warned most recently loses. Level all the way down is a referee decision, and
+the mat screen asks for one rather than picking a side.
+
+**Jazzo:** half the contest gone with nothing scored by either athlete stops the
+contest, and the board shows a yellow box until the mat resumes. The browser
+notices, because the browser holds the clock, but the halfway mark and the empty
+board are both checked again on the server.
+
+Contest length is set per age category on the championship screen — cadets,
+juniors and seniors do not fight for the same time. A category without one falls
+back to `config/kurash.php`, keyed on the weight class's gender. That file also
+carries `yonbosh_for_khalol`, `madichal_for_defeat`, `jazzo_at_fraction`, and
+`tanbeh_for_dakki` — zero by default, meaning tanbeh do not accumulate; set it
+to run under a rules edition where the Nth tanbeh becomes a dakki.
 
 ## Next
 

@@ -83,10 +83,26 @@
             --dim: #4e5b6b;
             --line: #1b222c;
             --cell-line: #232d39;
-            --blue-tint: #0c1c28;
-            --green-tint: #0b1f14;
             --flag-fill: repeating-linear-gradient(135deg, #171e27 0 10px, #1e262f 10px 20px);
             --clock-urgent: #ff2a17;
+
+            /* The two panes are the athletes' yakhtak, so the tint has to be
+               unmistakably blue and unmistakably green from the back of a hall
+               — not a hint of one on a dark ground. */
+            --blue-tint: #0a2c40;
+            --green-tint: #06331b;
+
+            /* G / Y / C in yellow, D / T / M in red. Lifted well clear of the
+               plate in dark, because a mid-tone hue on near-black is the first
+               thing a projector loses. */
+            --score-yellow: #ffc63d;
+            --score-yellow-fill: #33280a;
+            --score-red: #ff6a5c;
+            --score-red-fill: #3a1210;
+
+            --jazzo-fill: #ffd54a;
+            --jazzo-line: #b88700;
+            --jazzo-text: #241a00;
         }
 
         :root[data-theme="light"] {
@@ -101,10 +117,23 @@
             --dim: #a8b4af;
             --line: #dbe2df;
             --cell-line: #e2e8e5;
-            --blue-tint: #eaf5fc;
-            --green-tint: #eaf7ef;
             --flag-fill: repeating-linear-gradient(135deg, #e6ebe9 0 10px, #eef2f0 10px 20px);
             --clock-urgent: #ff4a3a;
+
+            --blue-tint: #d6ecfa;
+            --green-tint: #d8f0e1;
+
+            /* Darker steps of the same two hues on a light ground: the yellow
+               that reads on black is invisible on white, and the board has to
+               work under a daylit projection too. */
+            --score-yellow: #8a5c00;
+            --score-yellow-fill: #fdf3d9;
+            --score-red: #a81828;
+            --score-red-fill: #fdeaec;
+
+            --jazzo-fill: #ffd54a;
+            --jazzo-line: #a87c00;
+            --jazzo-text: #241a00;
         }
 
         :root {
