@@ -64,7 +64,7 @@
                     </div>
                 </div>
 
-                <div class="mt-[22px] flex gap-2.5">
+                <div class="mt-[22px] flex flex-wrap items-center gap-2.5">
                     <flux:button type="submit" variant="primary">
                         {{ $editingId ? __('Save changes') : __('Register athlete') }}
                     </flux:button>
@@ -72,9 +72,140 @@
                     @if ($editingId)
                         <flux:button type="button" variant="ghost" wire:click="cancelEdit">{{ __('Cancel') }}</flux:button>
                     @endif
+
+                    {{-- A delegation arrives as a workbook a fortnight before
+                         the event, and nobody is going to retype two hundred
+                         athletes into the form above. The label is a label so
+                         the file input itself can stay hidden — a browser's
+                         native one cannot be styled to sit beside a button. --}}
+                    @unless ($editingId)
+                        <span class="mx-1 h-6 w-px bg-line"></span>
+
+                        <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-ground px-3.5 py-[9px]
+                                      text-[13.5px] font-semibold text-ink transition-shadow hover:shadow-chip
+                                      has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand">
+                            <input type="file" class="sr-only" accept=".xlsx,.xls,.csv"
+                                   wire:model="importFile" wire:key="import-file-{{ $preview ? 'loaded' : 'empty' }}">
+                            {{ __('Insert File') }}
+                        </label>
+
+                        <span wire:loading wire:target="importFile,previewImport" class="text-[13px] text-muted">
+                            {{ __('Reading…') }}
+                        </span>
+
+                        <flux:button type="button" size="sm" variant="ghost" wire:click="downloadTemplate">
+                            {{ __('Template') }}
+                        </flux:button>
+                    @endunless
                 </div>
+
+                @error('importFile')
+                    <p class="mt-3 text-[13px] text-danger-deep">{{ $message }}</p>
+                @enderror
             </form>
         </x-ui.card>
+
+        {{-- The review step. Nothing has been written at this point: the file
+             has been read and this is what it would do. --}}
+        @if ($preview)
+            <x-ui.card flush :title="__('Import preview')">
+                <div class="rule-2"></div>
+
+                @if ($preview->fatal)
+                    <div class="flex flex-wrap items-center gap-3 bg-danger-100/60 px-6 py-4 dark:bg-danger-500/10">
+                        <x-ui.tag variant="danger">{{ __('Cannot read') }}</x-ui.tag>
+                        <span class="text-sm">{{ $preview->fatal }}</span>
+                        <flux:button size="xs" variant="ghost" class="ms-auto" wire:click="cancelImport">{{ __('Close') }}</flux:button>
+                    </div>
+                @else
+                    @php
+                        $rows = $showAllRows ? $preview->rows : array_slice($preview->rows, 0, 25);
+                        $hidden = count($preview->rows) - count($rows);
+                    @endphp
+
+                    <div class="flex flex-wrap items-center gap-3 px-6 py-4">
+                        <x-ui.tag variant="brand">{{ trans_choice('{0}Nothing to import|{1}:count ready|[2,*]:count ready', $preview->readyCount(), ['count' => $preview->readyCount()]) }}</x-ui.tag>
+
+                        @if ($preview->invalidCount())
+                            <x-ui.tag variant="danger">{{ trans_choice('{1}:count invalid|[2,*]:count invalid', $preview->invalidCount(), ['count' => $preview->invalidCount()]) }}</x-ui.tag>
+                        @endif
+
+                        @if ($preview->duplicateCount())
+                            <x-ui.tag variant="info">{{ trans_choice('{1}:count already registered|[2,*]:count already registered', $preview->duplicateCount(), ['count' => $preview->duplicateCount()]) }}</x-ui.tag>
+                        @endif
+
+                        <div class="ms-auto flex flex-wrap gap-2">
+                            @if ($preview->hasWork())
+                                <flux:button size="sm" variant="primary" wire:click="confirmImport">
+                                    {{ __('Import :count', ['count' => $preview->readyCount()]) }}
+                                </flux:button>
+                            @endif
+
+                            <flux:button size="sm" variant="ghost" wire:click="cancelImport">{{ __('Cancel') }}</flux:button>
+                        </div>
+                    </div>
+
+                    @if ($preview->unmappedHeadings)
+                        {{-- Named rather than ignored silently: a column nothing
+                             was read from is usually a heading spelled in a way
+                             the importer did not recognise, and the fix is
+                             obvious once it is pointed at. --}}
+                        <div class="border-t border-ink/12 px-6 py-3 text-[13px] text-muted">
+                            {{ __('Columns not read: :columns', ['columns' => implode(', ', $preview->unmappedHeadings)]) }}
+                        </div>
+                    @endif
+
+                    <div class="rule-2"></div>
+
+                    <div class="overflow-x-auto">
+                        <table class="t">
+                            <thead>
+                                <tr>
+                                    <th class="num">{{ __('Row') }}</th>
+                                    <th>{{ __('Name') }}</th>
+                                    <th>{{ __('NOC') }}</th>
+                                    <th>{{ __('Gender') }}</th>
+                                    <th>{{ __('Weight class') }}</th>
+                                    <th>{{ __('Result') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($rows as $row)
+                                    <tr wire:key="import-row-{{ $row->number }}"
+                                        @class(['bg-danger-100/40 dark:bg-danger-500/5' => $row->status === 'invalid'])>
+                                        {{-- The workbook's own row number, so
+                                             a bad line can be found in the file
+                                             the official is looking at. --}}
+                                        <td class="num font-mono text-xs text-muted">{{ $row->number }}</td>
+                                        <td class="font-semibold">{{ $row->cell('fullname') ?: '—' }}</td>
+                                        <td>{{ $row->cell('noc_code') ?: '—' }}</td>
+                                        <td>{{ $row->cell('gender') ?: '—' }}</td>
+                                        <td>{{ $row->cell('weight') ?: '—' }}</td>
+                                        <td>
+                                            @if ($row->isReady())
+                                                <x-ui.tag variant="brand">{{ __('Ready') }}</x-ui.tag>
+                                            @elseif ($row->status === 'duplicate')
+                                                <span class="text-[13px] text-muted">{{ $row->reason() }}</span>
+                                            @else
+                                                <span class="text-[13px] text-danger-deep">{{ $row->reason() }}</span>
+                                            @endif
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    @if ($hidden > 0)
+                        <div class="border-t border-ink/12 px-6 py-3">
+                            <flux:button size="xs" variant="ghost" wire:click="$set('showAllRows', true)">
+                                {{ __('Show the remaining :count rows', ['count' => $hidden]) }}
+                            </flux:button>
+                        </div>
+                    @endif
+                @endif
+            </x-ui.card>
+        @endif
     @endcan
 
     <x-ui.card
