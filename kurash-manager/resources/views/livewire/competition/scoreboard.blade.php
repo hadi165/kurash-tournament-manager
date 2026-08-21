@@ -51,7 +51,10 @@
     {{-- Re-anchored on every poll, so a board left running all weekend cannot
          drift away from the mat. --}}
     x-effect="sync(@js($secondsLeft), @js($clockRunning))"
-    class="board"
+    {{-- A decided contest turns the whole board the winner's yakhtak colour.
+         Not a badge on one pane: from the back of a hall the colour of the
+         screen is the result, and it is legible before any word on it is. --}}
+    class="board {{ $winnerSide ? '-won -won-'.$winnerSide : '' }}"
 >
     @php
         $genderLabel = match ($bout?->weightCategory?->gender) {
@@ -67,23 +70,6 @@
             ['athlete' => $bout->athleteA, 'tally' => $tally['a'], 'id' => $bout->athlete_a_id, 'yakhtak' => 'blue'],
             ['athlete' => $bout->athleteB, 'tally' => $tally['b'], 'id' => $bout->athlete_b_id, 'yakhtak' => 'green'],
         ];
-
-        // How the contest was won, in the federation's own words. Shown beside
-        // the winner rather than left for the hall to infer from the counts.
-        $methodOfVictory = match ($winType) {
-            'khalol' => __('KHALOL'),
-            'yonbosh' => __('YONBOSH'),
-            'chala' => __('CHALA'),
-            'girrom' => __('GIRROM'),
-            'madichal' => __('MADICHAL'),
-            'dakki' => __('DAKKI'),
-            'technique' => __('TECHNIQUE'),
-            'warnings' => __('WARNINGS'),
-            'decision' => __('DECISION'),
-            'manual' => __('REFEREE'),
-            'bye' => __('BYE'),
-            default => $winType ? Str::upper(str_replace('_', ' ', $winType)) : null,
-        };
 
         $brandLogo = config('branding.logo');
         $hasBrandLogo = $brandLogo && is_file(public_path($brandLogo));
@@ -179,12 +165,12 @@
                                          transformed: this word is the result,
                                          and it should read as the result in
                                          the markup a screen reader reaches
-                                         too. The method sits beside it, so the
+                                         too. The reason sits beside it, so the
                                          hall is told how as well as who. --}}
                                     <span class="tag -winner">{{ __('WINNER') }}</span>
 
-                                    @if ($methodOfVictory)
-                                        <span class="tag -method">{{ $methodOfVictory }}</span>
+                                    @if ($victoryReason)
+                                        <span class="tag -method">{{ Str::upper($victoryReason) }}</span>
                                     @endif
                                 @endif
                             </div>
@@ -483,9 +469,39 @@
         border-color: var(--green);
     }
 
-    /* The winner's pane is the same colour, lit. A board that recoloured the
-       result would be saying the winner changed sides. */
-    .pane.-winner {
+    /* ── The winner ─────────────────────────────────────────────────────── */
+
+    /* A decided contest turns the whole board, not one badge on one pane. The
+       tokens are redefined on the root rather than overridden per element, so
+       every part of the board — header, panes, strip, footer — moves together
+       and nothing has to be remembered when a piece is added later. */
+    .board.-won-blue {
+        --bg: var(--won-blue-bg);
+        --chrome: var(--won-blue-chrome);
+        --strip: var(--won-blue-chrome);
+        --pane: var(--won-blue-chrome);
+        --line: var(--blue);
+        --muted: var(--won-ink-muted);
+        --text: var(--won-ink);
+    }
+
+    .board.-won-green {
+        --bg: var(--won-green-bg);
+        --chrome: var(--won-green-chrome);
+        --strip: var(--won-green-chrome);
+        --pane: var(--won-green-chrome);
+        --line: var(--green);
+        --muted: var(--won-ink-muted);
+        --text: var(--won-ink);
+    }
+
+    /* The losing pane recedes rather than disappearing: the hall still wants
+       to see who was beaten and on what. */
+    .board.-won .pane:not(.-winner) {
+        opacity: 0.5;
+    }
+
+    .board.-won .pane.-winner {
         box-shadow: inset 0 0 0 0.65vh var(--gold);
     }
 

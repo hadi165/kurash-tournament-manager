@@ -377,20 +377,74 @@ class KurashScore
     /**
      * How a contest decided on the clock was won.
      *
-     * Named after what actually separated the two, so a result sheet reading
-     * "warnings" is a contest the latest-warning rule decided rather than one
-     * the software could not explain.
+     * Named after the step of the tie-break that actually separated the two, so
+     * a result sheet reading "warnings" is a contest the latest-warning rule
+     * decided rather than one the software could not explain. The steps are
+     * walked in the same order ScoreTally::compareTo() walks them, because a
+     * result whose stated reason came from a different rule than the decision
+     * would be worse than no reason at all.
      */
     private function winTypeFor(ScoreTally $winner, ScoreTally $loser): string
     {
-        return match (true) {
-            $winner->yonbosh !== $loser->yonbosh => self::YONBOSH,
-            $winner->chala !== $loser->chala => self::CHALA,
-            $winner->earnedYonbosh !== $loser->earnedYonbosh,
-            $winner->earnedChala !== $loser->earnedChala => 'technique',
-            $winner->lastPenaltyAt !== $loser->lastPenaltyAt => 'warnings',
-            default => 'decision',
+        if ($winner->topPriority() !== $loser->topPriority()) {
+            return $winner->topScore() ?? 'decision';
+        }
+
+        $top = $winner->topScore();
+
+        if ($top !== null && $winner->earned($top) !== $loser->earned($top)) {
+            return 'technique';
+        }
+
+        foreach ([self::KHALOL, self::YONBOSH, self::CHALA] as $call) {
+            if ($winner->count($call) !== $loser->count($call)) {
+                return $call;
+            }
+        }
+
+        if ($winner->lastScoreAt !== $loser->lastScoreAt) {
+            return 'latest_score';
+        }
+
+        return $winner->lastPenaltyAt !== $loser->lastPenaltyAt ? 'warnings' : 'decision';
+    }
+
+    /**
+     * Why this athlete won, in the words the boards and the sheets use.
+     *
+     * Here rather than in a blade because it is a statement about the rules,
+     * and two screens that phrased it differently would be two screens
+     * disagreeing about what happened.
+     */
+    public static function victoryReason(?string $winType): ?string
+    {
+        $message = match ($winType) {
+            self::KHALOL => 'Win by KHALOL',
+            self::YONBOSH => 'Win by Y',
+            self::CHALA => 'Win by C',
+            self::DAKKI => 'Opponent received D',
+            self::GIRROM => 'Opponent received G',
+            self::MADICHAL => 'Madichal limit reached',
+            'technique' => 'Win by technique',
+            'latest_score' => 'Win by latest score',
+            'warnings' => 'Win by penalty',
+            'decision' => 'Referee decision',
+            'manual' => 'Manual referee decision',
+            'bye' => 'Bye',
+            null => null,
+            default => 'Win by score',
         };
+
+        if ($message === null) {
+            return null;
+        }
+
+        // A translation file can return an array for a key, which is not
+        // something a board can print. The untranslated wording is a better
+        // answer than a fatal one.
+        $translated = __($message);
+
+        return is_string($translated) ? $translated : $message;
     }
 
     /**

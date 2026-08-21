@@ -103,6 +103,15 @@
             --jazzo-fill: #ffd54a;
             --jazzo-line: #b88700;
             --jazzo-text: #241a00;
+
+            /* The board when a contest is decided: the winner's yakhtak,
+               deep enough to hold white text at projector brightness. */
+            --won-blue-bg: #06344c;
+            --won-blue-chrome: #094863;
+            --won-green-bg: #043b1f;
+            --won-green-chrome: #06512c;
+            --won-ink: #ffffff;
+            --won-ink-muted: #cfe2ee;
         }
 
         :root[data-theme="light"] {
@@ -134,6 +143,15 @@
             --jazzo-fill: #ffd54a;
             --jazzo-line: #a87c00;
             --jazzo-text: #241a00;
+
+            /* Light theme keeps the same two hues at full strength: a winner
+               screen that went pastel would stop reading as a result. */
+            --won-blue-bg: #0b5b80;
+            --won-blue-chrome: #0d6d99;
+            --won-green-bg: #06642f;
+            --won-green-chrome: #07793a;
+            --won-ink: #ffffff;
+            --won-ink-muted: #e2eef5;
         }
 
         :root {

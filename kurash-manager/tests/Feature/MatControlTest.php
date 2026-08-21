@@ -254,15 +254,30 @@ describe('time', function () {
     });
 
     /**
-     * The software must not invent a winner. A contest level on both scores is
-     * the referees' to give, and the screen has to say so.
+     * Level on the count, so the contest goes to whoever scored last. Both
+     * chala were thrown for, so origin does not separate them either.
      */
-    it('asks for a referee decision when the scores are level', function () {
+    it('gives an equal contest to the athlete who scored last', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'chala', 'a', 190)
+            ->call('score', 'chala', 'b', 150)
+            ->call('finishOnTime');
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
+            ->and($bout->win_type)->toBe('latest_score');
+    });
+
+    /**
+     * The software must not invent a winner. A contest with nothing to
+     * separate the two at all is the referees' to give, and the screen has to
+     * say so.
+     */
+    it('asks for a referee decision when there is nothing to separate them', function () {
         [$court, $bout] = boutOnMat();
 
         $component = Livewire::test(MatControl::class, ['court' => $court])
-            ->call('score', 'chala', 'a', 190)
-            ->call('score', 'chala', 'b', 150)
             ->call('finishOnTime')
             ->assertSet('awaitingDecision', true);
 

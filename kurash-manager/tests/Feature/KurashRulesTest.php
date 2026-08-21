@@ -5,6 +5,7 @@ use App\Livewire\Competition\Scoreboard;
 use App\Models\Bout;
 use App\Models\User;
 use App\Services\KurashScore;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 
 /**
@@ -196,12 +197,76 @@ describe('the tie-break at time', function () {
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id);
     });
 
-    it('still refuses to invent a winner when the two are level all the way down', function () {
+    /**
+     * Equal on the count and on how both were earned, so the contest goes to
+     * whoever scored last.
+     */
+    it('falls to the latest score when the counts and origins are level', function () {
         [$court, $bout] = boutOnMat();
 
         Livewire::test(MatControl::class, ['court' => $court])
             ->call('score', 'chala', 'a', 200)
             ->call('score', 'chala', 'b', 190)
+            ->call('finishOnTime');
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
+            ->and($bout->win_type)->toBe('latest_score');
+    });
+
+    /**
+     * Value before recency. Green scored last and still loses, because a
+     * yonbosh is worth more than a chala however late the chala came.
+     */
+    it('lets a higher score beat a later one', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'yonbosh', 'a', 220)
+            ->call('score', 'chala', 'b', 100)
+            ->call('finishOnTime');
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id)
+            ->and($bout->win_type)->toBe('yonbosh');
+    });
+
+    /**
+     * Value before count, too: one yonbosh beats a pile of chala, because
+     * chala never accumulates into anything larger.
+     */
+    it('lets one yonbosh beat any number of chala', function () {
+        [$court, $bout] = boutOnMat();
+
+        $component = Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'yonbosh', 'a', 220);
+
+        foreach (range(1, 5) as $i) {
+            $component->call('score', 'chala', 'b', 200 - $i * 10);
+        }
+
+        $component->call('finishOnTime');
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id);
+    });
+
+    /**
+     * Blue's yonbosh came from green's dakki, and green has nothing. The
+     * relationship between a penalty and the score it generates has to survive
+     * into the winner calculation.
+     */
+    it('gives it to the athlete holding the yonbosh the opponent conceded', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'dakki', 'b', 200)
+            ->call('finishOnTime');
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id);
+    });
+
+    it('still refuses to invent a winner when there is nothing to separate them', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
             ->call('finishOnTime')
             ->assertSet('awaitingDecision', true);
 
@@ -412,9 +477,9 @@ describe('what the boards show', function () {
             ->assertSee('WINNER')
             ->assertSee($bout->athleteB->fullname)
             ->assertSee($bout->athleteB->noc_name)
-            // The method, not just the name: a hall watching a contest end
+            // The reason, not just the name: a hall watching a contest end
             // should not have to work out why it ended.
-            ->assertSee('GIRROM');
+            ->assertSee(Str::upper(__('Opponent received G')));
     });
 
     it('names both yakhtak rather than a corner', function () {
@@ -501,5 +566,119 @@ describe('undoing the call that ended a contest', function () {
         expect($bout->events()->where('action', 'result_recorded')->count())->toBe(1)
             ->and($bout->events()->where('action', 'result_cleared')->count())->toBe(1)
             ->and($bout->events()->where('action', KurashScore::ACTION_VOIDED)->count())->toBe(1);
+    });
+});
+
+describe('the worked examples from the rules', function () {
+    /**
+     * §10.2. Blue T=1 C=1, Green T=1 C=1, and Blue was warned most recently.
+     * Blue loses.
+     *
+     * Both chala are automatic — each is the consequence of the other's tanbeh
+     * — so nothing separates the two until the order of events does.
+     */
+    it('loses the contest for the athlete warned most recently', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'tanbeh', 'b', 200)   // green warned first: blue given a chala
+            ->call('score', 'tanbeh', 'a', 150)   // blue warned last: green given a chala
+            ->call('finishOnTime');
+
+        $bout->refresh();
+        $tally = app(KurashScore::class)->tally($bout, $bout->events()->get());
+
+        expect($tally['a']->chala)->toBe(1)
+            ->and($tally['b']->chala)->toBe(1)
+            ->and($tally['a']->tanbeh)->toBe(1)
+            ->and($tally['b']->tanbeh)->toBe(1)
+            ->and($bout->winner_athlete_id)->toBe($bout->athlete_b_id);
+    });
+
+    /**
+     * §10.4. Both hold one chala, but blue threw for theirs and green's exists
+     * only because blue was warned. Blue wins — despite carrying the warning.
+     */
+    it('prefers a technique-earned chala over one conceded through a warning', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'chala', 'a', 210)    // blue throws for one
+            ->call('score', 'tanbeh', 'a', 150)   // and is warned: green given one
+            ->call('finishOnTime');
+
+        $bout->refresh();
+        $tally = app(KurashScore::class)->tally($bout, $bout->events()->get());
+
+        expect($tally['a']->chala)->toBe(1)
+            ->and($tally['b']->chala)->toBe(1)
+            ->and($tally['a']->earnedChala)->toBe(1)
+            ->and($tally['b']->earnedChala)->toBe(0)
+            ->and($bout->winner_athlete_id)->toBe($bout->athlete_a_id)
+            ->and($bout->win_type)->toBe('technique');
+    });
+});
+
+describe('the priority table', function () {
+    /**
+     * The whole reason the hierarchy is configuration rather than a chain of
+     * comparisons: a federation moving a value between rule editions changes
+     * one file, and the winner calculation moves with it.
+     */
+    it('decides on the configured hierarchy rather than on a hard-coded order', function () {
+        [$court, $bout] = boutOnMat();
+
+        // Invert the two scoring values: chala now outranks yonbosh.
+        config()->set('kurash.score_priority.chala', 90);
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'yonbosh', 'a', 220)
+            ->call('score', 'chala', 'b', 100)
+            ->call('finishOnTime');
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
+            ->and($bout->win_type)->toBe('chala');
+    });
+});
+
+describe('the winner screen', function () {
+    it('turns the whole board blue when blue wins', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'khalol', 'a', 140);
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertSet('court.id', $court->id)
+            ->assertSee('class="board -won -won-blue"', escape: false);
+    });
+
+    it('turns the whole board green when green wins', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'khalol', 'b', 140);
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertSee('class="board -won -won-green"', escape: false);
+    });
+
+    it('leaves the board unwon while the contest is live', function () {
+        [$court] = boutOnMat();
+
+        // The class attribute, not the word: the stylesheet that defines the
+        // winner colours is on the page whether or not anybody has won.
+        Livewire::test(Scoreboard::class, ['court' => $court])
+            ->assertDontSee('class="board -won', escape: false);
+    });
+
+    it('states the reason in the words the rules use', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'madichal', 'a', 200)
+            ->call('score', 'madichal', 'a', 180)
+            ->call('score', 'madichal', 'a', 160);
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertSee(Str::upper(__('Madichal limit reached')));
     });
 });

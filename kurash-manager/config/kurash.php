@@ -50,6 +50,36 @@ return [
     'tanbeh_for_dakki' => (int) env('KURASH_TANBEH_FOR_DAKKI', 0),
 
     /*
+     | What each call is worth against the others.
+     |
+     | One table, read by the rules engine and by nothing else — the whole point
+     | of centralising it is that no screen gets to hold an opinion about which
+     | score outranks which. A federation moving a value between rule editions
+     | changes it here and the winner calculation, the boards and the exports
+     | all move together.
+     |
+     | Scores rank against scores: a contest is decided first on the highest
+     | one either athlete holds, so a yonbosh beats any number of chala however
+     | recently they were awarded. Penalties rank against penalties, which is
+     | what "the more serious warning" means when two are compared.
+     |
+     | The numbers are spaced rather than consecutive so a call can be inserted
+     | between two existing ones without renumbering the table.
+     */
+    'score_priority' => [
+        // Awarded to an athlete.
+        'khalol' => 100,
+        'yonbosh' => 40,
+        'chala' => 20,
+
+        // Awarded against one.
+        'girrom' => 90,
+        'dakki' => 30,
+        'madichal' => 15,
+        'tanbeh' => 10,
+    ],
+
+    /*
      | Jazzo: the fraction of the contest at which a bout with nothing scored by
      | either athlete is stopped.
      |

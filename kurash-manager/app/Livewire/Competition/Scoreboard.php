@@ -114,6 +114,16 @@ class Scoreboard extends Component
             // to know it was a khalol rather than a decision, and a board that
             // only names the winner leaves everybody to guess.
             'winType' => $bout?->isDecided() ? $bout->win_type : null,
+            // Phrased by the rules engine, not by the view: two screens that
+            // worded this differently would be two screens disagreeing about
+            // what happened.
+            'victoryReason' => KurashScore::victoryReason($bout?->isDecided() ? $bout->win_type : null),
+            // Which yakhtak the whole board turns when a contest is decided.
+            'winnerSide' => match (true) {
+                ! (bool) $bout?->isDecided() => null,
+                $bout->winner_athlete_id === $bout->athlete_a_id => 'blue',
+                default => 'green',
+            },
             // Jazzo puts a yellow box in the middle of the board and leaves it
             // there until the contest is resumed.
             'inJazzo' => (bool) $bout?->isInJazzo(),
