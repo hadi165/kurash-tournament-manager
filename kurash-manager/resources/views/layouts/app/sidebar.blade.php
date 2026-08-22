@@ -59,45 +59,43 @@
                 // is in view and the top-level items stay put either way.
                 $current = \App\Support\CurrentChampionship::resolve();
 
-                // Registration, the weigh-in and the running order all split by
-                // competition — the age groups were settled when the
-                // championship was created, so they are not a place to
-                // navigate to. Each item carries that split rather than making
-                // it a control to find once the page is open, and one
+                // Every screen under a championship splits by competition. The
+                // age groups were settled when the championship was created, so
+                // they are not a place to navigate to; the competition is. Each
+                // item carries the split rather than making it a control to
+                // find once the page is open, and a championship running one
                 // competition needs no choice at all.
                 $competitions = $current ? $current->configuredGenders() : [];
-                $openCompetition = (string) request()->query('division', '');
 
-                $competitionItems = collect($competitions)
-                    ->map(fn (string $gender) => [
-                        'label' => __(\App\Support\Gender::label($gender)),
-                        'href' => route('fight-order.index', ['championship' => $current, 'division' => $gender]),
-                        'active' => request()->routeIs('fight-order.*') && $openCompetition === $gender,
-                    ])
-                    ->all();
-
-                // Registration works on a whole competition, so it splits the
-                // same way. Which one is open comes from the bound route
-                // parameter rather than from the path.
+                // Named two ways, because two kinds of screen read it.
+                // Registration and the weigh-in belong to a competition, so it
+                // is a segment of their path. The rest are the championship's
+                // and a competition is a way of reading them, so it is a
+                // filter in the query string.
                 $boundCompetition = (string) (request()->route('competition') ?? '');
+                $queriedCompetition = (string) (request()->query('competition') ?? '');
+                $openDivision = (string) (request()->query('division') ?? '');
 
-                $registrationItems = collect($competitions)
+                // One rule to know rather than seven.
+                $itemsFor = fn (string $route, string $pattern, string $open, string $key = 'competition') => collect($competitions)
                     ->map(fn (string $gender) => [
                         'label' => __(\App\Support\Gender::label($gender)),
-                        'href' => route('athletes.index', ['championship' => $current, 'competition' => $gender]),
-                        'active' => request()->routeIs('athletes.*') && $boundCompetition === $gender,
+                        'href' => route($route, ['championship' => $current, $key => $gender]),
+                        'active' => request()->routeIs($pattern) && $open === $gender,
                     ])
                     ->all();
 
-                // The scale works through a competition for the same reason:
-                // the age groups were settled when the championship was made.
-                $weighInItems = collect($competitions)
-                    ->map(fn (string $gender) => [
-                        'label' => __(\App\Support\Gender::label($gender)),
-                        'href' => route('weighin.index', ['championship' => $current, 'competition' => $gender]),
-                        'active' => request()->routeIs('weighin.*') && $boundCompetition === $gender,
-                    ])
-                    ->all();
+                $registrationItems = $itemsFor('athletes.index', 'athletes.*', $boundCompetition);
+                $weighInItems = $itemsFor('weighin.index', 'weighin.*', $boundCompetition);
+
+                $entriesItems = $itemsFor('entries.index', 'entries.*', $queriedCompetition);
+                $bracketItems = $itemsFor('brackets.index', 'brackets.*', $queriedCompetition);
+                $matItems = $itemsFor('courts.index', 'courts.*', $queriedCompetition);
+                $medalItems = $itemsFor('medals.index', 'medals.*', $queriedCompetition);
+
+                // The running order calls it "division", because that control
+                // takes a single division's id as well as a competition.
+                $competitionItems = $itemsFor('fight-order.index', 'fight-order.*', $openDivision, 'division');
             @endphp
 
             @if (auth()->user()?->isReferee())
@@ -199,13 +197,29 @@
                         </x-nav-item>
                     @endif
 
-                    <x-nav-item :href="route('entries.index', $current)" :active="request()->routeIs('entries.*')">
-                        {{ __('Entries and Draw') }}
-                    </x-nav-item>
+                    @if (count($competitions) > 1)
+                        <x-nav-group
+                            :label="__('Entries and Draw')"
+                            :items="$entriesItems"
+                            :active="request()->routeIs('entries.*')"
+                        />
+                    @else
+                        <x-nav-item :href="route('entries.index', $current)" :active="request()->routeIs('entries.*')">
+                            {{ __('Entries and Draw') }}
+                        </x-nav-item>
+                    @endif
 
-                    <x-nav-item :href="route('brackets.index', $current)" :active="request()->routeIs('brackets.*')">
-                        {{ __('Bracket') }}
-                    </x-nav-item>
+                    @if (count($competitions) > 1)
+                        <x-nav-group
+                            :label="__('Bracket')"
+                            :items="$bracketItems"
+                            :active="request()->routeIs('brackets.*')"
+                        />
+                    @else
+                        <x-nav-item :href="route('brackets.index', $current)" :active="request()->routeIs('brackets.*')">
+                            {{ __('Bracket') }}
+                        </x-nav-item>
+                    @endif
 
                     @if (count($competitions) > 1)
                         <x-nav-group
@@ -219,15 +233,31 @@
                         </x-nav-item>
                     @endif
 
-                    <x-nav-item :href="route('courts.index', $current)" :active="request()->routeIs('courts.*') || request()->routeIs('mats.*')">
-                        {{ __('Mats') }}
-                    </x-nav-item>
+                    @if (count($competitions) > 1)
+                        <x-nav-group
+                            :label="__('Mats')"
+                            :items="$matItems"
+                            :active="request()->routeIs('courts.*') || request()->routeIs('mats.*')"
+                        />
+                    @else
+                        <x-nav-item :href="route('courts.index', $current)" :active="request()->routeIs('courts.*') || request()->routeIs('mats.*')">
+                            {{ __('Mats') }}
+                        </x-nav-item>
+                    @endif
 
                     {{-- The specification lists Result and Medal Standing
                          separately; both are sections of this one screen. --}}
-                    <x-nav-item :href="route('medals.index', $current)" :active="request()->routeIs('medals.*')">
-                        {{ __('Results & Medals') }}
-                    </x-nav-item>
+                    @if (count($competitions) > 1)
+                        <x-nav-group
+                            :label="__('Results and Medals')"
+                            :items="$medalItems"
+                            :active="request()->routeIs('medals.*')"
+                        />
+                    @else
+                        <x-nav-item :href="route('medals.index', $current)" :active="request()->routeIs('medals.*')">
+                            {{ __('Results and Medals') }}
+                        </x-nav-item>
+                    @endif
                 @endif
             </nav>
             @endif

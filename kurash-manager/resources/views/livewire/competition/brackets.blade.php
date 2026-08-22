@@ -7,6 +7,8 @@
         ['label' => __('Brackets')],
     ]"
 >
+    <x-competition.scope :label="$this->competitionLabel()" route="brackets.index" :championship="$championship" />
+
     <x-ui.card flush>
         <div class="overflow-x-auto">
             <table class="t">

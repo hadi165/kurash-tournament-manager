@@ -1,5 +1,5 @@
 <x-page
-    :title="__('Results & medals')"
+    :title="__('Results and medals')"
     :subtitle="trans_choice('{0}Every weight class is decided.|{1}:count weight class still undecided.|[2,*]:count weight classes still undecided.', $pending, ['count' => $pending])"
     :breadcrumbs="[
         ['label' => __('Championships'), 'href' => route('championships.index')],
@@ -16,6 +16,8 @@
              get the two-format pair the tabular exports get. --}}
         <x-ui.chip :href="route('exports.certificates', $championship)">{{ __('Certificates') }} · PDF</x-ui.chip>
     </x-slot:aside>
+
+    <x-competition.scope :label="$this->competitionLabel()" route="medals.index" :championship="$championship" />
 
     <x-ui.card flush>
         <div class="overflow-x-auto">

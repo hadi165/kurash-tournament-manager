@@ -1,8 +1,11 @@
 <?php
 
 use App\Exports\FightOrderReport;
+use App\Livewire\Competition\Brackets;
+use App\Livewire\Competition\Courts;
 use App\Livewire\Competition\Entries;
 use App\Livewire\Competition\FightOrder;
+use App\Livewire\Competition\Medals;
 use App\Livewire\Competition\Registration;
 use App\Livewire\Competition\WeighIn;
 use App\Models\AgeCategory;
@@ -300,5 +303,101 @@ describe('the weigh-in lists are separate', function () {
         Livewire::test(WeighIn::class, ['championship' => $this->championship, 'competition' => 'F'])
             ->assertSee('Woman 1')
             ->assertDontSee('Man 1');
+    });
+});
+
+/**
+ * The championship's own screens read one competition at a time.
+ *
+ * Unlike registration and the weigh-in, these belong to the whole
+ * championship — a competition is a way of reading them, so dropping the
+ * filter shows everything again.
+ */
+describe('the championship screens read one competition at a time', function () {
+    beforeEach(function () {
+        ($this->seat)($this->mens66, 4, 'M', 'Man');
+        ($this->seat)($this->womens66, 4, 'F', 'Woman');
+
+        foreach ([$this->mens66, $this->womens66] as $category) {
+            app(BracketGenerator::class)->generate($category);
+        }
+    });
+
+    it('narrows the entries to one competition', function () {
+        Livewire::test(Entries::class, ['championship' => $this->championship])
+            ->assertSee('Male -66')
+            ->assertSee('Female -66')
+            ->set('competition', 'M')
+            ->assertSee('Male -66')
+            ->assertDontSee('Female -66');
+    });
+
+    it('narrows the brackets to one competition', function () {
+        Livewire::test(Brackets::class, ['championship' => $this->championship])
+            ->set('competition', 'F')
+            ->assertSee('Female -66')
+            ->assertDontSee('Male -66');
+    });
+
+    /** Counts, not just rows: a men's entry table counts men. */
+    it('counts only the competition being read', function () {
+        $men = Livewire::test(Entries::class, ['championship' => $this->championship])
+            ->set('competition', 'M')
+            ->viewData('totalEntries');
+
+        $both = Livewire::test(Entries::class, ['championship' => $this->championship])
+            ->viewData('totalEntries');
+
+        expect($men)->toBe(4)->and($both)->toBe(8);
+    });
+
+    /** The medal table lists decided classes, so both have to be fought. */
+    it('narrows the medal table to one competition', function () {
+        foreach ([$this->mens66, $this->womens66] as $category) {
+            runTournament($category);
+        }
+
+        Livewire::test(Medals::class, ['championship' => $this->championship])
+            ->assertSee('Men Senior')
+            ->assertSee('Women Senior')
+            ->set('competition', 'M')
+            ->assertSee('Men Senior')
+            ->assertDontSee('Women Senior');
+    });
+
+    /**
+     * A mat is physical and belongs to no competition, so it stays listed —
+     * what narrows is how much of the competition being read is on it.
+     */
+    it('counts a mat by the competition being read', function () {
+        $court = $this->championship->courts()->create(['number' => 1]);
+        $this->mens66->bouts()->update(['court_id' => $court->id]);
+        $this->womens66->bouts()->update(['court_id' => $court->id]);
+
+        $mens = $this->championship->bouts()->where('age_category_id', $this->men->id)->count();
+
+        $scoped = Livewire::test(Courts::class, ['championship' => $this->championship])
+            ->set('competition', 'M')
+            ->viewData('courts')
+            ->first();
+
+        expect($scoped->bouts_count)->toBe($mens)
+            ->and($mens)->toBeLessThan($court->bouts()->count());
+    });
+
+    /**
+     * What stands between a mat and being deleted is everything on it, not
+     * only the half being read, so the refusal drops the filter.
+     */
+    it('drops the filter when a delete is refused', function () {
+        $court = $this->championship->courts()->create(['number' => 1]);
+        $this->womens66->bouts()->update(['court_id' => $court->id]);
+
+        Livewire::test(Courts::class, ['championship' => $this->championship])
+            ->set('competition', 'M')
+            ->call('delete', $court->id)
+            ->assertSet('competition', '')
+            ->assertSet('showingBoutsFor', $court->id)
+            ->assertSee('Woman 1');
     });
 });

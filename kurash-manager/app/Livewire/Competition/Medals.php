@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Competition;
 
+use App\Livewire\Concerns\ScopesToCompetition;
 use App\Models\Championship;
 use App\Models\WeightCategory;
 use App\Services\MedalTable;
@@ -10,6 +11,8 @@ use Livewire\Component;
 
 class Medals extends Component
 {
+    use ScopesToCompetition;
+
     public Championship $championship;
 
     public function mount(Championship $championship): void
@@ -21,10 +24,12 @@ class Medals extends Component
     {
         $medals = app(MedalTable::class);
 
-        $categories = WeightCategory::whereHas(
-            'ageCategory',
-            fn ($q) => $q->where('championship_id', $this->championship->id)
-        )->with('ageCategory')->orderBy('age_category_id')->orderBy('sort_order')->get();
+        $categories = WeightCategory::query()
+            ->tap(fn ($q) => $this->scopeWeightCategories($q))
+            ->with('ageCategory')
+            ->orderBy('age_category_id')
+            ->orderBy('sort_order')
+            ->get();
 
         $events = $categories
             ->map(fn (WeightCategory $c) => ['category' => $c] + $medals->forCategory($c))
@@ -33,7 +38,9 @@ class Medals extends Component
 
         return view('livewire.competition.medals', [
             'events' => $events,
-            'standings' => $medals->standings($this->championship->id),
+            // The standing follows what is on the page: a men's medal table
+            // counts the men's podiums.
+            'standings' => $medals->standings($this->championship->id, $this->scopedCompetition()),
             'pending' => $categories->count() - $events->count(),
         ]);
     }

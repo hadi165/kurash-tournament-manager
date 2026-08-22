@@ -7,6 +7,8 @@
         ['label' => __('Entries and Draw')],
     ]"
 >
+    <x-competition.scope :label="$this->competitionLabel()" route="entries.index" :championship="$championship" />
+
     <x-ui.stats cards :items="[
         ['value' => $totalEntries, 'label' => __('Registered')],
         ['value' => $totalCleared, 'label' => __('Passed the scale')],

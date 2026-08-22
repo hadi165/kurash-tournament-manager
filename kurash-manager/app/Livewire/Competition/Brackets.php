@@ -3,6 +3,7 @@
 namespace App\Livewire\Competition;
 
 use App\Exports\BracketSheet;
+use App\Livewire\Concerns\ScopesToCompetition;
 use App\Models\Championship;
 use App\Models\WeightCategory;
 use Illuminate\View\View;
@@ -16,6 +17,8 @@ use Livewire\Component;
  */
 class Brackets extends Component
 {
+    use ScopesToCompetition;
+
     public Championship $championship;
 
     public function mount(Championship $championship): void
@@ -26,7 +29,7 @@ class Brackets extends Component
     public function render(): View
     {
         $categories = WeightCategory::query()
-            ->whereHas('ageCategory', fn ($q) => $q->where('championship_id', $this->championship->id))
+            ->tap(fn ($q) => $this->scopeWeightCategories($q))
             ->with('ageCategory')
             ->withCount(['bouts', 'athletes'])
             ->get()

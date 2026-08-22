@@ -25,6 +25,8 @@
             </x-slot:aside>
         @endcan
 
+        <x-competition.scope :label="$this->competitionLabel()" route="courts.index" :championship="$championship" />
+
         <x-competition.flash />
 
         @can('manage-competition')

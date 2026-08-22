@@ -54,3 +54,39 @@ it('links straight through when the championship runs one competition', function
         ->assertSee(route('fight-order.index', $championship), false)
         ->assertDontSee(route('fight-order.index', ['championship' => $championship, 'division' => 'F']), false);
 });
+
+/**
+ * Every screen under a championship splits the same way, so there is one rule
+ * to know rather than seven.
+ */
+it('splits every championship screen by competition', function () {
+    $championship = Championship::factory()->create(['genders' => ['M', 'F']]);
+    AgeCategory::factory()->for($championship)->create(['gender' => 'M', 'age_group' => 'Senior']);
+
+    $response = $this->actingAs(User::factory()->create())
+        ->get(route('championships.show', $championship))
+        ->assertOk();
+
+    foreach (['entries.index', 'brackets.index', 'courts.index', 'medals.index'] as $route) {
+        foreach (['M', 'F'] as $competition) {
+            $response->assertSee(
+                route($route, ['championship' => $championship, 'competition' => $competition]),
+                false
+            );
+        }
+    }
+
+    $response->assertSee('Results and Medals')->assertDontSee('Results &amp; Medals');
+});
+
+/** A submenu of one is not a choice, so those items stay plain links. */
+it('leaves the championship screens as plain links when it runs one competition', function () {
+    $championship = Championship::factory()->create(['genders' => ['F']]);
+    AgeCategory::factory()->for($championship)->create(['gender' => 'F', 'age_group' => 'Senior']);
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('championships.show', $championship))
+        ->assertOk()
+        ->assertSee(route('medals.index', $championship), false)
+        ->assertDontSee(route('medals.index', ['championship' => $championship, 'competition' => 'M']), false);
+});

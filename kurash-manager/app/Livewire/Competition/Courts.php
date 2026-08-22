@@ -3,6 +3,7 @@
 namespace App\Livewire\Competition;
 
 use App\Contracts\ScoreboardDriver;
+use App\Livewire\Concerns\ScopesToCompetition;
 use App\Models\Bout;
 use App\Models\Championship;
 use App\Models\Court;
@@ -14,6 +15,8 @@ use Livewire\Component;
 
 class Courts extends Component
 {
+    use ScopesToCompetition;
+
     public Championship $championship;
 
     #[Validate('required|integer|min:1|max:99')]
@@ -125,7 +128,11 @@ class Courts extends Component
 
         if ($assigned > 0) {
             // Opened rather than only complained about: the next thing anybody
-            // wants after this message is the list it is talking about.
+            // wants after this message is the list it is talking about. The
+            // competition filter is dropped with it, because what stands
+            // between this mat and being deleted is everything on it, not
+            // only the half currently being read.
+            $this->competition = '';
             $this->showingBoutsFor = $court->id;
             $this->moveTargetId ??= $this->otherMats($court)->first()?->id;
 
@@ -237,7 +244,11 @@ class Courts extends Component
 
     public function render(): View
     {
-        $courts = $this->championship->courts()->withCount('bouts')->get();
+        // The count follows the competition being read, so a men's view of
+        // the mats says how much of the men's competition is on each.
+        $courts = $this->championship->courts()
+            ->withCount(['bouts' => fn ($q) => $this->scopeBouts($q)])
+            ->get();
         $showing = $courts->firstWhere('id', $this->showingBoutsFor);
 
         return view('livewire.competition.courts', [
@@ -256,6 +267,7 @@ class Courts extends Component
     private function assignedTo(Court $court): Collection
     {
         return $court->bouts()
+            ->tap(fn ($q) => $this->scopeBouts($q))
             ->with(['athleteA', 'athleteB', 'weightCategory.ageCategory'])
             ->orderByRaw('fight_number IS NULL, fight_number')
             ->get();
