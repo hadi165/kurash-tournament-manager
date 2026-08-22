@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Support\PrintLogo;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Response;
 
@@ -28,21 +29,16 @@ class PdfDocument
 
     /**
      * Logo resolved to a filesystem path, because Dompdf reads from disk rather
-     * than over HTTP, and PNG far more reliably than SVG.
+     * than over HTTP — and only when it can actually be drawn. See PrintLogo.
      *
      * @return array{organisation:string, short_name:string, logo:string|null}
      */
     private function branding(): array
     {
-        $logo = collect([config('branding.logo_print'), config('branding.logo')])
-            ->filter()
-            ->map(fn (string $path) => public_path($path))
-            ->first(fn (string $path) => is_file($path));
-
         return [
             'organisation' => (string) config('branding.organisation'),
             'short_name' => (string) config('branding.short_name'),
-            'logo' => $logo,
+            'logo' => PrintLogo::path(),
         ];
     }
 }

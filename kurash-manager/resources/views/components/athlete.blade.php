@@ -12,11 +12,11 @@
         <span class="truncate">{{ $athlete->fullname }}</span>
 
         @if ($showCode)
-            <span class="shrink-0 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+            <span class="shrink-0 text-xs font-bold text-ink/55">
                 {{ \App\Support\Noc::normalise($athlete->noc_code) }}
             </span>
         @endif
     </span>
 @else
-    <span {{ $attributes->merge(['class' => 'text-zinc-400 dark:text-zinc-500']) }}>{{ $fallback }}</span>
+    <span {{ $attributes->merge(['class' => 'text-ink/40']) }}>{{ $fallback }}</span>
 @endif

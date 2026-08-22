@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="kurash-soft.css">
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Categories (soft)" style="display:flex; min-height:100vh; background:var(--s-bg); color:var(--s-text); font-family:var(--s-font)">
+
+  <dc-import name="Sidebar v2" active="Categories" hint-size="264px,100%"></dc-import>
+
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column; padding:16px 20px 40px 4px">
+
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:4px 8px 16px">
+      <div style="font-size:13px; display:flex; align-items:center; gap:8px; color:var(--s-muted)">
+        <a href="#" style="text-decoration:none; font-weight:500">Championships</a>
+        <span>›</span>
+        <span style="color:var(--s-text); font-weight:600">Asian Kurash Championship 2026</span>
+      </div>
+      <div style="display:flex; align-items:center; gap:8px">
+        <button style="{{ ghostBtn }}" onClick="{{ toggleTheme }}" style-hover="background:var(--s-line-soft)">{{ themeBtnLabel }}</button>
+        <div style="position:relative">
+          <button style="{{ ghostBtn }}" onClick="{{ toggleExport }}" style-hover="background:var(--s-line-soft)">Export ▾</button>
+          <sc-if value="{{ exportOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute; right:0; top:calc(100% + 6px); z-index:50; min-width:250px; background:var(--s-surface); border:1px solid var(--s-line); border-radius:var(--s-r-md); box-shadow:var(--s-sh-lg); padding:10px">
+              <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--s-muted); padding:4px 8px">Entries by weight</div>
+              <div style="display:flex; gap:6px; padding:2px 4px 10px">
+                <a href="#" style="{{ chipBtn }}">PDF</a><a href="#" style="{{ chipBtn }}">Excel</a>
+              </div>
+              <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; color:var(--s-muted); padding:4px 8px; border-top:1px solid var(--s-line-soft)">Entries by NOC</div>
+              <div style="display:flex; gap:6px; padding:2px 4px 0">
+                <a href="#" style="{{ chipBtn }}">PDF</a><a href="#" style="{{ chipBtn }}">Excel</a>
+              </div>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+
+    <section style="{{ heroStyle }}">
+      <div>
+        <div style="display:inline-flex; align-items:center; gap:8px; background:var(--s-green-soft); color:var(--s-green-deep); padding:4px 12px; border-radius:var(--s-r-pill); font-size:12px; font-weight:600">
+          <span style="width:7px; height:7px; border-radius:var(--s-r-pill); background:var(--s-green)"></span>
+          Live · 12 Sep 2026 · Tashkent
+        </div>
+        <h1 style="font-size:34px; font-weight:700; letter-spacing:-0.02em; margin:14px 0 6px">Asian Kurash Championship 2026</h1>
+        <p style="margin:0; color:var(--s-muted); font-size:14.5px">Age categories and the weight classes inside them.</p>
+      </div>
+      <div style="display:flex; gap:12px">
+        <sc-for list="{{ heroStats }}" as="s" hint-placeholder-count="3">
+          <div style="{{ s.cardStyle }}">
+            <div style="{{ s.valueStyle }}">{{ s.value }}</div>
+            <div style="{{ s.labelStyle }}">{{ s.label }}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <div style="display:flex; gap:6px; background:var(--s-surface); border-radius:var(--s-r-pill); box-shadow:var(--s-sh-sm); padding:5px; margin-bottom:18px; align-self:flex-start">
+      <a href="#" style="{{ tabActive }}">Categories</a>
+      <a href="#" style="{{ tabIdle }}" style-hover="background:var(--s-line-soft)">Fight order</a>
+      <a href="#" style="{{ tabIdle }}" style-hover="background:var(--s-line-soft)">Mats &amp; scoreboards</a>
+      <a href="#" style="{{ tabIdle }}" style-hover="background:var(--s-line-soft)">Medals</a>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:16px; max-width:1180px">
+
+      <sc-if value="{{ formClosed }}" hint-placeholder-val="{{ true }}">
+        <div><button style="{{ primaryBtn }}" onClick="{{ openForm }}">+ New age category</button></div>
+      </sc-if>
+      <sc-if value="{{ formOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="background:var(--s-surface); border-radius:var(--s-r-lg); box-shadow:var(--s-sh-md); padding:24px 28px">
+          <div style="font-size:17px; font-weight:700; margin-bottom:18px">{{ formTitle }}</div>
+          <div style="display:grid; grid-template-columns:1fr 2fr auto; gap:18px; align-items:start">
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Name</label>
+              <input style="{{ inputStyle }}" placeholder="Men Senior" value="{{ name }}" onChange="{{ onName }}">
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Weight classes</label>
+              <input style="{{ inputStyle }}" placeholder="-60, -66, -73, -81, -90, +90" value="{{ weightsStr }}" onChange="{{ onWeights }}">
+              <div style="font-size:12px; color:var(--s-muted)">Comma separated, in display order. Use + for an open upper class.</div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Gender</label>
+              <div style="display:flex; gap:4px; background:var(--s-bg); padding:4px; border-radius:var(--s-r-pill)">
+                <sc-for list="{{ genderOpts }}" as="g" hint-placeholder-count="3">
+                  <button style="{{ g.style }}" onClick="{{ g.onClick }}">{{ g.label }}</button>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:22px">
+            <button style="{{ primaryBtn }}" onClick="{{ submitForm }}">{{ submitLabel }}</button>
+            <button style="{{ ghostBtn }}" onClick="{{ closeForm }}" style-hover="background:var(--s-line-soft)">Cancel</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-for list="{{ cats }}" as="cat" hint-placeholder-count="2">
+        <section style="{{ cat.sectionStyle }}">
+          <div style="{{ cat.headerStyle }}">
+            <div>
+              <div style="display:flex; align-items:center; gap:10px">
+                <h3 style="font-size:21px; font-weight:700; margin:0">{{ cat.name }}</h3>
+                <span style="{{ cat.tagStyle }}">{{ cat.genderLabel }}</span>
+              </div>
+              <div style="font-size:13.5px; color:var(--s-muted); margin-top:5px">{{ cat.total }} athletes registered · {{ cat.classCount }} weight classes</div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center">
+              <a href="#" style="{{ softBtn }}" style-hover="background:var(--s-line-soft)">Registration</a>
+              <a href="#" style="{{ softBtn }}" style-hover="background:var(--s-line-soft)">Weigh-in</a>
+              <button style="{{ ghostBtn }}" onClick="{{ cat.onEdit }}" style-hover="background:var(--s-line-soft)">Edit</button>
+              <button style="{{ dangerBtn }}" onClick="{{ cat.onDelete }}" style-hover="background:var(--s-red-soft)">Delete</button>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(158px, 1fr)); gap:10px; padding:20px 28px 26px">
+            <sc-for list="{{ cat.weights }}" as="w" hint-placeholder-count="6">
+              <a href="#" style="{{ w.cellStyle }}" style-hover="box-shadow:var(--s-sh-md); transform:translateY(-1px)">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px">
+                  <span style="font-size:18px; font-weight:700">{{ w.label }}</span>
+                  <span style="font-size:12.5px; font-weight:600; color:var(--s-muted)">{{ w.count }}/{{ w.cap }}</span>
+                </div>
+                <div style="margin-top:12px; height:6px; border-radius:var(--s-r-pill); background:var(--s-line); overflow:hidden">
+                  <div style="height:6px; border-radius:var(--s-r-pill); background:{{ w.barColor }}; width:{{ w.pct }}%"></div>
+                </div>
+              </a>
+            </sc-for>
+          </div>
+        </section>
+      </sc-for>
+
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;light&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Appearance&quot;},
+  &quot;palette&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;green lead&quot;, &quot;options&quot;: [&quot;green lead&quot;, &quot;blue lead&quot;, &quot;amber accent&quot;, &quot;two tone&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Appearance&quot;},
+  &quot;capacity&quot;: {&quot;editor&quot;: &quot;int&quot;, &quot;default&quot;: 16, &quot;min&quot;: 4, &quot;max&quot;: 64, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Data&quot;}
+}">
+class Component extends DCLogic {
+  state = {
+    themeOverride: null, formOpen: false, editingId: null, exportOpen: false,
+    name: '', weights: '', gender: 'M', nextId: 3,
+    cats: [
+      { id: 1, name: 'Men Senior', gender: 'M', weights: [['-60',14],['-66',16],['-73',12],['-81',9],['-90',16],['+90',5]] },
+      { id: 2, name: 'Women Senior', gender: 'F', weights: [['-48',7],['-52',13],['-57',14],['-63',11],['-70',16],['+70',4]] },
+    ],
+  };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'light';
+    const cap = this.props.capacity ?? 16;
+
+    // Colour combinations. Each names which hue leads (primary actions, hero
+    // wash) and which hues the supporting data tints use — so switching one
+    // value retunes the whole page rather than a single element.
+    const palettes = {
+      'green lead': { primary: 'var(--s-green)', primaryInk: 'var(--s-green-deep)',
+        hero: 'var(--s-green-soft)', men: 'blue', women: 'green',
+        stats: ['green', 'blue', 'amber'] },
+      'blue lead': { primary: 'var(--s-blue)', primaryInk: 'var(--s-blue-deep)',
+        hero: 'var(--s-blue-soft)', men: 'blue', women: 'green',
+        stats: ['blue', 'green', 'amber'] },
+      'amber accent': { primary: 'var(--s-green)', primaryInk: 'var(--s-green-deep)',
+        hero: 'var(--s-amber-soft)', men: 'amber', women: 'green',
+        stats: ['amber', 'green', 'blue'] },
+      'two tone': { primary: 'var(--s-green)', primaryInk: 'var(--s-green-deep)',
+        hero: 'var(--s-green-soft)', men: 'green', women: 'blue',
+        stats: ['green', 'blue', 'blue'] },
+    };
+    const hue = {
+      green: { bright: 'var(--s-green)', ink: 'var(--s-green-deep)', soft: 'var(--s-green-soft)' },
+      blue: { bright: 'var(--s-blue)', ink: 'var(--s-blue-deep)', soft: 'var(--s-blue-soft)' },
+      amber: { bright: 'var(--s-amber)', ink: 'var(--s-amber-deep)', soft: 'var(--s-amber-soft)' },
+    };
+    const p = palettes[this.props.palette ?? 'green lead'] || palettes['green lead'];
+    const navItem = (label, href, active) => ({ label, href, style: {
+      display: 'block', padding: '9px 12px', fontSize: '13.5px', textDecoration: 'none',
+      borderRadius: 'var(--s-r-sm)', color: active ? 'var(--s-green-deep)' : 'var(--s-text)',
+      fontWeight: active ? 600 : 500, background: active ? 'var(--s-green-soft)' : 'transparent',
+    }});
+    const btn = (extra) => ({ borderRadius: 'var(--s-r-pill)', border: '1px solid transparent', cursor: 'pointer',
+      fontFamily: 'var(--s-font)', fontSize: '13.5px', fontWeight: 600, padding: '8px 16px', textDecoration: 'none',
+      display: 'inline-flex', alignItems: 'center', background: 'transparent', color: 'var(--s-text)', transition: 'all .15s', ...extra });
+    const tab = active => ({ padding: '8px 18px', borderRadius: 'var(--s-r-pill)', fontSize: '13.5px', fontWeight: 600,
+      textDecoration: 'none', color: active ? '#fff' : 'var(--s-muted)', background: active ? p.primary : 'transparent' });
+    const cats = this.state.cats.map(c => {
+      // Each age category owns a tint, so a long page of categories stays scannable.
+      const fem = c.gender === 'F';
+      const h = hue[fem ? p.women : p.men];
+      const tint = h.soft, deep = h.ink, rail = h.bright;
+      return {
+      id: c.id, name: c.name, classCount: c.weights.length,
+      total: c.weights.reduce((s, w) => s + w[1], 0),
+      genderLabel: fem ? 'Women' : c.gender === 'M' ? 'Men' : 'Mixed',
+      sectionStyle: { background: 'var(--s-surface)', borderRadius: 'var(--s-r-lg)',
+        boxShadow: 'var(--s-sh-md)', overflow: 'hidden', borderTop: '5px solid ' + rail },
+      headerStyle: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        gap: '16px', flexWrap: 'wrap', padding: '22px 28px', background: tint },
+      tagStyle: { padding: '3px 11px', borderRadius: 'var(--s-r-pill)', fontSize: '12px', fontWeight: 600,
+        background: 'var(--s-surface)', color: deep },
+      weights: c.weights.map(w => {
+        const pct = Math.min(100, Math.round(w[1] / cap * 100));
+        return { label: w[0], count: w[1], cap, pct,
+          barColor: pct >= 100 ? 'var(--s-green)' : pct >= 50 ? 'var(--s-blue)' : 'var(--s-muted)',
+          cellStyle: { display: 'block', textDecoration: 'none', color: 'var(--s-text)', background: 'var(--s-bg)',
+            border: '1px solid var(--s-line)', borderRadius: 'var(--s-r-md)', padding: '14px 16px', transition: 'all .15s' } };
+      }),
+      onEdit: () => this.setState({ formOpen: true, editingId: c.id, name: c.name, gender: c.gender, weights: c.weights.map(w => w[0]).join(', ') }),
+      onDelete: () => { if (window.confirm('Delete "' + c.name + '" and its weight classes?')) this.setState(s => ({ cats: s.cats.filter(x => x.id !== c.id) })); },
+    };
+    });
+    return {
+      theme, themeBtnLabel: theme === 'dark' ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }),
+      platformItems: [navItem('Dashboard', '#', false), navItem('Championships', '#', false), navItem('Archive', '#', false)],
+      champItems: [navItem('Categories', '#', true), navItem('Athlete Registration', '#', false), navItem('Weigh-in Form', '#', false), navItem('Entries', '#', false), navItem('Fight Order', '#', false), navItem('Mats', '#', false), navItem('Results & Medals', '#', false)],
+      primaryBtn: btn({ background: p.primary, color: '#fff', boxShadow: 'var(--s-sh-sm)' }),
+      softBtn: btn({ border: '1px solid var(--s-line)', background: 'var(--s-surface)' }),
+      ghostBtn: btn({}),
+      dangerBtn: btn({ color: 'var(--s-red)' }),
+      chipBtn: btn({ fontSize: '12.5px', padding: '5px 14px', border: '1px solid var(--s-line)' }),
+      tabActive: tab(true), tabIdle: tab(false),
+      labelStyle: { fontSize: '12.5px', fontWeight: 600, color: 'var(--s-muted)' },
+      inputStyle: { fontFamily: 'var(--s-font)', fontSize: '14px', padding: '10px 14px', borderRadius: 'var(--s-r-sm)',
+        border: '1px solid var(--s-line)', background: 'var(--s-bg)', color: 'var(--s-text)', width: '100%' },
+      cats,
+      heroStyle: { background: p.hero, borderRadius: 'var(--s-r-lg)',
+        boxShadow: 'var(--s-sh-md)', padding: '28px 32px', display: 'flex',
+        justifyContent: 'space-between', alignItems: 'flex-end', gap: '32px',
+        flexWrap: 'wrap', marginBottom: '14px' },
+      // Rail carries the bright hue (decorative, no contrast floor); the number
+      // uses the -deep role, which is the readable end of the same hue.
+      heroStats: [
+        ['Categories', this.state.cats.length, hue[p.stats[0]]],
+        ['Athletes', this.state.cats.reduce((s, c) => s + c.weights.reduce((a, w) => a + w[1], 0), 0), hue[p.stats[1]]],
+        ['Weight classes', this.state.cats.reduce((s, c) => s + c.weights.length, 0), hue[p.stats[2]]],
+      ].map(([label, value, h]) => ({ label, value, rail: h.bright, ink: h.ink })).map(({ label, value, rail, ink }) => ({ label, value,
+        cardStyle: { minWidth: '116px', background: 'var(--s-surface)', borderRadius: 'var(--s-r-md)',
+          padding: '14px 16px', boxShadow: 'var(--s-sh-sm)', borderLeft: '4px solid ' + rail },
+        valueStyle: { fontSize: '28px', fontWeight: 700, lineHeight: 1, color: ink },
+        labelStyle: { fontSize: '12px', color: 'var(--s-muted)', marginTop: '3px' } })),
+      formOpen: this.state.formOpen, formClosed: !this.state.formOpen,
+      formTitle: this.state.editingId ? 'Edit age category' : 'New age category',
+      submitLabel: this.state.editingId ? 'Save changes' : 'Add category',
+      openForm: () => this.setState({ formOpen: true, editingId: null, name: '', weights: '-60, -66, -73, -81, -90, +90', gender: 'M' }),
+      closeForm: () => this.setState({ formOpen: false, editingId: null }),
+      name: this.state.name, weightsStr: this.state.weights,
+      onName: e => this.setState({ name: e.target.value }),
+      onWeights: e => this.setState({ weights: e.target.value }),
+      genderOpts: ['M', 'F', 'X'].map(g => ({
+        label: g === 'M' ? 'Male' : g === 'F' ? 'Female' : 'Mixed',
+        onClick: () => this.setState({ gender: g }),
+        style: { padding: '7px 14px', borderRadius: 'var(--s-r-pill)', border: 'none', cursor: 'pointer',
+          fontFamily: 'var(--s-font)', fontSize: '13px', fontWeight: 600,
+          background: this.state.gender === g ? 'var(--s-surface)' : 'transparent',
+          boxShadow: this.state.gender === g ? 'var(--s-sh-sm)' : 'none',
+          color: this.state.gender === g ? 'var(--s-text)' : 'var(--s-muted)' },
+      })),
+      submitForm: () => {
+        const name = this.state.name.trim();
+        const labels = this.state.weights.split(',').map(s => s.trim()).filter(Boolean);
+        if (!name || !labels.length) return;
+        this.setState(s => {
+          if (s.editingId) {
+            return { formOpen: false, editingId: null, cats: s.cats.map(c => c.id !== s.editingId ? c : { ...c, name, gender: s.gender, weights: labels.map(l => { const old = c.weights.find(w => w[0] === l); return [l, old ? old[1] : 0]; }) }) };
+          }
+          return { formOpen: false, cats: [...s.cats, { id: s.nextId, name, gender: s.gender, weights: labels.map(l => [l, 0]) }], nextId: s.nextId + 1 };
+        });
+      },
+      exportOpen: this.state.exportOpen,
+      toggleExport: () => this.setState(s => ({ exportOpen: !s.exportOpen })),
+    };
+  }
+}
+</script>
+</body>
+</html>

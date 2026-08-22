@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/styles.css">
+  <link rel="stylesheet" href="kurash-theme.css">
+  <script src="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/_ds_bundle.js"></script>
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Results &amp; Medal Standing" style="display:flex; min-height:100vh; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body)">
+  <dc-import name="Sidebar" active="Results &amp; Medal Standing" hint-size="252px,100%"></dc-import>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:10px 32px; border-bottom:2px solid var(--color-divider)">
+      <div style="font-size:13px; display:flex; align-items:center; gap:8px">
+        <a href="Championships.dc.html" style="font-weight:600; text-decoration:none">Championships</a>
+        <span class="text-muted">/</span>
+        <a href="Categories.dc.html" style="font-weight:600; text-decoration:none">Asian Kurash Championship 2026</a>
+        <span class="text-muted">/</span>
+        <span style="font-weight:600" class="text-muted">Medals</span>
+      </div>
+      <button class="btn btn-secondary" style="font-size:12px; padding:4px 12px" onClick="{{ toggleTheme }}">{{ themeBtnLabel }}</button>
+    </div>
+    <header style="padding:28px 32px 0">
+      <div class="kicker" style="color:var(--color-accent-600)">Asian Kurash Championship 2026</div>
+      <h1 style="font-size:36px; margin:8px 0 4px">Medals</h1>
+      <p class="text-muted" style="font-size:14px; margin:0 0 10px">3 weight classes still undecided.</p>
+      <div style="display:flex; align-items:center; gap:20px; flex-wrap:wrap">
+        <div style="display:flex; align-items:center; gap:6px">
+          <span class="kicker text-muted" style="margin-right:4px">Medal standing</span>
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">PDF</a>
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Excel</a>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px">
+          <span class="kicker text-muted" style="margin-right:4px">Results</span>
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">PDF</a>
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Excel</a>
+        </div>
+        <div style="display:flex; align-items:center; gap:6px">
+          <span class="kicker text-muted" style="margin-right:4px">Certificates</span>
+          <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">PDF</a>
+        </div>
+      </div>
+    </header>
+    <div style="padding:22px 32px 48px; display:flex; flex-direction:column; gap:20px; max-width:1240px">
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm)">
+        <table class="table" style="width:100%">
+          <thead>
+            <tr><th style="width:48px; text-align:right">#</th><th>NOC</th><th style="text-align:right">Gold</th><th style="text-align:right">Silver</th><th style="text-align:right">Bronze</th><th style="text-align:right">Total</th></tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ standings }}" as="s" hint-placeholder-count="6">
+              <tr>
+                <td style="text-align:right; font-family:monospace" class="text-muted">{{ s.rank }}</td>
+                <td><span style="display:inline-block; padding:1px 6px; border:1px solid var(--color-neutral-400); font-size:11px; font-weight:700">{{ s.noc }}</span> <span style="font-weight:700">{{ s.name }}</span></td>
+                <td style="text-align:right; font-weight:800; color:var(--color-accent-600)">{{ s.gold }}</td>
+                <td style="text-align:right">{{ s.silver }}</td>
+                <td style="text-align:right">{{ s.bronze }}</td>
+                <td style="text-align:right; font-weight:800">{{ s.total }}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+      <sc-for list="{{ events }}" as="e" hint-placeholder-count="2">
+        <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm); padding:20px 24px">
+          <h4 style="margin:0 0 14px">{{ e.title }}</h4>
+          <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:16px">
+            <sc-for list="{{ e.podium }}" as="p" hint-placeholder-count="4">
+              <div style="border-top:2px solid var(--color-divider); padding-top:8px">
+                <div class="kicker" style="{{ p.labelStyle }}">{{ p.medal }}</div>
+                <div style="font-weight:700; font-size:14px; margin-top:4px">{{ p.name }}</div>
+                <div class="text-muted" style="font-size:12px">{{ p.noc }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </section>
+      </sc-for>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;dark&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { themeOverride: null };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'dark';
+    const medal = m => ({ GOLD: { color: 'var(--color-accent-600)' }, SILVER: {}, BRONZE: {} }[m] || {});
+    const podium = list => list.map(([m, name, noc]) => ({ medal: m, name, noc, labelStyle: m === 'GOLD' ? { color: 'var(--color-accent-600)' } : {} }));
+    return {
+      theme, themeBtnLabel: theme === 'dark' ? 'Light mode' : 'Dark mode',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }),
+      standings: [
+        { rank: 1, noc: 'UZB', name: 'Uzbekistan', gold: 4, silver: 2, bronze: 3, total: 9 },
+        { rank: 2, noc: 'KAZ', name: 'Kazakhstan', gold: 2, silver: 3, bronze: 1, total: 6 },
+        { rank: 3, noc: 'KGZ', name: 'Kyrgyzstan', gold: 2, silver: 1, bronze: 2, total: 5 },
+        { rank: 4, noc: 'TJK', name: 'Tajikistan', gold: 1, silver: 2, bronze: 2, total: 5 },
+        { rank: 5, noc: 'MGL', name: 'Mongolia', gold: 1, silver: 1, bronze: 3, total: 5 },
+        { rank: 6, noc: 'IRI', name: 'Iran', gold: 0, silver: 1, bronze: 1, total: 2 },
+      ],
+      events: [
+        { title: 'Men Senior — -66 kg', podium: podium([['GOLD', 'Ulugbek Rashidov', 'UZB'], ['SILVER', 'Daniyar Seit', 'KAZ'], ['BRONZE', 'Emil Asanov', 'KGZ'], ['BRONZE', 'Arjun Patel', 'IND']]) },
+        { title: 'Women Senior — -52 kg', podium: podium([['GOLD', 'Dilnoza Karimova', 'UZB'], ['SILVER', 'Aigerim Bekova', 'KAZ'], ['BRONZE', 'Nilufar Saidova', 'TJK'], ['BRONZE', 'Saran Tuya', 'MGL']]) },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

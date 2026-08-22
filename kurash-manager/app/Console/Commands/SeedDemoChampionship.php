@@ -5,15 +5,14 @@ namespace App\Console\Commands;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Bout;
-use App\Models\BoutEvent;
 use App\Models\Championship;
 use App\Models\Court;
 use App\Models\User;
 use App\Models\WeightCategory;
 use App\Services\BoutAdvancer;
+use App\Services\BoutScorer;
 use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
-use App\Services\KurashScore;
 use App\Support\DemoRoster;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
@@ -81,6 +80,8 @@ class SeedDemoChampionship extends Command
             'location' => (string) $this->option('location'),
             'starts_on' => now()->subDays(2)->toDateString(),
             'ends_on' => now()->addDay()->toDateString(),
+            'genders' => ['M', 'F'],
+            'age_groups' => ['Senior'],
         ]);
 
         $this->info("Building “{$title}”…");
@@ -153,10 +154,11 @@ class SeedDemoChampionship extends Command
     {
         $categories = collect();
 
-        foreach (['M' => 'Men Senior', 'F' => 'Women Senior'] as $gender => $name) {
+        foreach (['M', 'F'] as $gender) {
             $ageCategory = AgeCategory::create([
                 'championship_id' => $championship->id,
-                'name' => $name,
+                'gender' => $gender,
+                'age_group' => 'Senior',
                 'sort_order' => $gender === 'M' ? 1 : 2,
             ]);
 
@@ -377,7 +379,7 @@ class SeedDemoChampionship extends Command
         $roll = random_int(1, 100);
 
         if ($roll <= 45) {
-            [$winType, $winnerScore, $loserScore] = ['halal', 10.0, 0.0];
+            [$winType, $winnerScore, $loserScore] = ['khalol', 10.0, 0.0];
         } elseif ($roll <= 75) {
             [$winType, $winnerScore, $loserScore] = ['yonbosh', 2.0, random_int(0, 3) / 10];
         } elseif ($roll <= 92) {
@@ -433,21 +435,25 @@ class SeedDemoChampionship extends Command
             // A few calls already made, but never enough to have ended it —
             // one yonbosh at most per side, so the contest is genuinely live
             // when the mat screen opens.
+            // Pressed through BoutScorer rather than written as rows, so the
+            // demo carries the automatic awards and the parent links a real
+            // contest would have — a seeded mat that skipped them would show a
+            // board no sequence of calls could produce.
             $calls = [
-                ['call' => 'chala', 'athlete_id' => $bout->athlete_a_id, 'clock' => 212],
-                ['call' => 'tanbeh', 'athlete_id' => $bout->athlete_b_id, 'clock' => 188],
-                ['call' => 'yonbosh', 'athlete_id' => $bout->athlete_a_id, 'clock' => 141],
-                ['call' => 'chala', 'athlete_id' => $bout->athlete_b_id, 'clock' => 96],
+                ['chala', 'a', 212],
+                ['tanbeh', 'b', 188],
+                ['yonbosh', 'a', 141],
+                ['chala', 'b', 96],
             ];
 
-            foreach (array_slice($calls, 0, random_int(1, 4)) as $call) {
-                BoutEvent::create([
-                    'bout_id' => $bout->id,
-                    'user_id' => $operator?->id,
-                    'action' => KurashScore::ACTION_SCORED,
-                    'source' => 'operator',
-                    'after' => $call,
-                ]);
+            foreach (array_slice($calls, 0, random_int(1, 4)) as [$call, $side, $clock]) {
+                app(BoutScorer::class)->record(
+                    bout: $bout,
+                    call: $call,
+                    side: $side,
+                    clock: $clock,
+                    user: $operator,
+                );
             }
         }
 

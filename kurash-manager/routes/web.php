@@ -5,10 +5,12 @@ use App\Http\Controllers\ExportController;
 use App\Http\Middleware\AllowPublicDisplay;
 use App\Livewire\Competition\Archive;
 use App\Livewire\Competition\Bracket;
+use App\Livewire\Competition\Brackets;
 use App\Livewire\Competition\Categories;
 use App\Livewire\Competition\Championships;
 use App\Livewire\Competition\Courts;
 use App\Livewire\Competition\Dashboard;
+use App\Livewire\Competition\DrawCeremony;
 use App\Livewire\Competition\Entries;
 use App\Livewire\Competition\FightOrder;
 use App\Livewire\Competition\MatControl;
@@ -16,6 +18,10 @@ use App\Livewire\Competition\Medals;
 use App\Livewire\Competition\Registration;
 use App\Livewire\Competition\Scoreboard;
 use App\Livewire\Competition\WeighIn;
+use App\Livewire\Operator\Draws as OperatorDraws;
+use App\Livewire\Operator\Presentation as OperatorPresentation;
+use App\Livewire\Referee\Mats as RefereeMats;
+use App\Livewire\Scoreboard\Viewer as ScoreboardViewer;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -26,9 +32,25 @@ use Illuminate\Support\Facades\Route;
  | page — which is what the specification asks for anyway: a login before any
  | competition data.
  */
-Route::get('/', fn () => auth()->check()
-    ? redirect()->route('dashboard')
-    : redirect()->route('login'))->name('home');
+Route::get('/', function () {
+    $user = auth()->user();
+
+    if ($user === null) {
+        return redirect()->route('login');
+    }
+
+    // A confined account has no dashboard. Sending it to one would be a 403 on
+    // the front door, which reads as a broken system rather than as a role.
+    if ($user->isReferee()) {
+        return redirect()->route('referee.mats');
+    }
+
+    if ($user->isScoreboardViewer()) {
+        return redirect()->route('scoreboard.index');
+    }
+
+    return redirect()->route('dashboard');
+})->name('home');
 
 /*
  | Venue display screens.
@@ -55,9 +77,76 @@ Route::middleware(AllowPublicDisplay::class)->prefix('display')->name('display.'
      | opposite trade from a bracket two thousand people are reading.
      */
     Route::get('mats/{court}/scoreboard', Scoreboard::class)->name('scoreboard');
+
+    /*
+     | The draw ceremony board, shown while positions are being pulled.
+     |
+     | Same gate and same trade as the scoreboard: one projector, updating
+     | itself, in front of a hall that is watching a draw being made. Read-only
+     | — the draw itself is made and committed on the admin screen.
+     */
+    Route::get('weight-classes/{weightCategory}/draw-ceremony', DrawCeremony::class)->name('draw-ceremony');
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
+/*
+ | The signed-in scoreboard.
+ |
+ | Separate from the public display group above: those screens hang in a hall
+ | and answer to DISPLAY_PUBLIC, while these belong to an account that signed
+ | in. Every route here is behind the scoreboard.view permission rather than a
+ | role name, so an operator or an admin reaches the same board through the
+ | same door — and reaches nothing else through it.
+ */
+Route::middleware(['auth', 'verified', 'can:scoreboard.view'])->group(function () {
+    Route::get('scoreboard', ScoreboardViewer::class)->name('scoreboard.index');
+    Route::get('scoreboard/mats/{court}', ScoreboardViewer::class)->name('scoreboard.show');
+});
+
+/*
+ | The competition application.
+ |
+ | Gated on access-admin rather than on "signed in": a scoreboard account has a
+ | session like everybody else, and without this it would reach the dashboard by
+ | typing the address.
+ */
+/*
+ | The published draw, for whoever is presenting it.
+ |
+ | Behind draw.view_published rather than a role name, and pointed only at
+ | tables an admin has approved — the working bracket screen below stays with
+ | the people who run the draw.
+ */
+Route::middleware(['auth', 'verified', 'can:draw.view_published'])->group(function () {
+    Route::get('operator/draws', OperatorDraws::class)->name('operator.draws.index');
+    Route::get('operator/draws/{weightCategory}', OperatorPresentation::class)->name('operator.draws.show');
+
+    // The ceremony itself: the same board the venue projector runs, opened by
+    // whoever is presenting rather than left on a wall.
+    Route::get('operator/draws/{weightCategory}/ceremony', DrawCeremony::class)
+        ->defaults('ceremony', true)
+        ->name('operator.draws.ceremony');
+});
+
+/*
+ | Scoring a mat.
+ |
+ | Its own group, behind mat.view rather than access-admin, because a referee
+ | account reaches this and nothing else while an official still needs to be
+ | able to watch a mat they cannot score. The buttons are behind score-bout
+ | inside the screen, so the two questions stay separate — the separation is on
+ | the permissions, not on two copies of the mat screen.
+ */
+Route::middleware(['auth', 'verified', 'can:mat.view'])->group(function () {
+    Route::get('referee/mats', RefereeMats::class)->name('referee.mats');
+    // The gate is given the mat by name, so the refusal happens in middleware
+    // rather than after the component has begun to build. Without the
+    // parameter it could only ever ask the general question.
+    Route::get('mats/{court}/live', MatControl::class)
+        ->middleware('can:mat.view,court')
+        ->name('mats.live');
+});
+
+Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('dashboard', Dashboard::class)->name('dashboard');
     Route::get('archive', Archive::class)->name('archive.index');
 
@@ -67,13 +156,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('championships/{championship}/entries', Entries::class)->name('entries.index');
     Route::get('championships/{championship}/medals', Medals::class)->name('medals.index');
     Route::get('championships/{championship}/mats', Courts::class)->name('courts.index');
-    Route::get('mats/{court}/live', MatControl::class)->name('mats.live');
+    Route::get('championships/{championship}/brackets', Brackets::class)->name('brackets.index');
     Route::get('championships/{championship}/fight-order', FightOrder::class)->name('fight-order.index');
 
-    Route::get('categories/{ageCategory}/athletes', Registration::class)->name('athletes.index');
-    Route::get('categories/{ageCategory}/weigh-in', WeighIn::class)->name('weighin.index');
+    // Scoped to a competition rather than to a division: the age groups a
+    // championship runs are settled when it is created, so they are a field on
+    // the entry and not a place to navigate to.
+    Route::get('championships/{championship}/athletes/{competition}', Registration::class)
+        ->whereIn('competition', ['M', 'F', 'X'])
+        ->name('athletes.index');
+    Route::get('championships/{championship}/weigh-in/{competition}', WeighIn::class)
+        ->whereIn('competition', ['M', 'F', 'X'])
+        ->name('weighin.index');
 
-    Route::get('weight-classes/{weightCategory}/bracket', Bracket::class)->name('bracket.show');
+    Route::get('weight-classes/{weightCategory}/bracket', Bracket::class)
+        ->middleware('can:manage-competition')
+        ->name('bracket.show');
 
     // Printable and downloadable paperwork. Every table the specification asks
     // for, in both formats, rendered from the database on request so a
@@ -83,6 +181,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     // Laid-out documents rather than tables, so they are PDF only and sit
     // outside the format-constrained group below.
     Route::prefix('exports')->name('exports.')->group(function () {
+        // The draw sheet is a tree rather than a table, and comes as a
+        // spreadsheet rather than as CSV — a bracket cannot be expressed in
+        // comma-separated rows at all.
+        Route::get('weight-classes/{weightCategory}/bracket.{format}', [ExportController::class, 'bracketSheet'])
+            ->where(['format' => 'pdf|xlsx'])
+            ->name('bracket-sheet');
+
         Route::get('championships/{championship}/certificates.pdf', [ExportController::class, 'certificates'])->name('certificates');
         Route::get('weight-classes/{weightCategory}/certificates.pdf', [ExportController::class, 'categoryCertificates'])->name('certificates.category');
 
@@ -91,9 +196,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('athletes/{athlete}/accreditation.pdf', [ExportController::class, 'athleteAccreditation'])->name('accreditation.athlete');
     });
 
-    Route::prefix('exports')->name('exports.')->where(['format' => 'pdf|csv'])->group(function () {
+    Route::prefix('exports')->name('exports.')->where(['format' => 'pdf|csv|xlsx'])->group(function () {
         Route::get('weight-classes/{weightCategory}/weigh-in.{format}', [ExportController::class, 'confirmedWeighIn'])->name('weigh-in');
         Route::get('weight-classes/{weightCategory}/draw.{format}', [ExportController::class, 'drawSheet'])->name('draw');
+        Route::get('weight-classes/{weightCategory}/draw-numbers.{format}', [ExportController::class, 'drawNumbers'])->name('draw-numbers');
 
         Route::get('championships/{championship}/fight-order.{format}', [ExportController::class, 'fightOrder'])->name('fight-order');
         Route::get('championships/{championship}/entries-by-noc.{format}', [ExportController::class, 'entriesByNoc'])->name('entries-noc');

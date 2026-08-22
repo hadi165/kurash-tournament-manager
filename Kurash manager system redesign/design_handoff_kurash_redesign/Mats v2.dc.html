@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="kurash-soft.css">
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Mats" style="display:flex; min-height:100vh; background:var(--s-bg); color:var(--s-text); font-family:var(--s-font)">
+  <dc-import name="Sidebar v2" active="Mats" hint-size="264px,100%"></dc-import>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column; padding:16px 20px 40px 4px">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:4px 8px 18px">
+      <div style="font-size:13px; display:flex; align-items:center; gap:8px; color:var(--s-muted)">
+        <a href="Championships v2.dc.html" style="text-decoration:none; font-weight:500">Championships</a><span>›</span>
+        <a href="Categories v2.dc.html" style="text-decoration:none; font-weight:500">Asian Kurash 2026</a><span>›</span>
+        <span style="color:var(--s-text); font-weight:600">Mats</span>
+      </div>
+      <button style="{{ ghostBtn }}" onClick="{{ toggleTheme }}" style-hover="background:var(--s-line-soft)">{{ themeBtnLabel }}</button>
+    </div>
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:16px; flex-wrap:wrap; padding:0 8px 20px">
+      <div>
+        <h1 style="font-size:30px; font-weight:700; letter-spacing:-0.02em; margin:0 0 6px">Mats and scoreboards</h1>
+        <p style="margin:0; color:var(--s-muted); font-size:14.5px">Driver in use: http — live scoreboards will be contacted at the addresses below.</p>
+      </div>
+      <sc-if value="{{ formClosed }}" hint-placeholder-val="{{ true }}">
+        <button style="{{ primaryBtn }}" onClick="{{ openForm }}">+ Add mat</button>
+      </sc-if>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:16px; max-width:1180px">
+      <sc-if value="{{ formOpen }}" hint-placeholder-val="{{ false }}">
+        <section style="{{ card }}">
+          <div style="font-size:17px; font-weight:700; margin-bottom:18px">Add mat</div>
+          <div style="display:grid; grid-template-columns:130px 1fr 1.4fr 1fr; gap:18px">
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Mat number</label>
+              <input style="{{ inputStyle }}" type="number" min="1" value="{{ fNumber }}" onChange="{{ onNumber }}">
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Name</label>
+              <input style="{{ inputStyle }}" placeholder="Mat A" value="{{ fName }}" onChange="{{ onName }}">
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">Scoreboard URL</label>
+              <input style="{{ inputStyle }}" placeholder="http://192.168.1.40" value="{{ fUrl }}" onChange="{{ onUrl }}">
+            </div>
+            <div style="display:flex; flex-direction:column; gap:7px">
+              <label style="{{ labelStyle }}">API key</label>
+              <input style="{{ inputStyle }}" type="password">
+              <div style="font-size:12px; color:var(--s-muted)">Optional</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:10px; margin-top:22px">
+            <button style="{{ primaryBtn }}" onClick="{{ addMat }}">Add mat</button>
+            <button style="{{ ghostBtn }}" onClick="{{ closeForm }}" style-hover="background:var(--s-line-soft)">Cancel</button>
+          </div>
+        </section>
+      </sc-if>
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:14px">
+        <sc-for list="{{ mats }}" as="m" hint-placeholder-count="3">
+          <section style="{{ m.cardStyle }}">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px">
+              <div style="display:flex; align-items:center; gap:12px">
+                <div style="{{ m.numBadge }}">{{ m.number }}</div>
+                <div>
+                  <div style="font-size:17px; font-weight:700; line-height:1.2">{{ m.name }}</div>
+                  <div style="font-size:12px; color:var(--s-muted); font-family:ui-monospace, monospace; margin-top:2px">{{ m.url }}</div>
+                </div>
+              </div>
+              <span style="{{ m.badgeStyle }}">{{ m.badge }}</span>
+            </div>
+            <div style="display:flex; gap:20px; margin-top:18px; padding-top:16px; border-top:1px solid var(--s-line-soft)">
+              <div>
+                <div style="font-size:20px; font-weight:700; line-height:1">{{ m.bouts }}</div>
+                <div style="font-size:12px; color:var(--s-muted); margin-top:2px">Bouts assigned</div>
+              </div>
+            </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:18px">
+              <a href="#" style="{{ primarySmall }}">Open mat</a>
+              <a href="#" style="{{ smallBtn }}" style-hover="background:var(--s-line-soft)">Scoreboard</a>
+              <button style="{{ smallBtn }}" style-hover="background:var(--s-line-soft)">Test</button>
+              <button style="{{ smallBtn }}" onClick="{{ m.onToggle }}" style-hover="background:var(--s-line-soft)">{{ m.toggleLabel }}</button>
+              <button style="{{ dangerBtn }}" onClick="{{ m.onDelete }}" style-hover="background:var(--s-red-soft)">Delete</button>
+            </div>
+          </section>
+        </sc-for>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;light&quot;, &quot;options&quot;: [&quot;light&quot;, &quot;dark&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = {
+    themeOverride: null, formOpen: false, fNumber: 4, fName: '', fUrl: '', nextId: 4,
+    mats: [
+      { id: 1, number: 1, name: 'Mat A', url: 'http://192.168.1.40', bouts: 52, active: true },
+      { id: 2, number: 2, name: 'Mat B', url: 'http://192.168.1.41', bouts: 48, active: true },
+      { id: 3, number: 3, name: 'Central', url: 'http://192.168.1.42', bouts: 56, active: false },
+    ],
+  };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'light';
+    const btn = e => ({ borderRadius: 'var(--s-r-pill)', border: '1px solid transparent', cursor: 'pointer',
+      fontFamily: 'var(--s-font)', fontSize: '13.5px', fontWeight: 600, padding: '8px 16px', textDecoration: 'none',
+      display: 'inline-flex', alignItems: 'center', background: 'transparent', color: 'var(--s-text)', transition: 'all .15s', ...e });
+    const pill = (bg, fg, extra = {}) => ({ display: 'inline-flex', alignItems: 'center', padding: '4px 12px',
+      borderRadius: '999px', fontSize: '12px', fontWeight: 600, background: bg, color: fg, ...extra });
+    const set = k => e => this.setState({ [k]: e.target.value });
+    return {
+      theme, themeBtnLabel: theme === 'dark' ? 'Light' : 'Dark',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }),
+      card: { background: 'var(--s-surface)', borderRadius: 'var(--s-r-lg)', boxShadow: 'var(--s-sh-md)',
+        padding: '22px 24px', borderTop: '5px solid var(--s-green)' },
+      primaryBtn: btn({ background: 'var(--s-green)', color: '#fff', boxShadow: 'var(--s-sh-sm)' }),
+      primarySmall: btn({ fontSize: '12.5px', padding: '6px 14px', background: 'var(--s-green)', color: '#fff' }),
+      ghostBtn: btn({}), smallBtn: btn({ fontSize: '12.5px', padding: '6px 14px', border: '1px solid var(--s-line)' }),
+      dangerBtn: btn({ fontSize: '12.5px', padding: '6px 14px', color: 'var(--s-red)' }),
+      labelStyle: { fontSize: '12.5px', fontWeight: 600, color: 'var(--s-muted)' },
+      inputStyle: { fontFamily: 'var(--s-font)', fontSize: '14px', padding: '10px 14px', borderRadius: 'var(--s-r-sm)',
+        border: '1px solid var(--s-line)', background: 'var(--s-bg)', color: 'var(--s-text)', width: '100%' },
+      formOpen: this.state.formOpen, formClosed: !this.state.formOpen,
+      openForm: () => this.setState({ formOpen: true }),
+      closeForm: () => this.setState({ formOpen: false }),
+      fNumber: this.state.fNumber, onNumber: set('fNumber'),
+      fName: this.state.fName, onName: set('fName'),
+      fUrl: this.state.fUrl, onUrl: set('fUrl'),
+      addMat: () => {
+        const name = this.state.fName.trim();
+        if (!name) return;
+        this.setState(s => ({ formOpen: false, fName: '', fUrl: '', nextId: s.nextId + 1, fNumber: Number(s.fNumber) + 1,
+          mats: [...s.mats, { id: s.nextId, number: Number(s.fNumber), name, url: s.fUrl || '—', bouts: 0, active: true }] }));
+      },
+      mats: this.state.mats.map(m => ({ ...m,
+        // The rail carries the mat's live state, readable across the room.
+        cardStyle: { background: 'var(--s-surface)', borderRadius: 'var(--s-r-lg)', boxShadow: 'var(--s-sh-md)',
+          padding: '22px 24px', borderTop: '5px solid ' + (m.active ? 'var(--s-green)' : 'var(--s-line)') },
+        numBadge: { width: '38px', height: '38px', flex: 'none', borderRadius: 'var(--s-r-md)', background: 'var(--s-bg)',
+          border: '1px solid var(--s-line)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontWeight: 700, fontSize: '16px' },
+        badge: m.active ? 'Active' : 'Inactive',
+        badgeStyle: m.active ? pill('var(--s-green-soft)', 'var(--s-green-deep)') : pill('var(--s-bg)', 'var(--s-muted)', { border: '1px solid var(--s-line)' }),
+        toggleLabel: m.active ? 'Deactivate' : 'Activate',
+        onToggle: () => this.setState(s => ({ mats: s.mats.map(x => x.id === m.id ? { ...x, active: !x.active } : x) })),
+        onDelete: () => { if (window.confirm('Delete ' + m.name + '?')) this.setState(s => ({ mats: s.mats.filter(x => x.id !== m.id) })); } })),
+    };
+  }
+}
+</script>
+</body>
+</html>

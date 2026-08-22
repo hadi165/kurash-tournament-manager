@@ -70,15 +70,19 @@ class MedalTable
      * Medal counts per NOC across a whole championship, ordered the way a
      * standings table is: gold first, then silver, then bronze.
      *
+     * @param  string|null  $competition  'M' or 'F' to count one competition's
+     *                                    podiums on their own, as a men's or
+     *                                    women's medal table does.
      * @return Collection<int, array{noc_code:string, gold:int, silver:int, bronze:int, total:int}>
      */
-    public function standings(int $championshipId): Collection
+    public function standings(int $championshipId, ?string $competition = null): Collection
     {
         $tally = [];
 
         $categories = WeightCategory::whereHas(
             'ageCategory',
             fn ($q) => $q->where('championship_id', $championshipId)
+                ->when($competition !== null, fn ($division) => $division->where('gender', $competition))
         )->get();
 
         foreach ($categories as $category) {

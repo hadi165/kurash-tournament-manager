@@ -11,7 +11,7 @@ use App\Support\Noc;
  * Counted from athlete rows rather than a stored total, so it cannot drift from
  * the registration list.
  */
-class EntriesByNocReport implements Report
+class EntriesByNocReport implements HasTotal, Report
 {
     public function __construct(private readonly Championship $championship) {}
 
@@ -38,7 +38,16 @@ class EntriesByNocReport implements Report
         return ['NOC', 'Country', 'Male', 'Female', 'Weighed in', 'Total entries'];
     }
 
+    /** @var list<list<string|int|float|null>>|null */
+    private ?array $memo = null;
+
     public function rows(): array
+    {
+        return $this->memo ??= $this->build();
+    }
+
+    /** @return list<list<string|int|float|null>> */
+    private function build(): array
     {
         $rows = [];
 
@@ -58,5 +67,13 @@ class EntriesByNocReport implements Report
         usort($rows, fn (array $a, array $b) => [$b[5], $a[0]] <=> [$a[5], $b[0]]);
 
         return $rows;
+    }
+
+    public function total(): array
+    {
+        return [
+            'label' => 'Total entries',
+            'value' => array_sum(array_map(fn (array $row) => (int) $row[5], $this->rows())),
+        ];
     }
 }

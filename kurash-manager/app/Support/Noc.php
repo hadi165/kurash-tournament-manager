@@ -20,53 +20,221 @@ namespace App\Support;
 final class Noc
 {
     /**
-     * IOC three-letter code => ISO 3166-1 alpha-2.
+     * IOC three-letter code => [ISO 3166-1 alpha-2, country name].
      *
-     * @var array<string, string>
+     * One table rather than two, because a code that gained a flag without a
+     * name — or a name without a flag — would be a code this application half
+     * knows, and nothing would say so.
+     *
+     * @var array<string, array{string, string}>
      */
-    private const ISO = [
-        'AFG' => 'af', 'ALB' => 'al', 'ALG' => 'dz', 'AND' => 'ad', 'ANG' => 'ao',
-        'ANT' => 'ag', 'ARG' => 'ar', 'ARM' => 'am', 'ARU' => 'aw', 'ASA' => 'as',
-        'AUS' => 'au', 'AUT' => 'at', 'AZE' => 'az', 'BAH' => 'bs', 'BAN' => 'bd',
-        'BAR' => 'bb', 'BDI' => 'bi', 'BEL' => 'be', 'BEN' => 'bj', 'BER' => 'bm',
-        'BHU' => 'bt', 'BIH' => 'ba', 'BIZ' => 'bz', 'BLR' => 'by', 'BOL' => 'bo',
-        'BOT' => 'bw', 'BRA' => 'br', 'BRN' => 'bh', 'BRU' => 'bn', 'BUL' => 'bg',
-        'BUR' => 'bf', 'CAF' => 'cf', 'CAM' => 'kh', 'CAN' => 'ca', 'CAY' => 'ky',
-        'CGO' => 'cg', 'CHA' => 'td', 'CHI' => 'cl', 'CHN' => 'cn', 'CIV' => 'ci',
-        'CMR' => 'cm', 'COD' => 'cd', 'COK' => 'ck', 'COL' => 'co', 'COM' => 'km',
-        'CPV' => 'cv', 'CRC' => 'cr', 'CRO' => 'hr', 'CUB' => 'cu', 'CYP' => 'cy',
-        'CZE' => 'cz', 'DEN' => 'dk', 'DJI' => 'dj', 'DMA' => 'dm', 'DOM' => 'do',
-        'ECU' => 'ec', 'EGY' => 'eg', 'ERI' => 'er', 'ESA' => 'sv', 'ESP' => 'es',
-        'EST' => 'ee', 'ETH' => 'et', 'FIJ' => 'fj', 'FIN' => 'fi', 'FRA' => 'fr',
-        'FSM' => 'fm', 'GAB' => 'ga', 'GAM' => 'gm', 'GBR' => 'gb', 'GBS' => 'gw',
-        'GEO' => 'ge', 'GEQ' => 'gq', 'GER' => 'de', 'GHA' => 'gh', 'GRE' => 'gr',
-        'GRN' => 'gd', 'GUA' => 'gt', 'GUI' => 'gn', 'GUM' => 'gu', 'GUY' => 'gy',
-        'HAI' => 'ht', 'HKG' => 'hk', 'HON' => 'hn', 'HUN' => 'hu', 'INA' => 'id',
-        'IND' => 'in', 'IRI' => 'ir', 'IRL' => 'ie', 'IRQ' => 'iq', 'ISL' => 'is',
-        'ISR' => 'il', 'ISV' => 'vi', 'ITA' => 'it', 'IVB' => 'vg', 'JAM' => 'jm',
-        'JOR' => 'jo', 'JPN' => 'jp', 'KAZ' => 'kz', 'KEN' => 'ke', 'KGZ' => 'kg',
-        'KIR' => 'ki', 'KOR' => 'kr', 'KOS' => 'xk', 'KSA' => 'sa', 'KUW' => 'kw',
-        'LAO' => 'la', 'LAT' => 'lv', 'LBA' => 'ly', 'LBN' => 'lb', 'LBR' => 'lr',
-        'LCA' => 'lc', 'LES' => 'ls', 'LIE' => 'li', 'LTU' => 'lt', 'LUX' => 'lu',
-        'MAD' => 'mg', 'MAR' => 'ma', 'MAS' => 'my', 'MAW' => 'mw', 'MDA' => 'md',
-        'MDV' => 'mv', 'MEX' => 'mx', 'MGL' => 'mn', 'MHL' => 'mh', 'MKD' => 'mk',
-        'MLI' => 'ml', 'MLT' => 'mt', 'MNE' => 'me', 'MON' => 'mc', 'MOZ' => 'mz',
-        'MRI' => 'mu', 'MTN' => 'mr', 'MYA' => 'mm', 'NAM' => 'na', 'NCA' => 'ni',
-        'NED' => 'nl', 'NEP' => 'np', 'NGR' => 'ng', 'NIG' => 'ne', 'NOR' => 'no',
-        'NRU' => 'nr', 'NZL' => 'nz', 'OMA' => 'om', 'PAK' => 'pk', 'PAN' => 'pa',
-        'PAR' => 'py', 'PER' => 'pe', 'PHI' => 'ph', 'PLE' => 'ps', 'PLW' => 'pw',
-        'PNG' => 'pg', 'POL' => 'pl', 'POR' => 'pt', 'PRK' => 'kp', 'PUR' => 'pr',
-        'QAT' => 'qa', 'ROU' => 'ro', 'RSA' => 'za', 'RUS' => 'ru', 'RWA' => 'rw',
-        'SAM' => 'ws', 'SEN' => 'sn', 'SEY' => 'sc', 'SGP' => 'sg', 'SKN' => 'kn',
-        'SLE' => 'sl', 'SLO' => 'si', 'SMR' => 'sm', 'SOL' => 'sb', 'SOM' => 'so',
-        'SRB' => 'rs', 'SRI' => 'lk', 'SSD' => 'ss', 'STP' => 'st', 'SUD' => 'sd',
-        'SUI' => 'ch', 'SUR' => 'sr', 'SVK' => 'sk', 'SWE' => 'se', 'SWZ' => 'sz',
-        'SYR' => 'sy', 'TAN' => 'tz', 'TGA' => 'to', 'THA' => 'th', 'TJK' => 'tj',
-        'TKM' => 'tm', 'TLS' => 'tl', 'TOG' => 'tg', 'TPE' => 'tw', 'TTO' => 'tt',
-        'TUN' => 'tn', 'TUR' => 'tr', 'TUV' => 'tv', 'UAE' => 'ae', 'UGA' => 'ug',
-        'UKR' => 'ua', 'URU' => 'uy', 'USA' => 'us', 'UZB' => 'uz', 'VAN' => 'vu',
-        'VEN' => 've', 'VIE' => 'vn', 'VIN' => 'vc', 'YEM' => 'ye', 'ZAM' => 'zm',
-        'ZIM' => 'zw',
+    private const NATIONS = [
+        'AFG' => ['af', 'Afghanistan'],
+        'ALB' => ['al', 'Albania'],
+        'ALG' => ['dz', 'Algeria'],
+        'AND' => ['ad', 'Andorra'],
+        'ANG' => ['ao', 'Angola'],
+        'ANT' => ['ag', 'Antigua and Barbuda'],
+        'ARG' => ['ar', 'Argentina'],
+        'ARM' => ['am', 'Armenia'],
+        'ARU' => ['aw', 'Aruba'],
+        'ASA' => ['as', 'American Samoa'],
+        'AUS' => ['au', 'Australia'],
+        'AUT' => ['at', 'Austria'],
+        'AZE' => ['az', 'Azerbaijan'],
+        'BAH' => ['bs', 'Bahamas'],
+        'BAN' => ['bd', 'Bangladesh'],
+        'BAR' => ['bb', 'Barbados'],
+        'BDI' => ['bi', 'Burundi'],
+        'BEL' => ['be', 'Belgium'],
+        'BEN' => ['bj', 'Benin'],
+        'BER' => ['bm', 'Bermuda'],
+        'BHU' => ['bt', 'Bhutan'],
+        'BIH' => ['ba', 'Bosnia and Herzegovina'],
+        'BIZ' => ['bz', 'Belize'],
+        'BLR' => ['by', 'Belarus'],
+        'BOL' => ['bo', 'Bolivia'],
+        'BOT' => ['bw', 'Botswana'],
+        'BRA' => ['br', 'Brazil'],
+        'BRN' => ['bh', 'Bahrain'],
+        'BRU' => ['bn', 'Brunei'],
+        'BUL' => ['bg', 'Bulgaria'],
+        'BUR' => ['bf', 'Burkina Faso'],
+        'CAF' => ['cf', 'Central African Republic'],
+        'CAM' => ['kh', 'Cambodia'],
+        'CAN' => ['ca', 'Canada'],
+        'CAY' => ['ky', 'Cayman Islands'],
+        'CGO' => ['cg', 'Republic of the Congo'],
+        'CHA' => ['td', 'Chad'],
+        'CHI' => ['cl', 'Chile'],
+        'CHN' => ['cn', 'China'],
+        'CIV' => ['ci', 'Côte d\'Ivoire'],
+        'CMR' => ['cm', 'Cameroon'],
+        'COD' => ['cd', 'Democratic Republic of the Congo'],
+        'COK' => ['ck', 'Cook Islands'],
+        'COL' => ['co', 'Colombia'],
+        'COM' => ['km', 'Comoros'],
+        'CPV' => ['cv', 'Cabo Verde'],
+        'CRC' => ['cr', 'Costa Rica'],
+        'CRO' => ['hr', 'Croatia'],
+        'CUB' => ['cu', 'Cuba'],
+        'CYP' => ['cy', 'Cyprus'],
+        'CZE' => ['cz', 'Czechia'],
+        'DEN' => ['dk', 'Denmark'],
+        'DJI' => ['dj', 'Djibouti'],
+        'DMA' => ['dm', 'Dominica'],
+        'DOM' => ['do', 'Dominican Republic'],
+        'ECU' => ['ec', 'Ecuador'],
+        'EGY' => ['eg', 'Egypt'],
+        'ERI' => ['er', 'Eritrea'],
+        'ESA' => ['sv', 'El Salvador'],
+        'ESP' => ['es', 'Spain'],
+        'EST' => ['ee', 'Estonia'],
+        'ETH' => ['et', 'Ethiopia'],
+        'FIJ' => ['fj', 'Fiji'],
+        'FIN' => ['fi', 'Finland'],
+        'FRA' => ['fr', 'France'],
+        'FSM' => ['fm', 'Micronesia'],
+        'GAB' => ['ga', 'Gabon'],
+        'GAM' => ['gm', 'The Gambia'],
+        'GBR' => ['gb', 'Great Britain'],
+        'GBS' => ['gw', 'Guinea-Bissau'],
+        'GEO' => ['ge', 'Georgia'],
+        'GEQ' => ['gq', 'Equatorial Guinea'],
+        'GER' => ['de', 'Germany'],
+        'GHA' => ['gh', 'Ghana'],
+        'GRE' => ['gr', 'Greece'],
+        'GRN' => ['gd', 'Grenada'],
+        'GUA' => ['gt', 'Guatemala'],
+        'GUI' => ['gn', 'Guinea'],
+        'GUM' => ['gu', 'Guam'],
+        'GUY' => ['gy', 'Guyana'],
+        'HAI' => ['ht', 'Haiti'],
+        'HKG' => ['hk', 'Hong Kong'],
+        'HON' => ['hn', 'Honduras'],
+        'HUN' => ['hu', 'Hungary'],
+        'INA' => ['id', 'Indonesia'],
+        'IND' => ['in', 'India'],
+        'IRI' => ['ir', 'Islamic Republic of Iran'],
+        'IRL' => ['ie', 'Ireland'],
+        'IRQ' => ['iq', 'Iraq'],
+        'ISL' => ['is', 'Iceland'],
+        'ISR' => ['il', 'Israel'],
+        'ISV' => ['vi', 'Virgin Islands (US)'],
+        'ITA' => ['it', 'Italy'],
+        'IVB' => ['vg', 'Virgin Islands (British)'],
+        'JAM' => ['jm', 'Jamaica'],
+        'JOR' => ['jo', 'Jordan'],
+        'JPN' => ['jp', 'Japan'],
+        'KAZ' => ['kz', 'Kazakhstan'],
+        'KEN' => ['ke', 'Kenya'],
+        'KGZ' => ['kg', 'Kyrgyzstan'],
+        'KIR' => ['ki', 'Kiribati'],
+        'KOR' => ['kr', 'South Korea'],
+        'KOS' => ['xk', 'Kosovo'],
+        'KSA' => ['sa', 'Saudi Arabia'],
+        'KUW' => ['kw', 'Kuwait'],
+        'LAO' => ['la', 'Laos'],
+        'LAT' => ['lv', 'Latvia'],
+        'LBA' => ['ly', 'Libya'],
+        'LBN' => ['lb', 'Lebanon'],
+        'LBR' => ['lr', 'Liberia'],
+        'LCA' => ['lc', 'Saint Lucia'],
+        'LES' => ['ls', 'Lesotho'],
+        'LIE' => ['li', 'Liechtenstein'],
+        'LTU' => ['lt', 'Lithuania'],
+        'LUX' => ['lu', 'Luxembourg'],
+        'MAD' => ['mg', 'Madagascar'],
+        'MAR' => ['ma', 'Morocco'],
+        'MAS' => ['my', 'Malaysia'],
+        'MAW' => ['mw', 'Malawi'],
+        'MDA' => ['md', 'Moldova'],
+        'MDV' => ['mv', 'Maldives'],
+        'MEX' => ['mx', 'Mexico'],
+        'MGL' => ['mn', 'Mongolia'],
+        'MHL' => ['mh', 'Marshall Islands'],
+        'MKD' => ['mk', 'North Macedonia'],
+        'MLI' => ['ml', 'Mali'],
+        'MLT' => ['mt', 'Malta'],
+        'MNE' => ['me', 'Montenegro'],
+        'MON' => ['mc', 'Monaco'],
+        'MOZ' => ['mz', 'Mozambique'],
+        'MRI' => ['mu', 'Mauritius'],
+        'MTN' => ['mr', 'Mauritania'],
+        'MYA' => ['mm', 'Myanmar'],
+        'NAM' => ['na', 'Namibia'],
+        'NCA' => ['ni', 'Nicaragua'],
+        'NED' => ['nl', 'Netherlands'],
+        'NEP' => ['np', 'Nepal'],
+        'NGR' => ['ng', 'Nigeria'],
+        'NIG' => ['ne', 'Niger'],
+        'NOR' => ['no', 'Norway'],
+        'NRU' => ['nr', 'Nauru'],
+        'NZL' => ['nz', 'New Zealand'],
+        'OMA' => ['om', 'Oman'],
+        'PAK' => ['pk', 'Pakistan'],
+        'PAN' => ['pa', 'Panama'],
+        'PAR' => ['py', 'Paraguay'],
+        'PER' => ['pe', 'Peru'],
+        'PHI' => ['ph', 'Philippines'],
+        'PLE' => ['ps', 'Palestine'],
+        'PLW' => ['pw', 'Palau'],
+        'PNG' => ['pg', 'Papua New Guinea'],
+        'POL' => ['pl', 'Poland'],
+        'POR' => ['pt', 'Portugal'],
+        'PRK' => ['kp', 'North Korea'],
+        'PUR' => ['pr', 'Puerto Rico'],
+        'QAT' => ['qa', 'Qatar'],
+        'ROU' => ['ro', 'Romania'],
+        'RSA' => ['za', 'South Africa'],
+        'RUS' => ['ru', 'Russia'],
+        'RWA' => ['rw', 'Rwanda'],
+        'SAM' => ['ws', 'Samoa'],
+        'SEN' => ['sn', 'Senegal'],
+        'SEY' => ['sc', 'Seychelles'],
+        'SGP' => ['sg', 'Singapore'],
+        'SKN' => ['kn', 'Saint Kitts and Nevis'],
+        'SLE' => ['sl', 'Sierra Leone'],
+        'SLO' => ['si', 'Slovenia'],
+        'SMR' => ['sm', 'San Marino'],
+        'SOL' => ['sb', 'Solomon Islands'],
+        'SOM' => ['so', 'Somalia'],
+        'SRB' => ['rs', 'Serbia'],
+        'SRI' => ['lk', 'Sri Lanka'],
+        'SSD' => ['ss', 'South Sudan'],
+        'STP' => ['st', 'São Tomé and Príncipe'],
+        'SUD' => ['sd', 'Sudan'],
+        'SUI' => ['ch', 'Switzerland'],
+        'SUR' => ['sr', 'Suriname'],
+        'SVK' => ['sk', 'Slovakia'],
+        'SWE' => ['se', 'Sweden'],
+        'SWZ' => ['sz', 'Eswatini'],
+        'SYR' => ['sy', 'Syria'],
+        'TAN' => ['tz', 'Tanzania'],
+        'TGA' => ['to', 'Tonga'],
+        'THA' => ['th', 'Thailand'],
+        'TJK' => ['tj', 'Tajikistan'],
+        'TKM' => ['tm', 'Turkmenistan'],
+        'TLS' => ['tl', 'Timor-Leste'],
+        'TOG' => ['tg', 'Togo'],
+        'TPE' => ['tw', 'Chinese Taipei'],
+        'TTO' => ['tt', 'Trinidad and Tobago'],
+        'TUN' => ['tn', 'Tunisia'],
+        'TUR' => ['tr', 'Turkey'],
+        'TUV' => ['tv', 'Tuvalu'],
+        'UAE' => ['ae', 'United Arab Emirates'],
+        'UGA' => ['ug', 'Uganda'],
+        'UKR' => ['ua', 'Ukraine'],
+        'URU' => ['uy', 'Uruguay'],
+        'USA' => ['us', 'United States'],
+        'UZB' => ['uz', 'Uzbekistan'],
+        'VAN' => ['vu', 'Vanuatu'],
+        'VEN' => ['ve', 'Venezuela'],
+        'VIE' => ['vn', 'Vietnam'],
+        'VIN' => ['vc', 'Saint Vincent and the Grenadines'],
+        'YEM' => ['ye', 'Yemen'],
+        'ZAM' => ['zm', 'Zambia'],
+        'ZIM' => ['zw', 'Zimbabwe'],
     ];
 
     /**
@@ -91,7 +259,7 @@ final class Noc
     {
         $code = self::normalise($noc);
 
-        return $code === null ? null : (self::ISO[$code] ?? null);
+        return $code === null ? null : (self::NATIONS[$code][0] ?? null);
     }
 
     /** Whether a flag exists on disk for this code. */
@@ -123,6 +291,68 @@ final class Noc
      */
     public static function codes(): array
     {
-        return array_keys(self::ISO);
+        return array_keys(self::NATIONS);
+    }
+
+    /** Whether this is a code the application knows at all. */
+    public static function exists(?string $noc): bool
+    {
+        $code = self::normalise($noc);
+
+        return $code !== null && isset(self::NATIONS[$code]);
+    }
+
+    /**
+     * The country a code stands for, as a competition names it — "Iran", not
+     * "Islamic Republic of Iran"; "Chinese Taipei", not "Taiwan".
+     */
+    public static function name(?string $noc): ?string
+    {
+        $code = self::normalise($noc);
+
+        return $code === null ? null : (self::NATIONS[$code][1] ?? null);
+    }
+
+    /**
+     * Every code with its country, in code order.
+     *
+     * @return array<string, string>
+     */
+    public static function all(): array
+    {
+        return array_map(fn (array $nation): string => $nation[1], self::NATIONS);
+    }
+
+    /**
+     * Codes beginning with what has been typed.
+     *
+     * Matched from the start of the code rather than anywhere inside it: a
+     * three-letter code is read as a prefix by the people who use them, and
+     * "IR" meaning Iran and Iraq and nothing else is the behaviour a table
+     * official expects.
+     *
+     * @return array<string, string>
+     */
+    public static function startingWith(?string $prefix, int $limit = 8): array
+    {
+        $typed = self::normalise($prefix);
+
+        if ($typed === null) {
+            return [];
+        }
+
+        $matches = [];
+
+        foreach (self::NATIONS as $code => [, $name]) {
+            if (str_starts_with($code, $typed)) {
+                $matches[$code] = $name;
+
+                if (count($matches) === $limit) {
+                    break;
+                }
+            }
+        }
+
+        return $matches;
     }
 }

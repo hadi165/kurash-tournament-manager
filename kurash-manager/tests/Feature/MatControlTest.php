@@ -26,7 +26,7 @@ describe('access', function () {
         $this->get(route('mats.live', $court))->assertOk();
 
         Livewire::test(MatControl::class, ['court' => $court])
-            ->call('score', 'halal', 'a')
+            ->call('score', 'khalol', 'a')
             ->assertForbidden();
 
         expect($bout->refresh()->winner_athlete_id)->toBeNull();
@@ -36,20 +36,20 @@ describe('access', function () {
 describe('scoring', function () {
     beforeEach(fn () => $this->actingAs($this->admin));
 
-    it('ends the contest on a halal', function () {
+    it('ends the contest on a khalol', function () {
         [$court, $bout] = boutOnMat();
 
         Livewire::test(MatControl::class, ['court' => $court])
-            ->call('score', 'halal', 'a', 180);
+            ->call('score', 'khalol', 'a', 180);
 
         $bout->refresh();
 
         expect($bout->winner_athlete_id)->toBe($bout->athlete_a_id)
-            ->and($bout->win_type)->toBe('halal')
+            ->and($bout->win_type)->toBe('khalol')
             ->and($bout->status)->toBe(Bout::STATUS_COMPLETED);
     });
 
-    it('makes two yonbosh a halal', function () {
+    it('makes two yonbosh a khalol', function () {
         [$court, $bout] = boutOnMat();
 
         $component = Livewire::test(MatControl::class, ['court' => $court])
@@ -81,32 +81,144 @@ describe('scoring', function () {
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id);
     });
 
-    it('awards the contest against an athlete who collects dakki', function () {
+    it('gives the opponent a chala for every tanbeh', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'tanbeh', 'a', 200)
+            ->call('score', 'tanbeh', 'a', 190);
+
+        $tally = app(KurashScore::class)->tally($bout->refresh(), $bout->events()->get());
+
+        // Tanbeh accumulates against blue and hands green a chala each time.
+        // Chala never adds up, so the contest is still live.
+        expect($tally['a']->tanbeh)->toBe(2)
+            ->and($tally['b']->chala)->toBe(2)
+            ->and($tally['b']->earnedChala)->toBe(0)
+            ->and($bout->winner_athlete_id)->toBeNull();
+    });
+
+    it('gives the opponent a yonbosh for a dakki', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'dakki', 'a', 200);
+
+        $tally = app(KurashScore::class)->tally($bout->refresh(), $bout->events()->get());
+
+        expect($tally['a']->dakki)->toBe(1)
+            ->and($tally['b']->yonbosh)->toBe(1)
+            ->and($tally['b']->earnedYonbosh)->toBe(0)
+            ->and($bout->winner_athlete_id)->toBeNull();
+    });
+
+    /**
+     * The rule the whole event log exists for. A dakki supersedes the tanbeh
+     * before it, so the chala that tanbeh handed the opponent goes back — but
+     * a chala the opponent threw for is untouched, and no counter on the board
+     * can tell the two apart. Only the log can.
+     */
+    it('takes back the automatic chala a dakki supersedes and keeps the earned one', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'chala', 'b', 220)     // green throws for one
+            ->call('score', 'tanbeh', 'a', 200)    // blue penalised: green given one
+            ->call('score', 'dakki', 'a', 180);    // superseded
+
+        $tally = app(KurashScore::class)->tally($bout->refresh(), $bout->events()->get());
+
+        expect($tally['b']->yonbosh)->toBe(1)
+            ->and($tally['b']->chala)->toBe(1)
+            ->and($tally['b']->earnedChala)->toBe(1)
+            ->and($bout->winner_athlete_id)->toBeNull();
+    });
+
+    it('makes two dakki a khalol for the opponent', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'dakki', 'a', 200)
+            ->call('score', 'dakki', 'a', 150);
+
+        // Two conceded yonbosh are two yonbosh: however they were reached, they
+        // add up to a khalol.
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
+            ->and($bout->win_type)->toBe('yonbosh');
+    });
+
+    it('awards the contest to the opponent on a girrom', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'girrom', 'a', 200);
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
+            ->and($bout->win_type)->toBe('girrom');
+    });
+
+    it('lets a girrom beat a lead on scores', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'yonbosh', 'a', 210)
+            ->call('score', 'girrom', 'a', 200);
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
+            ->and($bout->win_type)->toBe('girrom');
+    });
+
+    it('ends the contest on the third madichal and transfers nothing before it', function () {
+        [$court, $bout] = boutOnMat();
+
+        $component = Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'madichal', 'a', 200)
+            ->call('score', 'madichal', 'a', 190);
+
+        $tally = app(KurashScore::class)->tally($bout->refresh(), $bout->events()->get());
+
+        // Two is a count and nothing else — the opponent has been given
+        // nothing, and the contest is still live.
+        expect($tally['a']->madichal)->toBe(2)
+            ->and($tally['b']->yonbosh)->toBe(0)
+            ->and($tally['b']->chala)->toBe(0)
+            ->and($bout->winner_athlete_id)->toBeNull();
+
+        $component->call('score', 'madichal', 'a', 120);
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
+            ->and($bout->win_type)->toBe('madichal');
+    });
+
+    it('does not escalate tanbeh into dakki unless a federation asks for it', function () {
         [$court, $bout] = boutOnMat();
 
         $component = Livewire::test(MatControl::class, ['court' => $court]);
 
-        foreach (range(1, config('kurash.tanbeh_for_dakki')) as $i) {
+        foreach (range(1, 5) as $i) {
             $component->call('score', 'tanbeh', 'a', 200 - $i * 10);
         }
 
-        $bout->refresh();
+        $tally = app(KurashScore::class)->tally($bout->refresh(), $bout->events()->get());
 
-        expect($bout->winner_athlete_id)->toBe($bout->athlete_b_id)
-            ->and($bout->win_type)->toBe('dakki');
-    });
+        expect($tally['a']->dakki)->toBe(0)
+            ->and($bout->winner_athlete_id)->toBeNull();
 
-    it('lets dakki beat a lead on scores', function () {
-        [$court, $bout] = boutOnMat();
+        // Turned on, the configured tanbeh becomes a dakki and the opponent is
+        // given the yonbosh that comes with it.
+        config()->set('kurash.tanbeh_for_dakki', 3);
 
-        $component = Livewire::test(MatControl::class, ['court' => $court])
-            ->call('score', 'yonbosh', 'a', 210);
+        [$court2, $bout2] = boutOnMat();
+        $second = Livewire::test(MatControl::class, ['court' => $court2]);
 
-        foreach (range(1, config('kurash.tanbeh_for_dakki')) as $i) {
-            $component->call('score', 'tanbeh', 'a', 200 - $i * 10);
+        foreach (range(1, 3) as $i) {
+            $second->call('score', 'tanbeh', 'a', 200 - $i * 10);
         }
 
-        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id);
+        $tally = app(KurashScore::class)->tally($bout2->refresh(), $bout2->events()->get());
+
+        expect($tally['a']->dakki)->toBe(1)
+            ->and($tally['b']->yonbosh)->toBe(1);
     });
 });
 
@@ -136,19 +248,36 @@ describe('time', function () {
             ->call('finishOnTime');
 
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id)
-            ->and($bout->win_type)->toBe('yonbosh');
+            // Level on yonbosh, so chala is what separated them and that is
+            // what the record says.
+            ->and($bout->win_type)->toBe('chala');
     });
 
     /**
-     * The software must not invent a winner. A contest level on both scores is
-     * the referees' to give, and the screen has to say so.
+     * Level on the count, so the contest goes to whoever scored last. Both
+     * chala were thrown for, so origin does not separate them either.
      */
-    it('asks for a referee decision when the scores are level', function () {
+    it('gives an equal contest to the athlete who scored last', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'chala', 'a', 190)
+            ->call('score', 'chala', 'b', 150)
+            ->call('finishOnTime');
+
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
+            ->and($bout->win_type)->toBe('latest_score');
+    });
+
+    /**
+     * The software must not invent a winner. A contest with nothing to
+     * separate the two at all is the referees' to give, and the screen has to
+     * say so.
+     */
+    it('asks for a referee decision when there is nothing to separate them', function () {
         [$court, $bout] = boutOnMat();
 
         $component = Livewire::test(MatControl::class, ['court' => $court])
-            ->call('score', 'chala', 'a', 190)
-            ->call('score', 'chala', 'b', 150)
             ->call('finishOnTime')
             ->assertSet('awaitingDecision', true);
 
@@ -215,7 +344,7 @@ describe('the mat', function () {
         [$court, $bout] = boutOnMat(4);
 
         Livewire::test(MatControl::class, ['court' => $court])
-            ->call('score', 'halal', 'a', 100);
+            ->call('score', 'khalol', 'a', 100);
 
         $bout->refresh();
         $next = Bout::find($bout->next_bout_id);
@@ -228,7 +357,7 @@ describe('the mat', function () {
         [$court, $bout] = boutOnMat(4);
 
         $component = Livewire::test(MatControl::class, ['court' => $court])
-            ->call('score', 'halal', 'a', 100);
+            ->call('score', 'khalol', 'a', 100);
 
         $waiting = Bout::where('championship_id', $court->championship_id)
             ->readyToFight()

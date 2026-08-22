@@ -111,7 +111,7 @@ describe('caching', function () {
         app(BoutAdvancer::class)->recordResult(
             bout: $bout,
             winnerAthleteId: $bout->athlete_a_id,
-            winType: 'halal',
+            winType: 'khalol',
             user: null,
             source: 'operator',
         );
@@ -193,7 +193,7 @@ describe('conditional requests', function () {
         app(BoutAdvancer::class)->recordResult(
             bout: $bout,
             winnerAthleteId: $bout->athlete_a_id,
-            winType: 'halal',
+            winType: 'khalol',
             user: null,
             source: 'operator',
         );

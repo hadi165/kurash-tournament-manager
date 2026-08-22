@@ -53,6 +53,42 @@ describe('what it shows', function () {
             ->and($tally['b']->chala)->toBe(1);
     });
 
+    it('names the bout this mat runs next', function () {
+        [$court, $bout] = boutOnMat();
+
+        // A second contest in the same draw, assigned here and given a number.
+        $next = Bout::where('championship_id', $court->championship_id)
+            ->readyToFight()
+            ->whereKeyNot($bout->getKey())
+            ->firstOrFail();
+
+        $next->update(['court_id' => $court->id, 'fight_number' => 44, 'status' => Bout::STATUS_SCHEDULED]);
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertSee('No.44')
+            ->assertSee($next->athleteA->fullname);
+    });
+
+    it('leaves the next strip off when the mat has nothing else to run', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertDontSee('No.44');
+    });
+
+    it('does not promise a bout that belongs to another mat', function () {
+        [$court, $bout] = boutOnMat();
+
+        $elsewhere = Bout::where('championship_id', $court->championship_id)
+            ->readyToFight()
+            ->whereKeyNot($bout->getKey())
+            ->firstOrFail();
+
+        $elsewhere->update(['court_id' => null, 'fight_number' => 44, 'status' => Bout::STATUS_SCHEDULED]);
+
+        expect(Livewire::test(Scoreboard::class, ['court' => $court->refresh()])->viewData('nextBout'))->toBeNull();
+    });
+
     it('says so when the mat is empty', function () {
         [$court, $bout] = boutOnMat();
         $bout->update(['court_id' => null, 'status' => Bout::STATUS_PENDING]);
@@ -69,7 +105,7 @@ describe('what it shows', function () {
         [$court, $bout] = boutOnMat();
 
         $this->actingAs($this->admin);
-        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'halal', 'a', 150);
+        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'khalol', 'a', 150);
 
         $component = Livewire::test(Scoreboard::class, ['court' => $court->refresh()]);
 
@@ -102,6 +138,11 @@ describe('the shared clock', function () {
     });
 
     it('counts down from the anchor while it is running', function () {
+        // Frozen: the anchor is written from one reading of the clock and the
+        // countdown is computed from another, so a second ticking over between
+        // them made this fail on ten seconds having become eleven.
+        $this->freezeSecond();
+
         [$court, $bout] = boutOnMat();
 
         $bout->update([
@@ -157,7 +198,7 @@ describe('the shared clock', function () {
         $bout->update(['clock_seconds_left' => 90, 'clock_running' => true, 'clock_updated_at' => now()]);
 
         $this->actingAs($this->admin);
-        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'halal', 'b', 88);
+        Livewire::test(MatControl::class, ['court' => $court])->call('score', 'khalol', 'b', 88);
 
         expect(Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
             ->viewData('clockRunning'))->toBeFalse();

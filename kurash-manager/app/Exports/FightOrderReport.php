@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Bout;
 use App\Models\Championship;
+use App\Support\Gender;
 use App\Support\Noc;
 
 /**
@@ -16,24 +17,44 @@ use App\Support\Noc;
  */
 class FightOrderReport implements Report
 {
-    public function __construct(private readonly Championship $championship) {}
+    /**
+     * @param  string|null  $competition  'M' or 'F' to print one competition on
+     *                                    its own. A table official working the
+     *                                    women's classes should never have to
+     *                                    read past the men's.
+     */
+    public function __construct(
+        private readonly Championship $championship,
+        private readonly ?string $competition = null,
+    ) {}
 
     public function title(): string
     {
-        return 'Fight Order';
+        return $this->competition === null
+            ? 'Fight Order'
+            : 'Fight Order — '.Gender::label($this->competition);
     }
 
     public function filename(): string
     {
-        return 'Fight-Order-'.str($this->championship->title)->slug();
+        $name = 'Fight-Order-'.str($this->championship->title)->slug();
+
+        return $this->competition === null
+            ? $name
+            : $name.'-'.str(Gender::label($this->competition))->slug();
     }
 
     public function meta(): array
     {
-        return [
+        return array_filter([
             'Competition' => $this->championship->title,
             'Location' => $this->championship->location ?? '—',
-        ];
+            // Stated on the sheet, not only in the filename: a printout that
+            // leaves the room has to say which classes it covers.
+            'Classes' => $this->competition === null
+                ? 'All competitions'
+                : Gender::label($this->competition),
+        ]);
     }
 
     public function headings(): array
@@ -45,6 +66,12 @@ class FightOrderReport implements Report
     {
         $bouts = $this->championship->bouts()
             ->whereNotNull('fight_number')
+            // Scoped in the query: a men's sheet does not fetch the women's
+            // bouts and drop them while writing.
+            ->when($this->competition !== null, fn ($q) => $q->whereHas(
+                'ageCategory',
+                fn ($division) => $division->where('gender', $this->competition)
+            ))
             ->with(['athleteA', 'athleteB', 'winner', 'weightCategory.ageCategory', 'court'])
             ->orderBy('fight_number')
             ->get();

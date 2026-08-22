@@ -6,6 +6,7 @@ use App\Models\Athlete;
 use App\Models\Championship;
 use App\Models\WeightCategory;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Livewire\Component;
 
@@ -132,7 +133,9 @@ class Dashboard extends Component
             ];
         }
 
-        if ($undrawn->isNotEmpty()) {
+        // Drawing a bracket is an action, not a report: it is only offered to
+        // somebody who could carry it out.
+        if ($undrawn->isNotEmpty() && Gate::allows('manage-competition')) {
             $first = $undrawn->first();
 
             $steps[] = [

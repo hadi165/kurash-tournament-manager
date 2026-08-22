@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/styles.css">
+  <link rel="stylesheet" href="kurash-theme.css">
+  <script src="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/_ds_bundle.js"></script>
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Athlete Registration" style="display:flex; min-height:100vh; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body)">
+  <dc-import name="Sidebar" active="Athlete Registration" hint-size="252px,100%"></dc-import>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:10px 32px; border-bottom:2px solid var(--color-divider)">
+      <div style="font-size:13px; display:flex; align-items:center; gap:8px">
+        <a href="Championships.dc.html" style="font-weight:600; text-decoration:none">Championships</a>
+        <span class="text-muted">/</span>
+        <a href="Categories.dc.html" style="font-weight:600; text-decoration:none">Asian Kurash Championship 2026</a>
+        <span class="text-muted">/</span>
+        <span style="font-weight:600" class="text-muted">Registration</span>
+      </div>
+      <button class="btn btn-secondary" style="font-size:12px; padding:4px 12px" onClick="{{ toggleTheme }}">{{ themeBtnLabel }}</button>
+    </div>
+    <header style="padding:28px 32px 0">
+      <div class="kicker" style="color:var(--color-accent-600)">Men Senior</div>
+      <h1 style="font-size:36px; margin:8px 0 4px">Registration</h1>
+      <p class="text-muted" style="font-size:14px; margin:0 0 10px">Each athlete gets an IKA ID on registration, independent of any passport number.</p>
+      <div style="display:flex; align-items:center; gap:6px">
+        <span class="kicker text-muted" style="margin-right:4px">Accreditation cards</span>
+        <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">This category</a>
+        <a href="#" class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Whole championship</a>
+      </div>
+    </header>
+    <div style="padding:22px 32px 48px; display:flex; flex-direction:column; gap:20px; max-width:1240px">
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm); padding:22px 24px">
+        <h4 style="margin:0">Register athlete</h4>
+        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin:18px 0">
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">Full name</label>
+            <input class="input" value="{{ fFullname }}" onChange="{{ onFullname }}">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">NOC code</label>
+            <input class="input" placeholder="UZB" value="{{ fNoc }}" onChange="{{ onNoc }}">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">Country</label>
+            <input class="input" placeholder="Uzbekistan" value="{{ fCountry }}" onChange="{{ onCountry }}">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">Gender</label>
+            <select class="input" value="{{ fGender }}" onChange="{{ onGender }}">
+              <option value="M">Male</option>
+              <option value="F">Female</option>
+            </select>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">Weight class</label>
+            <select class="input" value="{{ fWeight }}" onChange="{{ onWeight }}">
+              <option value="">Select…</option>
+              <option value="-60">-60 kg</option>
+              <option value="-66">-66 kg</option>
+              <option value="-73">-73 kg</option>
+              <option value="-81">-81 kg</option>
+              <option value="-90">-90 kg</option>
+              <option value="+90">+90 kg</option>
+            </select>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">Passport / national ID</label>
+            <input class="input" value="{{ fNatId }}" onChange="{{ onNatId }}">
+            <div style="font-size:11px" class="text-muted">Optional</div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onClick="{{ register }}">Register</button>
+      </section>
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm)">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; padding:16px 20px">
+          <h4 style="margin:0">{{ countLabel }}</h4>
+          <input class="input" style="max-width:280px" placeholder="Search name, IKA ID or NOC" value="{{ search }}" onChange="{{ onSearch }}">
+        </div>
+        <table class="table" style="width:100%">
+          <thead>
+            <tr><th>IKA ID</th><th>Name</th><th>NOC</th><th>Weight</th><th>Weigh-in</th><th style="text-align:right">Draw</th><th></th></tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ rows }}" as="a" hint-placeholder-count="8">
+              <tr>
+                <td style="font-family:monospace; font-size:12px">{{ a.id }}</td>
+                <td style="font-weight:700">{{ a.name }}</td>
+                <td><span style="display:inline-block; padding:1px 6px; border:1px solid var(--color-neutral-400); font-size:11px; font-weight:700">{{ a.noc }}</span> <span class="text-muted" style="font-size:12px">{{ a.country }}</span></td>
+                <td>{{ a.weight }}</td>
+                <td><span class="tag" style="{{ a.badgeStyle }}">{{ a.badge }}</span></td>
+                <td style="text-align:right">{{ a.draw }}</td>
+                <td style="text-align:right">
+                  <div style="display:flex; justify-content:flex-end; gap:8px">
+                    <button class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Edit</button>
+                    <button class="btn btn-ghost" style="font-size:12px; padding:4px 10px; color:var(--color-danger)" onClick="{{ a.onRemove }}">Remove</button>
+                  </div>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;dark&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = {
+    themeOverride: null, search: '', nextNum: 170,
+    fFullname: '', fNoc: '', fCountry: '', fGender: 'M', fWeight: '', fNatId: '',
+    athletes: [
+      { id: 'IKA-26-0102', name: 'Ulugbek Rashidov', noc: 'UZB', country: 'Uzbekistan', weight: '-66', kg: 65.8, status: 'pass', draw: 3 },
+      { id: 'IKA-26-0117', name: 'Daniyar Seit', noc: 'KAZ', country: 'Kazakhstan', weight: '-66', kg: null, status: null, draw: null },
+      { id: 'IKA-26-0089', name: 'Emil Asanov', noc: 'KGZ', country: 'Kyrgyzstan', weight: '-73', kg: 72.9, status: 'pass', draw: 7 },
+      { id: 'IKA-26-0141', name: 'Firdavs Nazarov', noc: 'TJK', country: 'Tajikistan', weight: '-60', kg: 61.2, status: 'fail', draw: null },
+      { id: 'IKA-26-0056', name: 'Jasur Malikov', noc: 'UZB', country: 'Uzbekistan', weight: '-81', kg: 80.4, status: 'pass', draw: 2 },
+      { id: 'IKA-26-0163', name: 'Bat-Erdene Gan', noc: 'MGL', country: 'Mongolia', weight: '-90', kg: null, status: null, draw: null },
+      { id: 'IKA-26-0075', name: 'Reza Karimi', noc: 'IRI', country: 'Iran', weight: '+90', kg: 97.2, status: 'pass', draw: 5 },
+      { id: 'IKA-26-0128', name: 'Arjun Patel', noc: 'IND', country: 'India', weight: '-73', kg: 72.4, status: 'pass', draw: 1 },
+    ],
+  };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'dark';
+    const q = this.state.search.trim().toLowerCase();
+    const shown = this.state.athletes.filter(a => !q || a.name.toLowerCase().includes(q) || a.id.toLowerCase().includes(q) || a.noc.toLowerCase().includes(q));
+    const set = k => e => this.setState({ [k]: e.target.value });
+    return {
+      theme, themeBtnLabel: theme === 'dark' ? 'Light mode' : 'Dark mode',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }),
+      search: this.state.search, onSearch: set('search'),
+      countLabel: shown.length + (shown.length === 1 ? ' athlete' : ' athletes'),
+      fFullname: this.state.fFullname, onFullname: set('fFullname'),
+      fNoc: this.state.fNoc, onNoc: set('fNoc'),
+      fCountry: this.state.fCountry, onCountry: set('fCountry'),
+      fGender: this.state.fGender, onGender: set('fGender'),
+      fWeight: this.state.fWeight, onWeight: set('fWeight'),
+      fNatId: this.state.fNatId, onNatId: set('fNatId'),
+      register: () => {
+        const { fFullname, fNoc, fCountry, fWeight } = this.state;
+        if (!fFullname.trim() || !fNoc.trim() || !fWeight) return;
+        this.setState(s => ({
+          athletes: [...s.athletes, { id: 'IKA-26-0' + s.nextNum, name: fFullname.trim(), noc: fNoc.trim().toUpperCase(), country: fCountry.trim(), weight: fWeight, kg: null, status: null, draw: null }],
+          nextNum: s.nextNum + 1, fFullname: '', fNoc: '', fCountry: '', fNatId: '',
+        }));
+      },
+      rows: shown.map(a => ({
+        ...a,
+        draw: a.draw ?? '—',
+        badge: a.kg === null ? 'NOT WEIGHED' : a.kg + ' KG',
+        badgeStyle: a.kg === null
+          ? { background: 'transparent', border: '1px solid var(--color-neutral-400)', color: 'var(--color-text)' }
+          : a.status === 'pass'
+            ? { background: 'var(--color-accent-200)', color: 'var(--color-accent-800)' }
+            : { background: 'var(--color-danger-200)', color: 'var(--color-danger-700)' },
+        onRemove: () => { if (window.confirm('Remove ' + a.name + '?')) this.setState(s => ({ athletes: s.athletes.filter(x => x.id !== a.id) })); },
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Championship;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -28,6 +29,11 @@ class UserFactory extends Factory
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
+            // Stated rather than left to the column default: a model that was
+            // just created has only the attributes it was given, so an unset
+            // is_active reads as null and every capability check fails.
+            'role' => User::ROLE_ADMIN,
+            'is_active' => true,
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
             'two_factor_secret' => null,
@@ -56,5 +62,40 @@ class UserFactory extends Factory
             'two_factor_recovery_codes' => encrypt(json_encode(['recovery-code-1'])),
             'two_factor_confirmed_at' => now(),
         ]);
+    }
+
+    /** An account that may only read a scoreboard. */
+    public function scoreboardViewer(?Championship $scope = null): static
+    {
+        return $this->state(fn (): array => [
+            'role' => User::ROLE_SCOREBOARD_VIEWER,
+            'scoreboard_championship_id' => $scope?->getKey(),
+        ]);
+    }
+
+    /**
+     * A referee: scores one mat and reaches nothing else.
+     *
+     * Takes the same optional scope a scoreboard viewer does, because the
+     * column is the same question — which championship's mats this account
+     * belongs to.
+     */
+    public function referee(?Championship $scope = null): static
+    {
+        return $this->state(fn (): array => [
+            'role' => User::ROLE_REFEREE,
+            'scoreboard_championship_id' => $scope?->getKey(),
+        ]);
+    }
+
+    /** The operator: works the competition screens, changes nothing by right. */
+    public function official(): static
+    {
+        return $this->state(fn (): array => ['role' => User::ROLE_OFFICIAL]);
+    }
+
+    public function inactive(): static
+    {
+        return $this->state(fn (): array => ['is_active' => false]);
     }
 }

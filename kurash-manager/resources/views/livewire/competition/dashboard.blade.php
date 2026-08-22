@@ -1,108 +1,107 @@
-<div class="flex flex-col gap-6">
-    <div>
-        <flux:heading size="xl">{{ __('Dashboard') }}</flux:heading>
-        <flux:subheading>{{ __('Where each competition stands, and what it is waiting on.') }}</flux:subheading>
-    </div>
-
+<x-page
+    :title="__('Dashboard')"
+    :subtitle="__('Where each competition stands, and what it is waiting on.')"
+>
     @forelse ($championships as $c)
-        <flux:card class="flex flex-col gap-5" wire:key="champ-{{ $c['model']->id }}">
-            <div class="flex flex-wrap items-start justify-between gap-3">
+        <x-ui.card wire:key="champ-{{ $c['model']->id }}">
+            <div class="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                    <flux:heading size="lg">
-                        <a href="{{ route('championships.show', $c['model']) }}" wire:navigate class="hover:underline">
-                            {{ $c['model']->title }}
-                        </a>
-                    </flux:heading>
-                    <flux:subheading>
+                    <div class="flex flex-wrap items-center gap-2.5">
+                        <h2 class="m-0 text-xl">
+                            <a href="{{ route('championships.show', $c['model']) }}" wire:navigate
+                               class="text-ink no-underline hover:text-brand">
+                                {{ $c['model']->title }}
+                            </a>
+                        </h2>
+
+                        @if ($c['on_mat'] > 0)
+                            {{-- Bouts in progress are the only genuinely live
+                                 thing on this page, so they get the dot. --}}
+                            <x-ui.tag variant="brand" dot>
+                                {{ trans_choice('{1}:count bout on a mat|[2,*]:count bouts on mats', $c['on_mat'], ['count' => $c['on_mat']]) }}
+                            </x-ui.tag>
+                        @endif
+                    </div>
+
+                    <p class="mt-1.5 text-[13.5px] text-muted">
                         {{ $c['model']->location ?: __('Location not set') }}
                         @if ($c['model']->starts_on)
                             · {{ $c['model']->starts_on->format('j M Y') }}
                         @endif
-                    </flux:subheading>
+                    </p>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                    @if ($c['on_mat'] > 0)
-                        {{-- Bouts in progress are the only genuinely live thing
-                             on this page, so they get the strongest signal. --}}
-                        <flux:badge color="green" size="sm" icon="play">
-                            {{ trans_choice('{1}:count bout on a mat|[2,*]:count bouts on mats', $c['on_mat'], ['count' => $c['on_mat']]) }}
-                        </flux:badge>
-                    @endif
-
-                    <flux:button size="xs" variant="ghost" :href="route('fight-order.index', $c['model'])" wire:navigate>
+                    <flux:button size="sm" :href="route('fight-order.index', $c['model'])" wire:navigate>
                         {{ __('Fight order') }}
                     </flux:button>
-                    <flux:button size="xs" variant="ghost" :href="route('medals.index', $c['model'])" wire:navigate>
+                    <flux:button size="sm" :href="route('medals.index', $c['model'])" wire:navigate>
                         {{ __('Medals') }}
                     </flux:button>
                 </div>
             </div>
 
-            <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                @foreach ([
-                    ['label' => __('Athletes'), 'value' => $c['athletes']],
-                    ['label' => __('Weight classes'), 'value' => $c['classes']],
-                    ['label' => __('Passed the scale'), 'value' => $c['passed']],
-                    ['label' => __('Bouts'), 'value' => $c['bouts']],
-                    ['label' => __('Mats'), 'value' => $c['mats']],
-                ] as $stat)
-                    <div wire:key="stat-{{ $c['model']->id }}-{{ $stat['label'] }}">
-                        <div class="text-2xl font-semibold tabular-nums">{{ $stat['value'] }}</div>
-                        <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ $stat['label'] }}</flux:text>
-                    </div>
-                @endforeach
-            </div>
+            <x-ui.stats grid class="mt-5" :items="[
+                ['value' => $c['athletes'], 'label' => __('Athletes')],
+                ['value' => $c['classes'], 'label' => __('Weight classes')],
+                ['value' => $c['passed'], 'label' => __('Passed the scale')],
+                ['value' => $c['bouts'], 'label' => __('Bouts')],
+                ['value' => $c['mats'], 'label' => __('Mats')],
+            ]" />
 
             @if ($c['bouts'] > 0)
-                <div>
-                    <div class="mb-1 flex items-center justify-between text-xs text-zinc-500">
-                        <span>{{ __('Bouts decided') }}</span>
-                        <span class="tabular-nums">{{ $c['decided'] }} / {{ $c['bouts'] }}</span>
+                <div class="mt-5">
+                    <div class="mb-[7px] flex justify-between text-[13px]">
+                        <span class="text-muted">{{ __('Bouts decided') }}</span>
+                        <span class="font-semibold tabular-nums">{{ $c['decided'] }} / {{ $c['bouts'] }}</span>
                     </div>
-                    <div class="h-2 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
-                        <div
-                            class="h-full rounded-full bg-green-500 transition-[width]"
-                            style="width: {{ $c['progress'] }}%"
-                        ></div>
+
+                    <div class="h-2 overflow-hidden rounded-full bg-line">
+                        <div class="h-2 rounded-full bg-brand" style="width: {{ $c['progress'] }}%"></div>
                     </div>
                 </div>
             @endif
 
+            {{-- What the competition is waiting on. Blue rather than green: it
+                 is information, not a result. --}}
             @if (! empty($c['next_steps']))
-                <div class="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-900/50 dark:bg-amber-950/30">
-                    <flux:text class="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                        {{ __('Next') }}
-                    </flux:text>
+                <div class="mt-5 rounded-md bg-info-soft px-[18px] py-4">
+                    <div class="kicker mb-2.5 text-info-deep">{{ __('Next up') }}</div>
 
-                    @foreach ($c['next_steps'] as $i => $step)
-                        <div class="flex flex-wrap items-center gap-3 text-sm" wire:key="step-{{ $c['model']->id }}-{{ $i }}">
-                            <span>{{ $step['text'] }}</span>
+                    <div class="flex flex-col gap-2.5">
+                        @foreach ($c['next_steps'] as $i => $step)
+                            <div class="flex flex-wrap items-center gap-3.5" wire:key="step-{{ $c['model']->id }}-{{ $i }}">
+                                <span class="text-sm">{{ $step['text'] }}</span>
 
-                            @if ($step['route'])
-                                <flux:button size="xs" :href="route($step['route'], $step['params'])" wire:navigate>
-                                    {{ $step['label'] }}
-                                </flux:button>
-                            @endif
-                        </div>
-                    @endforeach
+                                @if ($step['route'])
+                                    <x-ui.chip :href="route($step['route'], $step['params'])" wire:navigate>
+                                        {{ $step['label'] }} →
+                                    </x-ui.chip>
+                                @endif
+                            </div>
+                        @endforeach
+                    </div>
                 </div>
             @elseif ($c['bouts'] > 0 && $c['decided'] === $c['bouts'])
-                <flux:callout variant="success" icon="trophy">
-                    {{ __('Every bout is decided.') }}
-                    <flux:button size="xs" :href="route('medals.index', $c['model'])" wire:navigate class="ms-2">
-                        {{ __('See the medals') }}
-                    </flux:button>
-                </flux:callout>
+                <div class="mt-5 flex flex-wrap items-center gap-3.5 rounded-md bg-brand-soft px-[18px] py-4">
+                    <span class="text-sm text-brand-deep">{{ __('Every bout is decided.') }}</span>
+                    <x-ui.chip :href="route('medals.index', $c['model'])" wire:navigate>
+                        {{ __('See the medals') }} →
+                    </x-ui.chip>
+                </div>
             @endif
-        </flux:card>
+        </x-ui.card>
     @empty
-        <flux:card class="flex flex-col items-start gap-3 py-10 text-center sm:items-center">
-            <flux:heading size="lg">{{ __('No competitions yet') }}</flux:heading>
-            <flux:subheading>{{ __('Create a championship, then add its categories and weight classes.') }}</flux:subheading>
-            <flux:button variant="primary" :href="route('championships.index')" wire:navigate>
-                {{ __('Create a championship') }}
-            </flux:button>
-        </flux:card>
+        <x-ui.card class="py-10 text-center">
+            <h2 class="m-0 text-2xl">{{ __('No competitions yet') }}</h2>
+            <p class="mt-2 text-[13.5px] text-muted">
+                {{ __('Create a championship, then add its categories and weight classes.') }}
+            </p>
+            <div class="mt-5">
+                <flux:button variant="primary" :href="route('championships.index')" wire:navigate>
+                    {{ __('Create a championship') }}
+                </flux:button>
+            </div>
+        </x-ui.card>
     @endforelse
-</div>
+</x-page>

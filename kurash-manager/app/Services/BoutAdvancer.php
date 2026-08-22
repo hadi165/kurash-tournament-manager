@@ -27,7 +27,7 @@ class BoutAdvancer
         Bout $bout,
         int $winnerAthleteId,
         array $scores = [],
-        string $winType = 'halal',
+        string $winType = 'khalol',
         ?User $user = null,
         string $source = 'operator',
     ): Bout {
@@ -85,6 +85,58 @@ class BoutAdvancer
             ]);
 
             $this->advance($bout, $user);
+
+            return $bout->refresh();
+        });
+    }
+
+    /**
+     * Take a result off a bout and put it back on the mat.
+     *
+     * The counterpart to recordResult, for the call that ended a contest by
+     * mistake — a khalol pressed on the wrong side, a girrom the referee
+     * withdrew. Correcting it from the bracket screen means recording a
+     * different winner, which is the wrong shape for "that did not happen":
+     * the contest has to become live again so it can be fought out.
+     *
+     * Everything the old winner went on to do is unwound first, exactly as a
+     * correction does. Leaving them standing in the next round would be worse
+     * than the original mistake, because nobody would be looking for them
+     * there.
+     */
+    public function clearResult(Bout $bout, ?User $user = null, string $reason = 'reopened'): Bout
+    {
+        if (! $bout->isDecided()) {
+            return $bout;
+        }
+
+        return DB::transaction(function () use ($bout, $user, $reason) {
+            $before = $bout->only(['winner_athlete_id', 'score_a', 'score_b', 'win_type', 'status']);
+
+            $this->unwind($bout, $user);
+
+            $bout->update([
+                'winner_athlete_id' => null,
+                'score_a' => null,
+                'score_b' => null,
+                'win_type' => null,
+                'is_bye' => false,
+                'status' => Bout::STATUS_ON_COURT,
+                // The snapshot froze who these athletes were when the result
+                // was recorded. There is no result now, so there is nothing for
+                // it to be evidence of.
+                'frozen_snapshot' => null,
+            ]);
+
+            BoutEvent::createInSequence([
+                'bout_id' => $bout->id,
+                'user_id' => $user?->id,
+                'action' => 'result_cleared',
+                'entry_action' => 'REMOVE',
+                'source' => 'operator',
+                'before' => $before,
+                'after' => ['reason' => $reason],
+            ]);
 
             return $bout->refresh();
         });

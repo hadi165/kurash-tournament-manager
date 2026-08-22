@@ -1,0 +1,777 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   The draw ceremony.
+
+   Broadcast furniture, not an admin page: its own palette, scoped to .dc so
+   nothing here can drift when the application's tokens change, and nothing
+   here can leak into them. Loaded by the admin draw screen's overlay and by
+   the venue big-screen route, which share this vocabulary exactly.
+
+   A draw is a legal record being made in public. There is one animation — the
+   slot that was just filled arrives — and nothing loops, drifts or sits on top
+   of information a viewer needs to read.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dc {
+    --dc-bg: #070c12;
+    --dc-panel: rgb(255 255 255 / 0.04);
+    --dc-line: rgb(255 255 255 / 0.09);
+    --dc-ink: #f2f6f4;
+    --dc-muted: #8697a0;
+    --dc-dim: rgb(255 255 255 / 0.28);
+
+    /* One accent. Gold is reserved for the slot just filled, the final, the
+       champion column and the complete chip — nowhere else. */
+    --dc-accent: #12c268;
+    --dc-gold: #d9a94a;
+
+    --dc-radius: 6px;
+    --dc-radius-sm: 4px;
+
+    --dc-enter: 360ms;
+    --dc-ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+    color: var(--dc-ink);
+    font-family: "Segoe UI", "Segoe UI Variable", "Source Sans 3", system-ui, sans-serif;
+}
+
+.dc-charcoal { --dc-bg: #0f1215; }
+
+/* ── Shared vocabulary ──────────────────────────────────────────────────── */
+
+/* Anything Alpine hides on load has to be hidden before Alpine boots. These
+   pages load this stylesheet and nothing else, so the rule lives here too —
+   without it both sides of an x-show pair paint for a frame, which on a venue
+   screen means the board briefly shows a name and DRAWING… at once. */
+[x-cloak] { display: none !important; }
+
+.dc-panel {
+    background: var(--dc-panel);
+    border: 1px solid var(--dc-line);
+    border-radius: var(--dc-radius);
+}
+
+.dc-kicker {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.dc-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px;
+    border-radius: var(--dc-radius-sm);
+    border: 1px solid var(--dc-line);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+}
+
+.dc-chip-live { color: var(--dc-accent); border-color: rgb(18 194 104 / 0.4); }
+.dc-chip-done { color: var(--dc-gold); border-color: rgb(217 169 74 / 0.45); }
+
+.dc-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 999px;
+    background: currentColor;
+    flex: none;
+}
+
+/* ── The overlay on the admin draw screen ───────────────────────────────── */
+
+.dc-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 26px;
+    padding: 56px;
+    background: var(--dc-bg);
+    text-align: center;
+}
+
+.dc-emblem {
+    width: 64px;
+    height: 64px;
+    color: var(--dc-accent);
+}
+
+.dc-heading {
+    margin: 0;
+    font-size: 29px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    text-transform: uppercase;
+}
+
+.dc-sub {
+    margin: 0;
+    font-size: 14.5px;
+    color: var(--dc-muted);
+}
+
+/* Indeterminate, and honest about it: the bar reports that work is happening,
+   never how much of it is done — the server has not been asked how far it is. */
+.dc-progress {
+    width: 320px;
+    max-width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: rgb(255 255 255 / 0.08);
+    overflow: hidden;
+}
+
+.dc-progress span {
+    display: block;
+    width: 40%;
+    height: 100%;
+    border-radius: 2px;
+    background: var(--dc-accent);
+    animation: dc-sweep 1.4s var(--dc-ease) infinite;
+}
+
+.dc-progress-done span {
+    width: 100%;
+    background: var(--dc-gold);
+    animation: none;
+}
+
+/* Seed tokens, sorting. Real names when the screen already has them. */
+.dc-tokens {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    max-width: 900px;
+}
+
+.dc-token {
+    padding: 7px 14px;
+    border-radius: var(--dc-radius-sm);
+    background: var(--dc-panel);
+    border: 1px solid var(--dc-line);
+    font-size: 13.5px;
+    font-weight: 600;
+    animation: dc-rise var(--dc-enter) var(--dc-ease) both;
+}
+
+.dc-seat {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-width: 0;
+    padding: 10px 14px;
+    border-radius: var(--dc-radius-sm);
+    background: var(--dc-panel);
+    border: 1px solid var(--dc-line);
+    border-left: 3px solid var(--dc-accent);
+    font-size: 13.5px;
+    text-align: left;
+    animation: dc-rise var(--dc-enter) var(--dc-ease) both;
+}
+
+.dc-seat-final { border-left-color: var(--dc-gold); }
+
+.dc-seat-seed {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--dc-muted);
+    min-width: 22px;
+}
+
+/* The seats size themselves to the column rather than holding a 260px floor:
+   on a phone the overlay is the whole screen, and a floor wider than it means
+   seven of the eight pairs are laid out where nobody can see them. */
+.dc-pairs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 240px));
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 860px;
+}
+
+/* ── Failure ────────────────────────────────────────────────────────────── */
+
+.dc-error { border-left: 3px solid #e0464f; padding: 20px 24px; max-width: 560px; }
+
+.dc-button {
+    padding: 9px 18px;
+    border-radius: var(--dc-radius-sm);
+    border: 1px solid var(--dc-line);
+    background: transparent;
+    color: var(--dc-ink);
+    font: inherit;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.dc-button-primary { background: var(--dc-accent); border-color: var(--dc-accent); color: #04140b; }
+
+.dc :focus-visible { outline: 2px solid var(--dc-accent); outline-offset: 2px; }
+
+/* ── The one animation ──────────────────────────────────────────────────── */
+
+@keyframes dc-rise {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes dc-sweep {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(250%); }
+}
+
+/* Reduced motion keeps every word and the progress feedback; it removes the
+   movement, not the information. Nothing here is revealed *by* an animation,
+   so switching them off can never leave content invisible. */
+@media (prefers-reduced-motion: reduce) {
+    .dc-token,
+    .dc-seat {
+        animation: dc-fade 120ms linear both;
+    }
+
+    .dc-progress span {
+        width: 100%;
+        animation: none;
+    }
+
+    @keyframes dc-fade {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   The venue draw board.
+
+   1920×1080 furniture: fixed gutters, fixed row heights, no fluid type. It is
+   read from the back of a hall, so nothing here reflows on a narrow window —
+   it scrolls instead, which is honest about what it is.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.dc-board-page {
+    --dc-conn: rgb(255 255 255 / 0.14);
+    --dc-row: 46px;
+
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--dc-bg);
+}
+
+/* A bracket of 32 does not fit a 1080 screen at 46px a row. The rows shrink
+   rather than the sheet scrolling, because a draw board that has to be
+   scrolled in front of a hall is not a draw board. */
+.dc-board-32 { --dc-row: 30px; }
+
+.dc-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 26px 56px;
+    border-bottom: 1px solid var(--dc-line);
+}
+
+/* The board loads this stylesheet and nothing else — no Tailwind, no
+   application bundle — so every rule it needs lives here, including the plain
+   layout ones. Self-contained is the point: the venue screen cannot drift when
+   the admin theme changes because it never reads it. */
+.dc-logo {
+    background: #fff;
+    padding: 6px;
+    border-radius: var(--dc-radius-sm);
+    line-height: 0;
+    flex: none;
+}
+
+.dc-logo img {
+    display: block;
+    width: 44px;
+    height: 44px;
+    object-fit: contain;
+}
+
+.dc-head-id {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-width: 0;
+}
+
+/* Wraps rather than running off the edge: the chips are facts about the draw,
+   and the last of them is the one that says it is live. */
+.dc-chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    min-width: 0;
+}
+
+.dc-pool-list {
+    display: flex;
+    flex-direction: column;
+    margin-top: 12px;
+}
+
+.dc-foot-group {
+    display: flex;
+    align-items: center;
+    gap: 26px;
+    min-width: 0;
+}
+
+.dc-board-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px;
+}
+
+.dc-org {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-accent);
+}
+
+.dc-champ {
+    font-size: 29px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    margin-top: 4px;
+}
+
+.dc-body {
+    flex: 1;
+    display: flex;
+    gap: 40px;
+    padding: 32px 56px;
+    min-height: 0;
+}
+
+/* ── Pool panel ─────────────────────────────────────────────────────────── */
+
+.dc-pool { width: 340px; flex: none; }
+
+.dc-now {
+    padding: 20px;
+    margin: 12px 0 28px;
+    border-left: 3px solid var(--dc-accent);
+}
+
+.dc-now-noc {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.dc-now-name {
+    font-size: 31px;
+    font-weight: 900;
+    text-transform: uppercase;
+    line-height: 1.05;
+    margin-top: 6px;
+}
+
+.dc-now-meta { font-size: 13px; color: var(--dc-muted); margin-top: 8px; }
+
+.dc-pool-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--dc-line);
+    font-size: 14px;
+}
+
+.dc-pool-noc { font-weight: 700; min-width: 42px; }
+.dc-pool-name { color: var(--dc-muted); flex: 1; min-width: 0; }
+.dc-pool-count { font-variant-numeric: tabular-nums; font-weight: 700; }
+.dc-pool-empty { padding: 14px 12px; font-size: 14px; color: var(--dc-muted); }
+
+/* ── The tree ───────────────────────────────────────────────────────────── */
+
+.dc-board { flex: 1; min-width: 0; overflow-x: auto; }
+
+.dc-heads { display: grid; margin-bottom: 10px; }
+
+.dc-head-col {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+    padding-left: 2px;
+}
+
+.dc-grid { display: grid; }
+
+.dc-seat-row {
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    height: var(--dc-row);
+    padding: 0 14px;
+    border-left: 3px solid transparent;
+    border-bottom: 1px solid var(--dc-line);
+}
+
+.dc-seat-filled { border-left-color: rgb(18 194 104 / 0.55); }
+
+/* The slot just filled: gold rail, a wash of gold behind it, gold numeral —
+   the newest fact on the board, and the only thing that moves. */
+.dc-seat-new {
+    border-left-color: var(--dc-gold);
+    background: rgb(217 169 74 / 0.1);
+    animation: dc-rise var(--dc-enter) var(--dc-ease) both;
+}
+
+.dc-seat-new .dc-seat-no { color: var(--dc-gold); }
+
+.dc-seat-no {
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--dc-muted);
+    min-width: 26px;
+}
+
+.dc-seat-name { font-size: 17.5px; font-weight: 600; flex: 1; min-width: 0; }
+.dc-seat-empty { color: var(--dc-dim); }
+.dc-seat-noc { font-size: 13px; font-weight: 700; color: var(--dc-muted); }
+
+.dc-match {
+    border-left: 1px solid var(--dc-conn);
+    position: relative;
+}
+
+.dc-match::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 50%;
+    width: 16px;
+    border-top: 1px solid var(--dc-conn);
+}
+
+.dc-champion {
+    grid-row: 1 / -1;
+    align-self: center;
+    padding: 0 18px;
+}
+
+.dc-champion-kicker {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.dc-champion-slot {
+    margin-top: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--dc-conn);
+    font-size: 17.5px;
+    font-weight: 600;
+    color: var(--dc-dim);
+}
+
+.dc-complete .dc-champion-kicker,
+.dc-complete .dc-champion-slot { color: var(--dc-gold); }
+.dc-complete .dc-champion-slot { border-bottom-color: var(--dc-gold); }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+
+.dc-foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 26px;
+    padding: 20px 56px;
+    border-top: 1px solid var(--dc-line);
+}
+
+.dc-foot-label {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.dc-track {
+    width: 420px;
+    max-width: 40vw;
+    height: 4px;
+    border-radius: 2px;
+    background: rgb(255 255 255 / 0.08);
+    overflow: hidden;
+}
+
+.dc-fill { height: 100%; background: var(--dc-accent); }
+.dc-complete .dc-fill { background: var(--dc-gold); }
+
+.dc-legend {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 12px;
+    color: var(--dc-muted);
+}
+
+.dc-legend-dot { width: 8px; height: 8px; border-radius: 2px; background: var(--dc-gold); }
+
+/* The feed dot, as on the scoreboard: this board runs on a poll, and a frozen
+   draw board in front of a hall is as dangerous as a frozen clock. */
+.dc-feed { width: 10px; height: 10px; border-radius: 999px; background: var(--dc-accent); flex: none; }
+.dc-feed-stale { background: #e0464f; animation: dc-pulse 1s ease-in-out infinite; }
+
+@keyframes dc-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dc-seat-new { animation: dc-fade 120ms linear both; }
+    .dc-feed-stale { animation: none; }
+}
+
+/* ── Scoreboard picker ──────────────────────────────────────────────────── */
+
+.dc-select { flex-direction: column; gap: 34px; }
+
+.dc-select-group { min-width: 0; }
+
+.dc-select-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.dc-select-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 20px;
+    text-decoration: none;
+    color: inherit;
+    border-left: 3px solid var(--dc-accent);
+}
+
+.dc-select-no {
+    font-size: 27px;
+    font-weight: 900;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.dc-select-name { font-size: 17.5px; font-weight: 600; }
+.dc-select-meta { font-size: 13px; color: var(--dc-muted); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   The signed-in scoreboard.
+
+   A wall display that happens to have an account behind it: a quiet header, a
+   mat selector, and a board that takes everything left. No navigation, because
+   there is nowhere else this account can go.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sbv {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--dc-bg);
+}
+
+.sbv-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--dc-line);
+}
+
+.sbv-head-id { display: flex; align-items: center; gap: 14px; min-width: 0; }
+
+.sbv-titles { display: flex; flex-direction: column; min-width: 0; }
+
+.sbv-champ {
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.sbv-label {
+    font-size: 19px;
+    font-weight: 900;
+    letter-spacing: -0.01em;
+}
+
+.sbv-tools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.sbv-select {
+    background: var(--dc-panel);
+    border: 1px solid var(--dc-line);
+    border-radius: var(--dc-radius-sm);
+    color: var(--dc-ink);
+    font: inherit;
+    font-size: 13.5px;
+    padding: 8px 12px;
+    max-width: 260px;
+}
+
+.sbv-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.sbv-status.-live { color: var(--dc-accent); }
+.sbv-status.-warn { color: var(--dc-gold); }
+.sbv-status.-off { color: #e0464f; }
+
+.sbv-readonly {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+    border: 1px solid var(--dc-line);
+    border-radius: var(--dc-radius-sm);
+    padding: 5px 10px;
+}
+
+.sbv-board { flex: 1; min-height: 0; display: flex; }
+
+.sbv-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.sbv-picker {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+    width: 100%;
+    max-width: 900px;
+}
+
+.sbv-card {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 18px;
+    text-align: left;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+    border-left: 3px solid var(--dc-accent);
+}
+
+.sbv-card-no { font-size: 25px; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; }
+.sbv-card-name { font-size: 16px; font-weight: 600; }
+.sbv-card-meta { font-size: 12.5px; color: var(--dc-muted); }
+
+/* Announced, not shown: the header already says which mat is on screen. */
+.sbv-sr {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+/* Embedded in the viewer chrome, the board fills what is left of the page
+   rather than claiming the whole viewport. */
+.sbv-board .board { height: auto; flex: 1; }
+
+@media (max-width: 720px) {
+    .sbv-head { padding: 10px 14px; }
+    .sbv-select { max-width: 160px; }
+    .sbv-readonly { display: none; }
+}
+
+/* The ceremony's waiting state, and the one control that starts it. */
+.dc-now-waiting { border-left-color: var(--dc-gold); }
+
+.dc-start { margin: -16px 0 28px; }
+
+/* ── The board on smaller screens ───────────────────────────────────────────
+   It is venue furniture first, but a phone must still be able to read it:
+   the panel and the tree stack, the gutters close up, and the tree scrolls
+   inside its own column rather than pushing the page sideways. */
+@media (max-width: 1100px) {
+    .dc-body { flex-direction: column; gap: 24px; padding: 24px; }
+    .dc-pool { width: 100%; }
+    .dc-head { padding: 18px 24px; }
+    .dc-foot { padding: 16px 24px; }
+    .dc-champ { font-size: 23px; }
+    .dc-now-name { font-size: 26px; }
+}
+
+@media (max-width: 720px) {
+    .dc-board-page { --dc-row: 34px; }
+    .dc-head { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .dc-body { padding: 18px; gap: 18px; }
+    .dc-foot { flex-direction: column; align-items: flex-start; gap: 12px; }
+    .dc-track { width: 100%; max-width: none; }
+    .dc-champ { font-size: 20px; }
+    .dc-now { padding: 16px; }
+    .dc-now-name { font-size: 22px; }
+    .dc-seat-name { font-size: 15px; }
+}
+
+/* The beat before a name lands. It pulses once per position rather than
+   looping continuously, and stops entirely for reduced motion. */
+.dc-now-drawing {
+    color: var(--dc-gold);
+    animation: dc-breathe 1.1s var(--dc-ease) infinite;
+}
+
+@keyframes dc-breathe {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .dc-now-drawing { animation: none; opacity: 1; }
+}

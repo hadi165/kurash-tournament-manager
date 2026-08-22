@@ -31,8 +31,23 @@ class BracketGenerator
     /**
      * @return array{bouts:int, byes:int, rounds:int, size:int}
      */
-    public function generate(WeightCategory $category, bool $discardResults = false): array
+    public function generate(WeightCategory $category, bool $discardResults = false, bool $replacePublished = false): array
     {
+        // A published draw is a document other people are working from, and a
+        // locked one is a document nobody may replace without unlocking it
+        // first. Neither is something a stray call should be able to redraw.
+        if ($category->isDrawLocked()) {
+            throw new DrawIsProtectedException(
+                "The draw for {$category->label} is locked. Unlock it before drawing again."
+            );
+        }
+
+        if ($category->isDrawPublished() && ! $replacePublished) {
+            throw new DrawIsProtectedException(
+                "The draw for {$category->label} is published. Withdraw it before drawing again."
+            );
+        }
+
         $athletes = $category->drawnAthletes()->get();
 
         if ($athletes->isEmpty()) {
@@ -57,7 +72,9 @@ class BracketGenerator
         $rounds = BracketSeeding::totalRounds($size);
         $token = Str::lower(Str::random(4));
 
-        return DB::transaction(function () use ($category, $byDrawNumber, $size, $rounds, $token) {
+        $athleteCount = $athletes->count();
+
+        return DB::transaction(function () use ($category, $byDrawNumber, $size, $rounds, $token, $athleteCount) {
             $category->bouts()->delete();
 
             $boutsByRound = $this->createBouts($category, $size, $rounds, $token);
@@ -66,11 +83,25 @@ class BracketGenerator
 
             $byes = $this->resolveWalkovers($boutsByRound, $rounds);
 
+            // Recorded in the same transaction as the rows they describe, so
+            // the metadata can never describe a bracket that was not written.
+            // Publication is deliberately cleared: a new table has not been
+            // approved by anybody yet.
+            $category->forceFill([
+                'draw_generated_at' => now(),
+                'draw_athlete_count' => $athleteCount,
+                'draw_bucket_size' => $size,
+                'draw_bye_count' => $size - $athleteCount,
+                'draw_version' => $category->draw_version + 1,
+                'draw_published_at' => null,
+            ])->save();
+
             return [
                 'bouts' => array_sum(array_map('count', $boutsByRound)),
                 'byes' => $byes,
                 'rounds' => $rounds,
                 'size' => $size,
+                'athletes' => $athleteCount,
             ];
         });
     }

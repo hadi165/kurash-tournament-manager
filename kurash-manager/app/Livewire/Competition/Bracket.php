@@ -10,9 +10,11 @@ use App\Models\WeightCategory;
 use App\Services\BoutAdvancer;
 use App\Services\BracketGenerator;
 use App\Services\BracketHasResultsException;
+use App\Services\DrawIsProtectedException;
 use App\Services\MedalTable;
 use App\Support\BracketSeeding;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -39,6 +41,11 @@ class Bracket extends Component
     public array $draws = [];
 
     public bool $confirmingRegenerate = false;
+
+    public bool $confirmingDelete = false;
+
+    /** Set when a draw that somebody may already be presenting would be replaced. */
+    public bool $confirmingReplacePublished = false;
 
     public function mount(WeightCategory $weightCategory): void
     {
@@ -87,16 +94,36 @@ class Bracket extends Component
             $seen[$number] = $athleteId;
         }
 
-        foreach ($this->athletes() as $athlete) {
-            $value = $this->draws[$athlete->id] ?? '';
+        // Cleared first, then written, and both inside one transaction. Draw
+        // numbers are unique per category, so writing them one at a time in
+        // place fails the moment two athletes swap: the first update tries to
+        // take a number the second is still holding.
+        //
+        // Written by query rather than through the loaded models for the same
+        // reason drawAtRandom() does: an Eloquent model only persists *dirty*
+        // attributes, and these were loaded before the clear, so an athlete
+        // keeping the number they already had would look unchanged and be left
+        // at NULL.
+        DB::transaction(function () use ($seen) {
+            $this->weightCategory->athletes()->update(['draw_number' => null, 'draw_number_source' => null]);
 
-            $athlete->update([
-                'draw_number' => $value === '' ? null : (int) $value,
-                'draw_number_source' => $value === '' ? null : 'manual',
-            ]);
-        }
+            foreach ($seen as $number => $athleteId) {
+                Athlete::whereKey($athleteId)->update([
+                    'draw_number' => $number,
+                    'draw_number_source' => 'manual',
+                ]);
+            }
+        });
 
-        session()->flash('status', __('Draw numbers saved.'));
+        $this->syncDraws();
+
+        // Changing the numbers does not move anybody in a bracket that already
+        // exists — the draw is what the bracket was built from, not something
+        // it reads live. Saying so beats leaving an official to wonder why the
+        // tree on screen did not move.
+        session()->flash('status', $this->weightCategory->bouts()->exists()
+            ? __('Draw numbers saved. Redraw the bracket for the new order to take effect.')
+            : __('Draw numbers saved.'));
     }
 
     /** Assign draw numbers at random to everyone who passed the scale. */
@@ -110,7 +137,7 @@ class Bracket extends Component
             ->shuffle();
 
         if ($eligibleIds->isEmpty()) {
-            session()->flash('error', __('Nobody in this class has passed the weigh-in.'));
+            $this->drawFailed(__('Nobody in this class has passed the weigh-in.'));
 
             return;
         }
@@ -132,34 +159,190 @@ class Bracket extends Component
             }
         });
 
+        // The ceremony board reads this stamp to pace its reveal. The draw
+        // itself is already committed above — what is paced is the telling of
+        // it, never the drawing, so a hall watching position 4 appear is
+        // watching a result that has been final for ten seconds.
+        Cache::put(
+            DrawCeremony::paceKey($this->weightCategory->id),
+            ['at' => (int) now()->timestamp, 'per' => 3],
+            now()->addHour(),
+        );
+
         $this->syncDraws();
         session()->flash('status', __('Drew :count athlete(s) at random.', ['count' => $eligibleIds->count()]));
+
+        $this->dispatch('draw-completed', mode: 'positions');
     }
 
-    public function generate(bool $discardResults = false): void
+    public function generate(bool $discardResults = false, bool $replacePublished = false): void
     {
         Gate::authorize('manage-competition');
 
         try {
-            $result = app(BracketGenerator::class)->generate($this->weightCategory, $discardResults);
+            $result = app(BracketGenerator::class)->generate($this->weightCategory, $discardResults, $replacePublished);
+        } catch (DrawIsProtectedException $e) {
+            // A published draw is one other people have been told to work
+            // from, so replacing it is a decision, not a click.
+            $this->confirmingReplacePublished = ! $this->weightCategory->isDrawLocked();
+            $this->drawFailed($e->getMessage());
+
+            return;
         } catch (BracketHasResultsException $e) {
             $this->confirmingRegenerate = true;
-            session()->flash('error', $e->getMessage());
+            $this->drawFailed($e->getMessage());
 
             return;
         } catch (Throwable $e) {
-            session()->flash('error', $e->getMessage());
+            $this->drawFailed($e->getMessage());
 
             return;
         }
 
         $this->confirmingRegenerate = false;
+        $this->confirmingReplacePublished = false;
+
+        $this->dispatch('draw-completed', mode: 'bracket');
 
         session()->flash('status', __('Bracket drawn: :bouts bouts across :rounds rounds, :byes bye(s).', [
             'bouts' => $result['bouts'],
             'rounds' => $result['rounds'],
             'byes' => $result['byes'],
         ]));
+    }
+
+    /**
+     * Tell the ceremony overlay the draw did not run.
+     *
+     * Flashed as well as dispatched: the overlay is decoration and the flash
+     * is the record, so the message survives on the screen after the overlay
+     * is dismissed.
+     */
+    private function drawFailed(string $message): void
+    {
+        session()->flash('error', $message);
+
+        $this->dispatch('draw-failed', message: $message);
+    }
+
+    /**
+     * Approve the drawn table for everybody else to see.
+     *
+     * Publication is what separates a table being worked on from one an
+     * operator may present, so it is its own permission and its own decision —
+     * generating a bracket deliberately does not publish it.
+     */
+    public function publishDraw(): void
+    {
+        Gate::authorize('draw.publish');
+
+        if (! $this->weightCategory->hasDraw()) {
+            session()->flash('error', __('There is no draw to publish yet.'));
+
+            return;
+        }
+
+        $this->weightCategory->forceFill(['draw_published_at' => now()])->save();
+
+        session()->flash('status', __('Draw published. Operators can present it now.'));
+    }
+
+    public function withdrawDraw(): void
+    {
+        Gate::authorize('draw.publish');
+
+        $this->weightCategory->forceFill(['draw_published_at' => null])->save();
+
+        session()->flash('status', __('Draw withdrawn. It is no longer available to operators.'));
+    }
+
+    /** Locked means not even an admin redraws it without unlocking first. */
+    public function toggleDrawLock(): void
+    {
+        Gate::authorize('draw.publish');
+
+        $locked = $this->weightCategory->isDrawLocked();
+
+        $this->weightCategory->forceFill(['draw_locked_at' => $locked ? null : now()])->save();
+
+        session()->flash('status', $locked ? __('Draw unlocked.') : __('Draw locked.'));
+    }
+
+    /**
+     * Throw the drawn bracket away.
+     *
+     * Registration refuses to remove an athlete once their class has been
+     * drawn, because deleting one out of a bracket leaves a tree with a hole
+     * in it. That is the right refusal, but it needs a way out: this is it.
+     * Draw numbers are deliberately kept, so the usual sequence — delete,
+     * correct the entry list, redraw — costs nobody the draw they already
+     * made.
+     *
+     * Deleted through the models rather than by one query, so the archived
+     * championship guard fires: a closed competition's results are not
+     * something a button should be able to erase.
+     */
+    public function deleteBracket(bool $discardResults = false): void
+    {
+        Gate::authorize('manage-competition');
+
+        if (! $this->weightCategory->bouts()->exists()) {
+            session()->flash('error', __('There is no bracket to delete.'));
+
+            return;
+        }
+
+        // A contest being scored right now would vanish from under the mat
+        // screen mid-bout, so that one is refused outright rather than
+        // confirmed.
+        if ($this->weightCategory->bouts()->where('status', Bout::STATUS_ON_COURT)->exists()) {
+            session()->flash('error', __('A contest from this class is on a mat. Take it off the mat before deleting the bracket.'));
+
+            return;
+        }
+
+        $decided = $this->weightCategory->bouts()
+            ->whereNotNull('winner_athlete_id')
+            ->where('is_bye', false)
+            ->count();
+
+        if ($decided > 0 && ! $discardResults) {
+            $this->confirmingDelete = true;
+
+            session()->flash('error', trans_choice(
+                '{1}:count contest has been decided in this class. Deleting the bracket erases it.'
+                .'|[2,*]:count contests have been decided in this class. Deleting the bracket erases them.',
+                $decided,
+                ['count' => $decided],
+            ));
+
+            return;
+        }
+
+        try {
+            DB::transaction(function () {
+                $this->weightCategory->bouts()->get()->each->delete();
+
+                // The metadata described rows that no longer exist, and a
+                // deleted draw is certainly not a published one.
+                $this->weightCategory->forceFill([
+                    'draw_generated_at' => null,
+                    'draw_athlete_count' => null,
+                    'draw_bucket_size' => null,
+                    'draw_bye_count' => null,
+                    'draw_published_at' => null,
+                ])->save();
+            });
+        } catch (Throwable $e) {
+            session()->flash('error', $e->getMessage());
+
+            return;
+        }
+
+        $this->confirmingDelete = false;
+        $this->confirmingRegenerate = false;
+
+        session()->flash('status', __('Bracket deleted. The draw numbers are kept, so this class can be drawn again.'));
     }
 
     /**
@@ -215,7 +398,7 @@ class Bracket extends Component
             app(BoutAdvancer::class)->recordResult(
                 bout: $bout,
                 winnerAthleteId: $winnerId,
-                winType: 'halal',
+                winType: 'khalol',
                 user: auth()->user(),
                 source: 'operator',
             );
@@ -248,7 +431,30 @@ class Bracket extends Component
                 ->orderBy('number')
                 ->get(),
             'projectedSize' => $this->projectedSize(),
+            // Read from the same query the generator counts, so the summary and
+            // the draw can never disagree about how many are in the class.
+            'drawSummary' => $this->drawSummary(),
         ]);
+    }
+
+    /**
+     * What drawing now would produce.
+     *
+     * @return array{athletes:int, size:int, byes:int, firstRound:int}
+     */
+    private function drawSummary(): array
+    {
+        $athletes = $this->weightCategory->drawnAthletes()->count();
+        $size = $athletes >= 2 ? BracketSeeding::size($athletes) : 0;
+        $byes = max(0, $size - $athletes);
+
+        return [
+            'athletes' => $athletes,
+            'size' => $size,
+            'byes' => $byes,
+            // Every first-round pair that is not a walkover.
+            'firstRound' => $size > 0 ? max(0, intdiv($size, 2) - $byes) : 0,
+        ];
     }
 
     private function projectedSize(): ?int

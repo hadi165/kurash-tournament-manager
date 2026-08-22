@@ -25,20 +25,20 @@
             alt="{{ $name ?? $code }}"
             title="{{ $name ?? $code }}"
             loading="lazy"
-            class="{{ $box }} shrink-0 rounded-[2px] object-cover ring-1 ring-black/10 dark:ring-white/15"
+            class="{{ $box }} shrink-0 object-cover ring-1 ring-ink/20"
         />
     @elseif ($code)
         {{-- A code with no flag — a delegation competing without one, or a code
              this system does not recognise. A neutral placeholder keeps the
              column aligned instead of collapsing the row. --}}
         <span
-            class="{{ $box }} shrink-0 rounded-[2px] bg-zinc-200 ring-1 ring-black/10 dark:bg-zinc-700 dark:ring-white/15"
+            class="{{ $box }} shrink-0 bg-n-300 ring-1 ring-ink/20"
             title="{{ __('No flag for :code', ['code' => $code]) }}"
             aria-hidden="true"
         ></span>
     @endif
 
     @if ($showCode && $code)
-        <span class="font-medium tabular-nums">{{ $code }}</span>
+        <span class="font-bold tabular-nums">{{ $code }}</span>
     @endif
 </span>

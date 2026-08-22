@@ -6,6 +6,7 @@ use App\Contracts\ScoreboardDriver;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Bout;
+use App\Models\Championship;
 use App\Models\Court;
 use App\Models\User;
 use App\Models\WeightCategory;
@@ -15,11 +16,13 @@ use App\Services\Scoreboard\FakeScoreboardDriver;
 use App\Services\Scoreboard\HttpScoreboardDriver;
 use App\Services\Scoreboard\NullScoreboardDriver;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
+use Laravel\Fortify\Contracts\LoginResponse;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -49,6 +52,31 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        /*
+         | Where an account lands after signing in.
+         |
+         | A confined account goes where it may actually work — a referee to the
+         | mats they score, a scoreboard account to its board — rather than to a
+         | dashboard it is not allowed to open. Deliberately not to the intended
+         | URL, which for these roles can only be somewhere they would be
+         | refused.
+         */
+        $this->app->singleton(LoginResponse::class, fn (): LoginResponse => new class implements LoginResponse
+        {
+            public function toResponse($request): RedirectResponse
+            {
+                $user = $request->user();
+
+                if ($user?->isReferee()) {
+                    return redirect()->route('referee.mats');
+                }
+
+                return $user?->isScoreboardViewer()
+                    ? redirect()->route('scoreboard.index')
+                    : redirect()->intended(route('dashboard'));
+            }
+        });
+
         $this->app->singleton(ScoreboardDriver::class, fn () => match (config('scoreboard.driver')) {
             'fake' => new FakeScoreboardDriver,
             'null' => new NullScoreboardDriver,
@@ -64,6 +92,128 @@ class AppServiceProvider extends ServiceProvider
     protected function configureGates(): void
     {
         Gate::define('manage-competition', fn (User $user): bool => $user->canManageCompetition());
+
+        // Accounts are the one thing only an admin touches.
+        Gate::define('manage-users', fn (User $user): bool => $user->canManageUsers());
+
+        /*
+         | The scoreboard permissions, spelled out rather than inferred.
+         |
+         | Reading a board and scoring on one are different things, so an
+         | operator holding scoreboard.view gains nothing towards changing a
+         | score: that stays behind manage-competition, which no scoreboard
+         | viewer will ever pass.
+         |
+         | The selection gates all reduce to the same question — is this
+         | championship inside the account's scope — because a division and a
+         | mat both belong to exactly one championship, and answering it in one
+         | place is what stops the three from disagreeing.
+         */
+        /*
+         | The competition screens themselves.
+         |
+         | Every working role reads them — an official needs the fight order in
+         | front of them even though they cannot change it — but a scoreboard
+         | account is not a working role, and this is what keeps it out of the
+         | admin surface by typing a URL rather than by hiding a link.
+         */
+        Gate::define('access-admin', fn (User $user): bool => $user->is_active && ! $user->isConfinedToMat());
+
+        /*
+         | The published draw.
+         |
+         | An operator presents what an admin approved, and nothing else: this
+         | permission opens the published table and the presentation that runs
+         | off it, while generating, publishing and withdrawing stay behind
+         | manage-competition. Reading a draw grants nothing towards drawing
+         | one, which is the same separation the scoreboard permissions keep.
+         */
+        Gate::define('draw.view_published', fn (User $user): bool => $user->is_active && ! $user->isConfinedToMat());
+
+        Gate::define('presentation.operate', fn (User $user): bool => $user->is_active && ! $user->isConfinedToMat());
+
+        Gate::define('draw.publish', fn (User $user): bool => $user->canManageCompetition());
+
+        Gate::define('scoreboard.view', fn (User $user): bool => $user->canViewScoreboard());
+
+        /*
+         | Scoring a contest.
+         |
+         | Its own permission rather than a corner of manage-competition, which
+         | also opens the entry list, the draw and the bracket. A referee holds
+         | this and nothing else; an admin holds both and reaches the mat by the
+         | same door. Every write on the mat screen is checked against this, so
+         | a role added later inherits the separation instead of having to
+         | remember it.
+         |
+         | Passed a mat, it asks the harder question: not "may this account
+         | score" but "may this account score *here*". A referee holding the
+         | role and not the assignment is refused, which is what stops mat
+         | three being reached by editing a number in the address bar. Called
+         | without one it answers the general question, for the places that ask
+         | before a mat is in hand.
+         */
+        Gate::define(
+            'score-bout',
+            fn (User $user, ?Court $court = null): bool => $court === null
+                ? $user->canScoreBouts()
+                : $user->mayRefereeCourt($court)
+        );
+
+        /*
+         | Opening a mat screen, as opposed to scoring on one.
+         |
+         | Everybody who works the competition may watch a mat — an official
+         | following the session needs the screen in front of them, and took no
+         | permission away from anybody by having it. The buttons on it are a
+         | separate question, answered by score-bout above, so a viewer who
+         | opens this reaches a board with nothing to press.
+         */
+        Gate::define(
+            'mat.view',
+            function (User $user, ?Court $court = null): bool {
+                // Named a mat, this is the question that matters: not whether
+                // the account works mats but whether it works *this* one.
+                if ($court !== null && $user->isReferee()) {
+                    return $user->mayRefereeCourt($court);
+                }
+
+                // Asked without one — the landing page, a menu — it is the
+                // general question, and a referee with no assignment still
+                // reaches the page that explains they have none.
+                if ($user->isReferee()) {
+                    return $user->is_active;
+                }
+
+                return $user->canScoreBouts()
+                    || ($user->is_active && ! $user->isConfinedToMat());
+            }
+        );
+
+        Gate::define(
+            'scoreboard.select_event',
+            fn (User $user, ?Championship $championship = null): bool => $user->mayViewChampionship($championship)
+        );
+
+        Gate::define(
+            'scoreboard.select_division',
+            fn (User $user, WeightCategory $category): bool => $user->mayViewChampionship($category->ageCategory?->championship)
+        );
+
+        /*
+         | Reading one mat's board.
+         |
+         | A referee's scope is their assignment rather than the championship
+         | the mat sits in, so the board follows the same rule the mat screen
+         | does — otherwise an account barred from scoring on mat three could
+         | still watch it, which is not what "assigned to mat one" means.
+         */
+        Gate::define(
+            'scoreboard.select_court',
+            fn (User $user, Court $court): bool => $user->isReferee()
+                ? $user->mayRefereeCourt($court)
+                : $user->mayViewChampionship($court->championship)
+        );
     }
 
     /**

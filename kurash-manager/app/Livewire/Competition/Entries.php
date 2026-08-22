@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Competition;
 
+use App\Livewire\Concerns\ScopesToCompetition;
 use App\Models\Athlete;
 use App\Models\Championship;
 use App\Models\WeightCategory;
@@ -23,6 +24,8 @@ use Livewire\Component;
  */
 class Entries extends Component
 {
+    use ScopesToCompetition;
+
     public Championship $championship;
 
     /** 'weight' or 'noc' — which count is on top. */
@@ -47,7 +50,7 @@ class Entries extends Component
     private function byWeight(): array
     {
         $categories = WeightCategory::query()
-            ->whereHas('ageCategory', fn ($q) => $q->where('championship_id', $this->championship->id))
+            ->tap(fn ($q) => $this->scopeWeightCategories($q))
             ->with('ageCategory')
             ->withCount(['athletes', 'bouts'])
             ->get()
@@ -58,6 +61,7 @@ class Entries extends Component
         // page holds at a championship with sixty weight classes in it.
         $passed = Athlete::query()
             ->where('championship_id', $this->championship->id)
+            ->when($this->scopedDivisionIds(), fn ($q, array $ids) => $q->whereIn('age_category_id', $ids))
             ->where('weighin_status', 'pass')
             ->whereNotNull('weight_category_id')
             ->groupBy('weight_category_id')
@@ -87,7 +91,11 @@ class Entries extends Component
     {
         $rows = [];
 
-        foreach ($this->championship->athletes()->get()->groupBy('noc_code') as $noc => $group) {
+        $athletes = $this->championship->athletes()
+            ->when($this->scopedDivisionIds(), fn ($q, array $ids) => $q->whereIn('age_category_id', $ids))
+            ->get();
+
+        foreach ($athletes->groupBy('noc_code') as $noc => $group) {
             $name = $group->first()?->noc_name;
 
             $rows[] = [

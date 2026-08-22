@@ -77,7 +77,7 @@ class ScoreboardResultController extends Controller
                     'score_a' => $payload['score_a'] ?? null,
                     'score_b' => $payload['score_b'] ?? null,
                 ],
-                winType: $payload['win_type'] ?? 'halal',
+                winType: $payload['win_type'] ?? 'khalol',
                 user: null,
                 source: 'scoreboard',
             );

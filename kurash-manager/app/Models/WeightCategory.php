@@ -2,12 +2,28 @@
 
 namespace App\Models;
 
+use App\Services\WeightValidator;
+use App\Support\WeightRange;
+use Carbon\CarbonImmutable;
 use Database\Factories\WeightCategoryFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * The cast columns are declared here because static analysis reads the
+ * migration, where they are timestamps, and cannot see that casts() turns them
+ * into date objects.
+ *
+ * @property CarbonImmutable|null $draw_generated_at
+ * @property CarbonImmutable|null $draw_published_at
+ * @property CarbonImmutable|null $draw_locked_at
+ * @property int|null $draw_athlete_count
+ * @property int|null $draw_bucket_size
+ * @property int|null $draw_bye_count
+ * @property int $draw_version
+ */
 class WeightCategory extends Model
 {
     /** @use HasFactory<WeightCategoryFactory> */
@@ -19,7 +35,52 @@ class WeightCategory extends Model
 
     protected function casts(): array
     {
-        return ['min_kg' => 'decimal:2', 'max_kg' => 'decimal:2'];
+        return [
+            'min_kg' => 'decimal:2',
+            'max_kg' => 'decimal:2',
+            'draw_generated_at' => 'datetime',
+            'draw_published_at' => 'datetime',
+            'draw_locked_at' => 'datetime',
+        ];
+    }
+
+    /*
+     |--------------------------------------------------------------------------
+     | The draw, as it was drawn
+     |--------------------------------------------------------------------------
+     |
+     | These read the figures recorded when the bracket was generated, never
+     | today's registration list. An operator looking at a published draw must
+     | see what was published, and a late registration must not quietly change
+     | the shape of a table somebody is presenting from.
+     */
+
+    public function hasDraw(): bool
+    {
+        return $this->bouts()->exists();
+    }
+
+    public function isDrawPublished(): bool
+    {
+        return $this->draw_published_at !== null;
+    }
+
+    public function isDrawLocked(): bool
+    {
+        return $this->draw_locked_at !== null;
+    }
+
+    /**
+     * Has the entry list moved since the draw was generated?
+     *
+     * Informational only, and only ever shown to somebody who could act on it:
+     * a published draw stays exactly as published until an admin regenerates
+     * it on purpose.
+     */
+    public function drawIsStale(): bool
+    {
+        return $this->draw_athlete_count !== null
+            && $this->draw_athlete_count !== $this->drawnAthletes()->count();
     }
 
     /** @return BelongsTo<AgeCategory, $this> */
@@ -72,23 +133,22 @@ class WeightCategory extends Model
     }
 
     /**
-     * Does a measured weight fall inside this category, allowing the standard
-     * 0.5kg tolerance below an upper bound?
+     * Does a measured weight fall inside this category?
+     *
+     * Delegated rather than answered here. The rule needs the classes either
+     * side of this one to know where the band starts, which is a question about
+     * the division and not about this row — and the previous answer, which used
+     * only this row, accepted a 500-gram window below the ceiling instead of a
+     * weight class.
      */
-    public function admits(float $kg, float $tolerance = 0.5): bool
+    public function admits(float $kg, float $tolerance = WeightValidator::TOLERANCE_KG): bool
     {
-        if ($this->min_kg !== null && $kg < (float) $this->min_kg) {
-            return false;
-        }
+        return app(WeightValidator::class)->rangeFor($this, $tolerance)->admits($kg);
+    }
 
-        if ($this->max_kg !== null && $kg > (float) $this->max_kg) {
-            return false;
-        }
-
-        if ($this->max_kg !== null && $kg < (float) $this->max_kg - $tolerance) {
-            return false;
-        }
-
-        return true;
+    /** The band this class accepts, tolerance included. */
+    public function weightRange(float $tolerance = WeightValidator::TOLERANCE_KG): WeightRange
+    {
+        return app(WeightValidator::class)->rangeFor($this, $tolerance);
     }
 }

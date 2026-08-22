@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Gender;
 use Database\Factories\ChampionshipFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -20,17 +21,103 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $starts_on
  * @property Carbon|null $ends_on
  * @property Carbon|null $archived_at
+ * @property array<int, mixed>|null $genders
+ * @property array<int, mixed>|null $age_groups
  */
 class Championship extends Model
 {
     /** @use HasFactory<ChampionshipFactory> */
     use HasFactory;
 
-    protected $fillable = ['title', 'location', 'starts_on', 'ends_on', 'archived_at', 'archived_by'];
+    protected $fillable = ['title', 'location', 'starts_on', 'ends_on', 'genders', 'age_groups', 'archived_at', 'archived_by'];
 
     protected function casts(): array
     {
-        return ['starts_on' => 'date', 'ends_on' => 'date', 'archived_at' => 'datetime'];
+        return [
+            'starts_on' => 'date',
+            'ends_on' => 'date',
+            'archived_at' => 'datetime',
+            'genders' => 'array',
+            'age_groups' => 'array',
+        ];
+    }
+
+    /*
+     |--------------------------------------------------------------------------
+     | What this championship runs
+     |--------------------------------------------------------------------------
+     |
+     | The organizer states two lists when the championship is created: the
+     | competitions (men, women) and the age groups (senior, junior, cadet).
+     | Every division is one of the first paired with one of the second, and
+     | nothing anywhere in the system may offer a pair that is not in here.
+     */
+
+    /**
+     * Named apart from the `genders` column on purpose: a method with the same
+     * name as an attribute is what Eloquent reaches for when the column has not
+     * been selected, and it would find an array where it wanted a relation.
+     *
+     * @return list<string>
+     */
+    public function configuredGenders(): array
+    {
+        $genders = Gender::sanitise($this->genders ?? []);
+
+        // A championship saved before it declared anything still has to be
+        // usable, so it falls back to what one has always meant.
+        return $genders === [] ? Gender::DEFAULT : $genders;
+    }
+
+    /**
+     * The age groups a championship can be run for, in the order a federation
+     * lists them. Offered as the checkboxes on the championship form; a
+     * championship carrying something else keeps it, so nothing an organizer
+     * already entered is quietly dropped.
+     *
+     * @var list<string>
+     */
+    public const AGE_GROUPS = ['Senior', 'Junior', 'Cadet', 'Veteran'];
+
+    /** @return list<string> */
+    public function configuredAgeGroups(): array
+    {
+        $groups = [];
+
+        foreach ($this->age_groups ?? [] as $group) {
+            $group = is_string($group) ? trim($group) : '';
+
+            if ($group !== '' && ! in_array($group, $groups, true)) {
+                $groups[] = $group;
+            }
+        }
+
+        return $groups === [] ? ['Senior'] : $groups;
+    }
+
+    /**
+     * Where a division sits in reading order: by competition first, then by
+     * age group, both in the order this championship declared them.
+     *
+     * Derived rather than typed, so the first age group offered as a default
+     * anywhere is the first one the organizer ticked.
+     */
+    public function divisionSortOrder(string $gender, string $ageGroup): int
+    {
+        $competition = array_search($gender, $this->configuredGenders(), true);
+        $group = array_search($ageGroup, $this->configuredAgeGroups(), true);
+
+        return ($competition === false ? 99 : $competition) * 100
+            + ($group === false ? 99 : $group);
+    }
+
+    /** Every division this championship is allowed to have, in reading order. */
+    public function allowsDivision(?string $gender, ?string $ageGroup): bool
+    {
+        return $gender !== null
+            && $ageGroup !== null
+            && in_array($gender, $this->configuredGenders(), true)
+            && in_array($ageGroup, $this->configuredAgeGroups(), true);
     }
 
     /** @return HasMany<AgeCategory, $this> */

@@ -3,9 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Exports\AccreditationCards;
+use App\Exports\BracketSheet;
+use App\Exports\BracketSheetWriter;
 use App\Exports\CertificateSheet;
 use App\Exports\ConfirmedWeighInReport;
 use App\Exports\CsvWriter;
+use App\Exports\DrawNumbersReport;
 use App\Exports\DrawSheetReport;
 use App\Exports\EntriesByNocReport;
 use App\Exports\EntriesByWeightCategoryReport;
@@ -15,12 +18,15 @@ use App\Exports\PdfDocument;
 use App\Exports\PdfWriter;
 use App\Exports\Report;
 use App\Exports\ResultsReport;
+use App\Exports\XlsxWriter;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Championship;
 use App\Models\WeightCategory;
 use App\Services\MedalTable;
+use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
  * Every table the planning specification asks to be printable or downloadable.
@@ -86,12 +92,41 @@ class ExportController extends Controller
         return $this->document->download('exports.accreditation', $cards->data(), $cards->filename());
     }
 
-    public function confirmedWeighIn(WeightCategory $weightCategory, string $format): Response
+    public function confirmedWeighIn(WeightCategory $weightCategory, string $format): Response|StreamedResponse
     {
         return $this->render(new ConfirmedWeighInReport($weightCategory->load('ageCategory.championship')), $format);
     }
 
-    public function drawSheet(WeightCategory $weightCategory, string $format): Response
+    /** What the draw produced: one line per athlete, in draw order. */
+    public function drawNumbers(WeightCategory $weightCategory, string $format): Response|StreamedResponse
+    {
+        return $this->render(new DrawNumbersReport($weightCategory->load('ageCategory.championship')), $format);
+    }
+
+    /**
+     * The bracket as a tree, in both formats.
+     *
+     * Outside render(): a tree is not a table of rows, so it has its own
+     * writer rather than being forced through the tabular one.
+     */
+    public function bracketSheet(WeightCategory $weightCategory, string $format): Response|StreamedResponse
+    {
+        $sheet = new BracketSheet($weightCategory->load('ageCategory.championship'));
+
+        // Drawable is not drawn: a class whose athletes hold numbers but whose
+        // bracket has never been generated has no tree to print.
+        abort_unless(
+            $weightCategory->hasDraw() && $sheet->size() >= 2,
+            404,
+            __('This weight class has not been drawn yet.'),
+        );
+
+        $writer = app(BracketSheetWriter::class);
+
+        return $format === 'xlsx' ? $writer->xlsx($sheet) : $writer->pdf($sheet);
+    }
+
+    public function drawSheet(WeightCategory $weightCategory, string $format): Response|StreamedResponse
     {
         return $this->render(
             new DrawSheetReport($weightCategory->load('ageCategory.championship')),
@@ -100,27 +135,34 @@ class ExportController extends Controller
         );
     }
 
-    public function fightOrder(Championship $championship, string $format): Response
+    public function fightOrder(Championship $championship, string $format, Request $request): Response|StreamedResponse
     {
-        return $this->render(new FightOrderReport($championship), $format, orientation: 'landscape');
+        // Checked against the competitions this championship actually runs, so
+        // anything else prints the whole order rather than an empty sheet.
+        $requested = $request->query('competition');
+        $competition = is_string($requested) && in_array($requested, $championship->configuredGenders(), true)
+            ? $requested
+            : null;
+
+        return $this->render(new FightOrderReport($championship, $competition), $format, orientation: 'landscape');
     }
 
-    public function entriesByNoc(Championship $championship, string $format): Response
+    public function entriesByNoc(Championship $championship, string $format): Response|StreamedResponse
     {
         return $this->render(new EntriesByNocReport($championship), $format);
     }
 
-    public function entriesByWeight(Championship $championship, string $format): Response
+    public function entriesByWeight(Championship $championship, string $format): Response|StreamedResponse
     {
         return $this->render(new EntriesByWeightCategoryReport($championship), $format);
     }
 
-    public function results(Championship $championship, string $format): Response
+    public function results(Championship $championship, string $format): Response|StreamedResponse
     {
         return $this->render(new ResultsReport($championship, $this->medals), $format, orientation: 'landscape');
     }
 
-    public function medalStanding(Championship $championship, string $format): Response
+    public function medalStanding(Championship $championship, string $format): Response|StreamedResponse
     {
         return $this->render(new MedalStandingReport($championship, $this->medals), $format);
     }
@@ -130,10 +172,14 @@ class ExportController extends Controller
      * Named explicitly anyway rather than treating "anything that is not pdf"
      * as CSV, which would hand someone a .xlsx request a CSV without saying so.
      */
-    private function render(Report $report, string $format, string $orientation = 'portrait'): Response
+    private function render(Report $report, string $format, string $orientation = 'portrait'): Response|StreamedResponse
     {
         return match ($format) {
             'pdf' => $this->pdf->download($report, $orientation),
+            // Both spellings stay: xlsx is what the buttons ask for, csv is
+            // still there for anything that has to read the data rather than
+            // look at it.
+            'xlsx' => app(XlsxWriter::class)->download($report),
             'csv' => $this->csv->download($report),
             default => abort(404),
         };

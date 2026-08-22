@@ -1,0 +1,28 @@
+/* Kurash brand retune of the Modernist tokens: IKA logo green as accent, logo blue as accent-2, logo red reserved for danger. */
+@import url('https://fonts.googleapis.com/css2?family=Source+Sans+3:wght@400;600;700&display=swap');
+html, body { margin: 0; background: var(--color-bg); }
+:root { --font-heading: "Segoe UI", "Segoe UI Variable", "Source Sans 3", system-ui, sans-serif; --font-body: "Segoe UI", "Segoe UI Variable", "Source Sans 3", system-ui, sans-serif; --font-heading-weight: 700; }
+a { color: var(--color-accent-700); }
+a:hover { color: var(--color-accent-800); }
+:root {
+  --color-accent: #019a44; --color-accent-2: #1a9fd8;
+  --color-accent-100: #e8f9ee; --color-accent-200: #c8f1d6; --color-accent-300: #8fdfae;
+  --color-accent-400: #3dbd6f; --color-accent-500: #019a44; --color-accent-600: #01813a;
+  --color-accent-700: #046830; --color-accent-800: #084d26; --color-accent-900: #0b371d;
+  --color-accent-2-100: #e8f6fd; --color-accent-2-200: #c8eafa; --color-accent-2-300: #93d7f2;
+  --color-accent-2-400: #4fbce8; --color-accent-2-500: #1a9fd8; --color-accent-2-600: #0c81b4;
+  --color-accent-2-700: #086690; --color-accent-2-800: #0c4c69; --color-accent-2-900: #0f3749;
+  --color-danger: #d7263d; --color-danger-100: #fdeaee; --color-danger-200: #f9cdd4; --color-danger-700: #8f1626;
+}
+[data-theme="dark"] {
+  --color-bg: #141817; --color-surface: #1e2423; --color-text: #eef3f0;
+  --color-divider: color-mix(in srgb, #eef3f0 40%, transparent);
+  --color-neutral-100: #242a28; --color-neutral-200: #313835; --color-neutral-300: #465049;
+  --color-neutral-400: #5f6a64; --color-neutral-500: #8a948e; --color-neutral-600: #aab3ae;
+  --color-neutral-700: #c8d0cb; --color-neutral-800: #e0e6e2; --color-neutral-900: #f2f6f3;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.5); --shadow-md: 0 3px 10px rgba(0,0,0,.55);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,.65);
+}
+[data-theme="dark"] a { color: var(--color-accent-400); }
+[data-theme="dark"] a:hover { color: var(--color-accent-300); }
+.kicker { font-size: 10px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; font-family: var(--font-heading); }

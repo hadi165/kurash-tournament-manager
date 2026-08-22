@@ -1,5 +1,6 @@
 <?php
 
+use App\Livewire\Settings\Accounts;
 use App\Livewire\Settings\Appearance;
 use App\Livewire\Settings\Profile;
 use App\Livewire\Settings\Security;
@@ -13,6 +14,12 @@ Route::middleware(['auth'])->group(function () {
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::livewire('settings/appearance', Appearance::class)->name('appearance.edit');
+
+    // Accounts are an admin surface: the gate is on the route, not only on
+    // the link that reaches it.
+    Route::livewire('settings/accounts', Accounts::class)
+        ->middleware('can:manage-users')
+        ->name('accounts.index');
 
     Route::livewire('settings/security', Security::class)
         ->middleware([

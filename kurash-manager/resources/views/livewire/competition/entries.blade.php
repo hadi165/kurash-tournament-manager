@@ -1,156 +1,158 @@
-<div class="flex flex-col gap-6">
-    <div class="print:hidden">
-        <flux:breadcrumbs>
-            <flux:breadcrumbs.item :href="route('championships.index')" wire:navigate>{{ __('Championships') }}</flux:breadcrumbs.item>
-            <flux:breadcrumbs.item :href="route('championships.show', $championship)" wire:navigate>{{ $championship->title }}</flux:breadcrumbs.item>
-            <flux:breadcrumbs.item>{{ __('Entries') }}</flux:breadcrumbs.item>
-        </flux:breadcrumbs>
+<x-page
+    :title="__('Entries and Draw')"
+    :subtitle="__('How many are entered, how many made the scale, and which classes can start.')"
+    :breadcrumbs="[
+        ['label' => __('Championships'), 'href' => route('championships.index')],
+        ['label' => $championship->title, 'href' => route('championships.show', $championship)],
+        ['label' => __('Entries and Draw')],
+    ]"
+>
+    <x-competition.scope :label="$this->competitionLabel()" route="entries.index" :championship="$championship" />
 
-        <flux:heading size="xl" class="mt-2">{{ __('Entries') }}</flux:heading>
-        <flux:subheading>
-            {{ __('How many are entered, how many made the scale, and which classes can start.') }}
-        </flux:subheading>
-    </div>
-
-    <div class="grid gap-4 sm:grid-cols-3">
-        @foreach ([
-            ['label' => __('Registered'), 'value' => $totalEntries],
-            ['label' => __('Passed the scale'), 'value' => $totalCleared],
-            ['label' => __('Classes ready to draw'), 'value' => $readyToDraw],
-        ] as $stat)
-            <flux:card class="flex flex-col gap-1">
-                <div class="text-3xl font-semibold tabular-nums">{{ $stat['value'] }}</div>
-                <flux:text class="text-xs uppercase tracking-wide text-zinc-500">{{ $stat['label'] }}</flux:text>
-            </flux:card>
-        @endforeach
-    </div>
+    <x-ui.stats cards :items="[
+        ['value' => $totalEntries, 'label' => __('Registered')],
+        ['value' => $totalCleared, 'label' => __('Passed the scale')],
+        ['value' => $readyToDraw, 'label' => __('Classes ready to draw'), 'accent' => true],
+    ]" />
 
     {{-- Specification §6.2. The Start button opens that class's draw directly;
          the old system stopped at a file-upload page first. --}}
-    <flux:card class="flex flex-col gap-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-                <flux:heading size="lg">{{ __('Number of Entries by Weight Categories') }}</flux:heading>
-                <flux:subheading>{{ __('Only athletes who passed the scale are counted as entries.') }}</flux:subheading>
-            </div>
-
-            <x-competition.exports route="exports.entries-weight" :params="['championship' => $championship]" />
-        </div>
+    <x-ui.card
+        flush
+        :title="__('Entries by weight category')"
+        :subtitle="__('Only athletes who passed the scale are counted as entries.')"
+    >
+        <x-slot:head>
+            <x-ui.chip :href="route('exports.entries-weight', ['championship' => $championship, 'format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
+            <x-ui.chip :href="route('exports.entries-weight', ['championship' => $championship, 'format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
+        </x-slot:head>
 
         <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="t">
                 <thead>
-                    <tr class="border-b border-zinc-200 text-left dark:border-zinc-700">
-                        <th class="px-3 py-2 font-medium">{{ __('Weight category') }}</th>
-                        <th class="px-3 py-2 text-right font-medium">{{ __('Registered') }}</th>
-                        <th class="px-3 py-2 text-right font-medium">{{ __('Number of entries') }}</th>
-                        <th class="px-3 py-2 font-medium">{{ __('Bracket') }}</th>
-                        <th class="px-3 py-2 font-medium">{{ __("Athlete's list") }}</th>
-                        <th class="px-3 py-2 font-medium">{{ __('Draw result') }}</th>
-                        <th class="px-3 py-2 font-medium">{{ __('Draw status') }}</th>
+                    <tr>
+                        <th>{{ __('Weight category') }}</th>
+                        <th class="num">{{ __('Registered') }}</th>
+                        <th class="num">{{ __('Entries') }}</th>
+                        <th>{{ __('Bracket') }}</th>
+                        <th>{{ __('Exports') }}</th>
+                        <th>{{ __('Draw status') }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($byWeight as $row)
                         @php $category = $row['category']; @endphp
-                        <tr class="border-b border-zinc-100 last:border-0 dark:border-zinc-800" wire:key="weight-{{ $category->id }}">
-                            <td class="px-3 py-2">
-                                <div class="font-medium">{{ $category->exportName() }}</div>
-                                <flux:text class="text-xs">{{ $category->ageCategory->name }}</flux:text>
+
+                        <tr wire:key="weight-{{ $category->id }}">
+                            <td>
+                                <div class="font-semibold">{{ $category->exportName() }}</div>
+                                <div class="text-[12.5px] text-muted">{{ $category->ageCategory->name }}</div>
                             </td>
-                            <td class="px-3 py-2 text-right tabular-nums">{{ $row['registered'] }}</td>
-                            <td class="px-3 py-2 text-right font-medium tabular-nums">{{ $row['cleared'] }}</td>
-                            <td class="px-3 py-2 font-mono text-xs">{{ $row['bracket'] ?? '—' }}</td>
-                            <td class="px-3 py-2">
-                                <flux:button size="xs" variant="ghost"
-                                    :href="route('exports.weigh-in', ['weightCategory' => $category, 'format' => 'pdf'])">
-                                    PDF
-                                </flux:button>
+                            <td class="num">{{ $row['registered'] }}</td>
+                            <td class="num font-semibold">{{ $row['cleared'] }}</td>
+                            <td class="font-mono text-xs text-muted">{{ $row['bracket'] ?? '—' }}</td>
+                            <td>
+                                <div class="flex gap-1.5">
+                                    {{-- The athletes' list, and the drawn bracket
+                                         once there is one to print. --}}
+                                    <x-ui.chip :href="route('exports.weigh-in', ['weightCategory' => $category, 'format' => 'pdf'])">
+                                        {{ __('List') }}
+                                    </x-ui.chip>
+
+                                    @if ($row['drawn'])
+                                        <x-ui.chip :href="route('exports.draw', ['weightCategory' => $category, 'format' => 'pdf'])">
+                                            {{ __('Draw') }}
+                                        </x-ui.chip>
+
+                                        {{-- What the draw gave each athlete, in draw order.
+                                             The weigh-in list is the sheet the numbers are
+                                             written onto and leaves the column blank; this is
+                                             what came back off it. --}}
+                                        <x-ui.chip :href="route('exports.draw-numbers', ['weightCategory' => $category, 'format' => 'pdf'])">
+                                            {{ __('Numbers') }}
+                                        </x-ui.chip>
+                                    @endif
+                                </div>
                             </td>
-                            <td class="px-3 py-2">
-                                @if ($row['drawn'])
-                                    <flux:button size="xs" variant="ghost"
-                                        :href="route('exports.draw', ['weightCategory' => $category, 'format' => 'pdf'])">
-                                        PDF
-                                    </flux:button>
-                                    <flux:button size="xs" variant="ghost"
-                                        :href="route('exports.draw', ['weightCategory' => $category, 'format' => 'csv'])">
-                                        Excel
-                                    </flux:button>
-                                @else
-                                    <span class="text-zinc-400">—</span>
-                                @endif
-                            </td>
-                            <td class="px-3 py-2">
-                                @if ($row['drawn'])
-                                    <div class="flex items-center gap-2">
-                                        <flux:badge size="sm" color="green">{{ __('Done') }}</flux:badge>
-                                        <flux:button size="xs" variant="ghost" :href="route('bracket.show', $category)" wire:navigate>
-                                            {{ __('Open') }}
-                                        </flux:button>
-                                    </div>
-                                @elseif ($row['cleared'] >= 2)
-                                    <div class="flex items-center gap-2">
-                                        <flux:badge size="sm" color="zinc">{{ __('Not Started') }}</flux:badge>
+                            <td>
+                                <div class="flex items-center gap-2">
+                                    @if ($row['drawn'])
+                                        <x-ui.tag variant="brand">{{ __('Done') }}</x-ui.tag>
+
+                                        {{-- Open goes to the working draw screen, which belongs
+                                             to the people who run the draw. Everybody else is
+                                             offered the published table instead, when there is
+                                             one — a link nobody can follow is worse than no
+                                             link at all. --}}
+                                        @can('manage-competition')
+                                            <x-ui.chip :href="route('bracket.show', $category)" wire:navigate>{{ __('Open') }}</x-ui.chip>
+                                        @elseif ($category->isDrawPublished())
+                                            <x-ui.chip :href="route('operator.draws.ceremony', $category)">{{ __('Present') }}</x-ui.chip>
+                                        @endcan
+                                    @elseif ($row['cleared'] >= 2)
+                                        <x-ui.tag>{{ __('Not started') }}</x-ui.tag>
                                         @can('manage-competition')
                                             <flux:button size="xs" variant="primary" :href="route('bracket.show', $category)" wire:navigate>
-                                                {{ __('Start') }}
+                                                {{ __('Start draw') }}
                                             </flux:button>
                                         @endcan
-                                    </div>
-                                @else
-                                    <flux:badge size="sm" color="amber">
-                                        {{ __('Needs 2 cleared') }}
-                                    </flux:badge>
-                                @endif
+                                    @else
+                                        <x-ui.tag variant="danger">{{ __('Needs 2 cleared') }}</x-ui.tag>
+                                    @endif
+                                </div>
                             </td>
                         </tr>
                     @empty
-                        <tr><td colspan="7" class="px-3 py-8 text-center text-zinc-500">{{ __('No weight classes yet.') }}</td></tr>
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-muted">{{ __('No weight classes yet.') }}</td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
-    </flux:card>
+    </x-ui.card>
 
     {{-- Specification §6.1. --}}
-    <flux:card class="flex flex-col gap-4">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-                <flux:heading size="lg">{{ __('Number of Entries by NOC') }}</flux:heading>
-                <flux:subheading>{{ __('Largest delegations first.') }}</flux:subheading>
-            </div>
-
-            <x-competition.exports route="exports.entries-noc" :params="['championship' => $championship]" />
-        </div>
+    <x-ui.card flush :title="__('Entries by NOC')" :subtitle="__('Largest delegations first.')">
+        <x-slot:head>
+            <x-ui.chip :href="route('exports.entries-noc', ['championship' => $championship, 'format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
+            <x-ui.chip :href="route('exports.entries-noc', ['championship' => $championship, 'format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
+        </x-slot:head>
 
         <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="t">
                 <thead>
-                    <tr class="border-b border-zinc-200 text-left dark:border-zinc-700">
-                        <th class="px-3 py-2 font-medium">{{ __('NOC') }}</th>
-                        <th class="px-3 py-2 font-medium">{{ __('Delegation') }}</th>
-                        <th class="px-3 py-2 text-right font-medium">{{ __('Male') }}</th>
-                        <th class="px-3 py-2 text-right font-medium">{{ __('Female') }}</th>
-                        <th class="px-3 py-2 text-right font-medium">{{ __('Passed the scale') }}</th>
-                        <th class="px-3 py-2 text-right font-medium">{{ __('Entries') }}</th>
+                    <tr>
+                        <th>{{ __('NOC') }}</th>
+                        <th>{{ __('Delegation') }}</th>
+                        <th class="num">{{ __('Male') }}</th>
+                        <th class="num">{{ __('Female') }}</th>
+                        <th class="num">{{ __('Passed the scale') }}</th>
+                        <th class="num">{{ __('Entries') }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     @forelse ($byNoc as $row)
-                        <tr class="border-b border-zinc-100 last:border-0 dark:border-zinc-800" wire:key="noc-{{ $row['noc'] }}">
-                            <td class="px-3 py-2"><x-flag :noc="$row['noc']" :name="$row['name']" show-code /></td>
-                            <td class="px-3 py-2">{{ $row['name'] ?? '—' }}</td>
-                            <td class="px-3 py-2 text-right tabular-nums">{{ $row['male'] }}</td>
-                            <td class="px-3 py-2 text-right tabular-nums">{{ $row['female'] }}</td>
-                            <td class="px-3 py-2 text-right tabular-nums">{{ $row['cleared'] }}</td>
-                            <td class="px-3 py-2 text-right font-medium tabular-nums">{{ $row['total'] }}</td>
+                        <tr wire:key="noc-{{ $row['noc'] }}">
+                            <td>
+                                <span class="inline-flex items-center gap-2">
+                                    <x-flag :noc="$row['noc']" :name="$row['name']" />
+                                    <span class="rounded-sm border border-line bg-ground px-2 py-0.5 font-mono text-[11.5px]">{{ $row['noc'] }}</span>
+                                </span>
+                            </td>
+                            <td class="text-muted">{{ $row['name'] ?? '—' }}</td>
+                            <td class="num">{{ $row['male'] }}</td>
+                            <td class="num">{{ $row['female'] }}</td>
+                            <td class="num">{{ $row['cleared'] }}</td>
+                            <td class="num font-semibold">{{ $row['total'] }}</td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="px-3 py-8 text-center text-zinc-500">{{ __('Nobody is registered yet.') }}</td></tr>
+                        <tr>
+                            <td colspan="6" class="py-8 text-center text-muted">{{ __('Nobody is registered yet.') }}</td>
+                        </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
-    </flux:card>
-</div>
+    </x-ui.card>
+</x-page>

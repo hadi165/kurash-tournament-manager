@@ -6,6 +6,7 @@ use App\Models\Bout;
 use App\Models\Court;
 use App\Services\KurashScore;
 use App\Support\ScoreTally;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -28,9 +29,22 @@ class Scoreboard extends Component
 {
     public Court $court;
 
-    public function mount(Court $court): void
+    /** True when the board is nested inside the signed-in viewer's chrome. */
+    public bool $embedded = false;
+
+    public function mount(Court $court, bool $embedded = false): void
     {
+        // Checked whenever somebody is signed in, on this route and on the
+        // public display one alike: a scoped account must not reach another
+        // championship's mat by editing the id in either URL. Guests are left
+        // to the display gate, which is what decides whether a hall screen is
+        // public at all.
+        if (auth()->check()) {
+            Gate::authorize('scoreboard.select_court', $court);
+        }
+
         $this->court = $court->load('championship');
+        $this->embedded = $embedded;
     }
 
     /**
@@ -43,10 +57,30 @@ class Scoreboard extends Component
     private function bout(): ?Bout
     {
         return $this->court->bouts()
-            ->with(['athleteA', 'athleteB', 'weightCategory', 'events'])
+            ->with(['athleteA', 'athleteB', 'ageCategory', 'weightCategory.ageCategory', 'events'])
             ->whereIn('status', [Bout::STATUS_ON_COURT, Bout::STATUS_COMPLETED])
             ->orderByRaw('winner_athlete_id is not null')   // live contest first
             ->orderByDesc('updated_at')
+            ->first();
+    }
+
+    /**
+     * What this mat runs after the contest on the board.
+     *
+     * Scoped to bouts actually assigned here rather than to anything loose in
+     * the fight order: the strip tells athletes and coaches standing at this
+     * mat that they are up, and a bout that is going to another mat would send
+     * them to the wrong place.
+     */
+    private function nextBout(?Bout $current): ?Bout
+    {
+        return $this->court->bouts()
+            ->readyToFight()
+            ->where('status', '!=', Bout::STATUS_ON_COURT)
+            ->when($current, fn ($q) => $q->whereKeyNot($current->getKey()))
+            ->whereNotNull('fight_number')
+            ->with(['athleteA', 'athleteB', 'weightCategory'])
+            ->orderBy('fight_number')
             ->first();
     }
 
@@ -76,6 +110,28 @@ class Scoreboard extends Component
             'secondsLeft' => $bout?->secondsRemaining($seconds) ?? $seconds,
             'clockRunning' => (bool) ($bout?->clock_running && ! $bout->isDecided()),
             'winner' => $bout?->isDecided() ? $bout->winner : null,
+            // How it was won, spelled out. A hall watching a contest end wants
+            // to know it was a khalol rather than a decision, and a board that
+            // only names the winner leaves everybody to guess.
+            'winType' => $bout?->isDecided() ? $bout->win_type : null,
+            // Phrased by the rules engine, not by the view: two screens that
+            // worded this differently would be two screens disagreeing about
+            // what happened.
+            'victoryReason' => KurashScore::victoryReason($bout?->isDecided() ? $bout->win_type : null),
+            // Which yakhtak the whole board turns when a contest is decided.
+            'winnerSide' => match (true) {
+                ! (bool) $bout?->isDecided() => null,
+                $bout->winner_athlete_id === $bout->athlete_a_id => 'blue',
+                default => 'green',
+            },
+            // Jazzo puts a yellow box in the middle of the board and leaves it
+            // there until the contest is resumed.
+            'inJazzo' => (bool) $bout?->isInJazzo(),
+            'nextBout' => $this->nextBout($bout),
+            // The board carries no controls for anybody, but an account that
+            // may only read one should be told so rather than left to infer it
+            // from an absence.
+            'readOnly' => (bool) auth()->user()?->isScoreboardViewer(),
         ]);
     }
 }

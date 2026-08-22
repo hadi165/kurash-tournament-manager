@@ -29,8 +29,8 @@ describe('access', function () {
             'championships.index' => route('championships.index'),
             'championships.show' => route('championships.show', $championship),
             'medals.index' => route('medals.index', $championship),
-            'athletes.index' => route('athletes.index', $ageCategory),
-            'weighin.index' => route('weighin.index', $ageCategory),
+            'athletes.index' => route('athletes.index', ['championship' => $championship, 'competition' => 'M']),
+            'weighin.index' => route('weighin.index', ['championship' => $championship, 'competition' => 'M']),
             'bracket.show' => route('bracket.show', $weightCategory),
         };
 
@@ -50,9 +50,24 @@ describe('access', function () {
         $this->get(route('championships.index'))->assertOk();
         $this->get(route('championships.show', $championship))->assertOk();
         $this->get(route('medals.index', $championship))->assertOk();
-        $this->get(route('athletes.index', $ageCategory))->assertOk();
-        $this->get(route('weighin.index', $ageCategory))->assertOk();
-        $this->get(route('bracket.show', $weightCategory))->assertOk();
+        $this->get(route('athletes.index', ['championship' => $championship, 'competition' => 'M']))->assertOk();
+        $this->get(route('weighin.index', ['championship' => $championship, 'competition' => 'M']))->assertOk();
+    });
+
+    /**
+     * The one screen a reader does not get.
+     *
+     * The bracket screen is where a draw is made, so it shows pairings before
+     * anybody has approved them. Reading a draw now goes through the published
+     * table instead, which is what an operator presents from.
+     */
+    it('keeps the working bracket screen for the people who run the draw', function () {
+        $championship = Championship::factory()->create();
+        $ageCategory = AgeCategory::factory()->create(['championship_id' => $championship->id]);
+        $weightCategory = WeightCategory::factory()->create(['age_category_id' => $ageCategory->id]);
+
+        $this->actingAs($this->viewer)->get(route('bracket.show', $weightCategory))->assertForbidden();
+        $this->actingAs($this->admin)->get(route('bracket.show', $weightCategory))->assertOk();
     });
 
     /**
@@ -76,7 +91,10 @@ describe('access', function () {
 
         $this->actingAs($this->viewer);
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $category->ageCategory])
+        Livewire::test(WeighIn::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => $category->ageCategory->gender,
+        ])
             ->set("weights.{$athlete->id}", '64.8')
             ->call('record', $athlete->id)
             ->assertForbidden();
@@ -142,7 +160,7 @@ describe('categories', function () {
         $championship = Championship::factory()->create();
 
         Livewire::test(Categories::class, ['championship' => $championship])
-            ->set('ageCategoryName', 'Men Senior')
+            ->set('ageGroup', 'Senior')
             ->set('weightLabels', '-60, -66, -73, +90')
             ->set('gender', 'M')
             ->call('save')
@@ -158,7 +176,7 @@ describe('categories', function () {
         $championship = Championship::factory()->create();
 
         Livewire::test(Categories::class, ['championship' => $championship])
-            ->set('ageCategoryName', 'Men Senior')
+            ->set('ageGroup', 'Senior')
             ->set('weightLabels', '-66, +90')
             ->call('save');
 
@@ -174,7 +192,7 @@ describe('categories', function () {
         $championship = Championship::factory()->create();
 
         Livewire::test(Categories::class, ['championship' => $championship])
-            ->set('ageCategoryName', 'Men Senior')
+            ->set('ageGroup', 'Senior')
             ->set('weightLabels', ' , , ')
             ->call('save')
             ->assertHasErrors('weightLabels');
@@ -199,7 +217,10 @@ describe('registration', function () {
     it('registers an athlete and issues an IKA ID', function () {
         [$category] = categoryWithAthletes(0);
 
-        Livewire::test(Registration::class, ['ageCategory' => $category->ageCategory])
+        Livewire::test(Registration::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => 'M',
+        ])
             ->set('fullname', 'Ghader Nasb')
             ->set('noc_code', 'afg')
             ->set('gender', 'M')
@@ -222,7 +243,10 @@ describe('registration', function () {
         [$mine] = categoryWithAthletes(0);
         [$theirs] = categoryWithAthletes(0, '-73');
 
-        Livewire::test(Registration::class, ['ageCategory' => $mine->ageCategory])
+        Livewire::test(Registration::class, [
+            'championship' => $mine->ageCategory->championship,
+            'competition' => 'M',
+        ])
             ->set('fullname', 'Intruder')
             ->set('noc_code', 'UZB')
             ->set('weight_category_id', $theirs->id)
@@ -243,7 +267,10 @@ describe('registration', function () {
             'weight_category_id' => $from->id,
         ]);
 
-        Livewire::test(Registration::class, ['ageCategory' => $ageCategory])
+        Livewire::test(Registration::class, [
+            'championship' => $ageCategory->championship,
+            'competition' => 'M',
+        ])
             ->call('edit', $athlete->id)
             ->set('weight_category_id', $to->id)
             ->call('save');
@@ -256,28 +283,42 @@ describe('registration', function () {
 describe('weigh-in', function () {
     beforeEach(fn () => $this->actingAs($this->admin));
 
+    /**
+     * The class runs from its floor to its ceiling, with 500 grams of grace
+     * below the floor — not a 500-gram window below the ceiling, which is what
+     * the rule used to be and which rejected most of the class. The bands
+     * themselves are covered in detail in WeightValidationTest.
+     */
     it('passes a weight inside the class and fails one outside', function (float $kg, string $expected) {
-        [$category] = categoryWithAthletes(1);   // -66 class, min 60 max 66
+        [$category] = categoryWithAthletes(1);   // -66 class, floor 60, ceiling 66
         $athlete = $category->athletes()->first();
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $category->ageCategory])
+        Livewire::test(WeighIn::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => $category->ageCategory->gender,
+        ])
             ->set("weights.{$athlete->id}", (string) $kg)
             ->call('record', $athlete->id);
 
         expect($athlete->refresh()->weighin_status)->toBe($expected)
             ->and((float) $athlete->weighin_kg)->toBe($kg);
     })->with([
-        'at the limit' => [66.0, 'pass'],
-        'inside tolerance' => [65.6, 'pass'],
-        'below tolerance' => [64.9, 'fail'],
-        'over the limit' => [66.4, 'fail'],
+        'at the ceiling' => [66.0, 'pass'],
+        'just under the ceiling' => [65.6, 'pass'],
+        'well inside the class' => [64.9, 'pass'],
+        'inside the tolerance below the floor' => [59.6, 'pass'],
+        'below the tolerance' => [59.4, 'fail'],
+        'over the ceiling' => [66.4, 'fail'],
     ]);
 
     it('rejects a non-numeric entry without touching the record', function () {
         [$category] = categoryWithAthletes(1);
         $athlete = $category->athletes()->first();
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $category->ageCategory])
+        Livewire::test(WeighIn::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => $category->ageCategory->gender,
+        ])
             ->set("weights.{$athlete->id}", 'heavy')
             ->call('record', $athlete->id);
 
@@ -337,6 +378,112 @@ describe('bracket screen', function () {
 
         // Nothing changed — the originals are still 1, 2, 3.
         expect($category->athletes()->pluck('draw_number')->sort()->values()->all())->toBe([1, 2, 3]);
+    });
+
+    describe('deleting the bracket', function () {
+        it('throws the drawn bracket away and keeps the draw numbers', function () {
+            [$category, $athletes] = categoryWithAthletes(4);
+            app(BracketGenerator::class)->generate($category);
+
+            Livewire::test(Bracket::class, ['weightCategory' => $category])
+                ->call('deleteBracket');
+
+            expect($category->bouts()->count())->toBe(0)
+                ->and($athletes[1]->refresh()->draw_number)->toBe(1);
+        });
+
+        /** Which is the whole point: registration refuses while a bracket stands. */
+        it('lets an athlete be removed afterwards', function () {
+            [$category] = categoryWithAthletes(4);
+            app(BracketGenerator::class)->generate($category);
+
+            Livewire::test(Bracket::class, ['weightCategory' => $category])
+                ->call('deleteBracket');
+
+            $ageCategory = $category->ageCategory;
+            $athlete = $category->athletes()->firstOrFail();
+
+            Livewire::test(Registration::class, [
+                'championship' => $ageCategory->championship,
+                'competition' => 'M',
+            ])
+                ->call('delete', $athlete->id);
+
+            expect(Athlete::find($athlete->id))->toBeNull();
+        });
+
+        it('asks again before erasing a decided contest', function () {
+            [$category] = categoryWithAthletes(4);
+            app(BracketGenerator::class)->generate($category);
+            runTournament($category);
+
+            $component = Livewire::test(Bracket::class, ['weightCategory' => $category])
+                ->call('deleteBracket');
+
+            expect($category->bouts()->count())->toBeGreaterThan(0)
+                ->and($component->get('confirmingDelete'))->toBeTrue();
+
+            $component->call('deleteBracket', true);
+
+            expect($category->bouts()->count())->toBe(0);
+        });
+
+        /** A contest being scored would vanish from under the mat screen. */
+        it('refuses while a contest from the class is on a mat', function () {
+            [$court, $bout] = boutOnMat();
+            $category = $bout->weightCategory;
+
+            Livewire::test(Bracket::class, ['weightCategory' => $category])
+                ->call('deleteBracket')
+                ->assertSee('on a mat');
+
+            expect($category->bouts()->count())->toBeGreaterThan(0);
+        });
+    });
+
+    /**
+     * Regression: draw numbers are unique per category, and saveDraws() used
+     * to write them one at a time in place. The moment two athletes swapped,
+     * the first update tried to take a number the second was still holding and
+     * the screen died on the constraint rather than saving.
+     */
+    it('lets two athletes swap draw numbers after the draw', function () {
+        [$category, $athletes] = categoryWithAthletes(4);
+
+        app(BracketGenerator::class)->generate($category);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->set("draws.{$athletes[1]->id}", '2')
+            ->set("draws.{$athletes[2]->id}", '1')
+            ->call('saveDraws');
+
+        expect($athletes[1]->refresh()->draw_number)->toBe(2)
+            ->and($athletes[2]->refresh()->draw_number)->toBe(1);
+    });
+
+    it('says the bracket needs redrawing when the numbers change under one', function () {
+        [$category, $athletes] = categoryWithAthletes(4);
+
+        app(BracketGenerator::class)->generate($category);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->set("draws.{$athletes[1]->id}", '2')
+            ->set("draws.{$athletes[2]->id}", '1')
+            ->call('saveDraws')
+            // Asserted on what the operator actually sees: Livewire's test
+            // harness ages the flash before session('status') can be read back.
+            ->assertSee('Redraw the bracket for the new order to take effect.');
+    });
+
+    it('clears a draw number that is emptied', function () {
+        [$category, $athletes] = categoryWithAthletes(3);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->set("draws.{$athletes[3]->id}", '')
+            ->call('saveDraws');
+
+        expect($athletes[3]->refresh()->draw_number)->toBeNull()
+            ->and($athletes[1]->refresh()->draw_number)->toBe(1);
     });
 
     /**

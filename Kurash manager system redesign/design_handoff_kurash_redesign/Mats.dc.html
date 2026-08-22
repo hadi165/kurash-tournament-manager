@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/styles.css">
+  <link rel="stylesheet" href="kurash-theme.css">
+  <script src="_ds/modernist-ade95aec-3268-4197-bc69-ddbb127c7df0/_ds_bundle.js"></script>
+</helmet>
+<div data-theme="{{ theme }}" data-screen-label="Mats" style="display:flex; min-height:100vh; background:var(--color-bg); color:var(--color-text); font-family:var(--font-body)">
+  <dc-import name="Sidebar" active="Mats" hint-size="252px,100%"></dc-import>
+  <main style="flex:1; min-width:0; display:flex; flex-direction:column">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; padding:10px 32px; border-bottom:2px solid var(--color-divider)">
+      <div style="font-size:13px; display:flex; align-items:center; gap:8px">
+        <a href="Championships.dc.html" style="font-weight:600; text-decoration:none">Championships</a>
+        <span class="text-muted">/</span>
+        <a href="Categories.dc.html" style="font-weight:600; text-decoration:none">Asian Kurash Championship 2026</a>
+        <span class="text-muted">/</span>
+        <span style="font-weight:600" class="text-muted">Mats</span>
+      </div>
+      <button class="btn btn-secondary" style="font-size:12px; padding:4px 12px" onClick="{{ toggleTheme }}">{{ themeBtnLabel }}</button>
+    </div>
+    <header style="padding:28px 32px 0">
+      <div class="kicker" style="color:var(--color-accent-600)">Asian Kurash Championship 2026</div>
+      <h1 style="font-size:36px; margin:8px 0 4px">Mats and scoreboards</h1>
+      <p class="text-muted" style="font-size:14px; margin:0">Driver in use: http — live scoreboards will be contacted at the addresses below.</p>
+    </header>
+    <div style="padding:22px 32px 48px; display:flex; flex-direction:column; gap:20px; max-width:1240px">
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm); padding:22px 24px">
+        <h4 style="margin:0">Add mat</h4>
+        <div style="display:grid; grid-template-columns:120px 1fr 1.4fr 1fr; gap:16px; margin:18px 0">
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">Mat number</label>
+            <input class="input" type="number" min="1" value="4">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">Name</label>
+            <input class="input" placeholder="Mat A">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">Scoreboard URL</label>
+            <input class="input" placeholder="http://192.168.1.40">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:6px">
+            <label class="kicker">API key</label>
+            <input class="input" type="password">
+            <div style="font-size:11px" class="text-muted">Optional</div>
+          </div>
+        </div>
+        <button class="btn btn-primary">Add mat</button>
+      </section>
+      <section style="background:var(--color-surface); border:1px solid var(--color-neutral-300); box-shadow:var(--shadow-sm)">
+        <table class="table" style="width:100%">
+          <thead>
+            <tr><th style="text-align:right">Mat</th><th>Name</th><th>Scoreboard</th><th style="text-align:right">Bouts</th><th>Status</th><th></th></tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{ mats }}" as="m" hint-placeholder-count="3">
+              <tr>
+                <td style="text-align:right; font-family:monospace; font-weight:700">{{ m.number }}</td>
+                <td style="font-weight:700">{{ m.name }}</td>
+                <td style="font-family:monospace; font-size:12px">{{ m.url }}</td>
+                <td style="text-align:right">{{ m.bouts }}</td>
+                <td><span class="tag" style="{{ m.badgeStyle }}">{{ m.badge }}</span></td>
+                <td style="text-align:right">
+                  <div style="display:flex; justify-content:flex-end; gap:8px; flex-wrap:wrap">
+                    <a href="#" class="btn btn-primary" style="font-size:12px; padding:4px 12px">Open mat</a>
+                    <a href="#" class="btn btn-secondary" style="font-size:12px; padding:4px 12px">Scoreboard</a>
+                    <button class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Test</button>
+                    <button class="btn btn-ghost" style="font-size:12px; padding:4px 10px" onClick="{{ m.onToggle }}">{{ m.toggleLabel }}</button>
+                    <button class="btn btn-ghost" style="font-size:12px; padding:4px 10px">Edit</button>
+                    <button class="btn btn-ghost" style="font-size:12px; padding:4px 10px; color:var(--color-danger)">Delete</button>
+                  </div>
+                </td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;dark&quot;, &quot;options&quot;: [&quot;dark&quot;, &quot;light&quot;], &quot;tsType&quot;: &quot;string&quot;}}">
+class Component extends DCLogic {
+  state = {
+    themeOverride: null,
+    mats: [
+      { id: 1, number: 1, name: 'Mat A', url: 'http://192.168.1.40', bouts: 52, active: true },
+      { id: 2, number: 2, name: 'Mat B', url: 'http://192.168.1.41', bouts: 48, active: true },
+      { id: 3, number: 3, name: 'Central', url: 'http://192.168.1.42', bouts: 56, active: false },
+    ],
+  };
+  renderVals() {
+    const theme = this.state.themeOverride ?? this.props.theme ?? 'dark';
+    return {
+      theme, themeBtnLabel: theme === 'dark' ? 'Light mode' : 'Dark mode',
+      toggleTheme: () => this.setState({ themeOverride: theme === 'dark' ? 'light' : 'dark' }),
+      mats: this.state.mats.map(m => ({
+        ...m,
+        badge: m.active ? 'ACTIVE' : 'INACTIVE',
+        badgeStyle: m.active
+          ? { background: 'var(--color-accent-200)', color: 'var(--color-accent-800)' }
+          : { background: 'transparent', border: '1px solid var(--color-neutral-400)', color: 'var(--color-text)' },
+        toggleLabel: m.active ? 'Deactivate' : 'Activate',
+        onToggle: () => this.setState(s => ({ mats: s.mats.map(x => x.id === m.id ? { ...x, active: !x.active } : x) })),
+      })),
+    };
+  }
+}
+</script>
+</body>
+</html>

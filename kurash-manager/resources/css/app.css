@@ -1,6 +1,11 @@
 @import 'tailwindcss';
 @import '../../vendor/livewire/flux/dist/flux.css';
 
+/* The draw ceremony's own palette, scoped to .dc. Imported rather than
+   duplicated: the venue draw board loads the same file as a standalone entry,
+   and two copies of a palette are two palettes waiting to disagree. */
+@import './ceremony.css';
+
 @source '../views';
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../vendor/livewire/flux-pro/stubs/**/*.blade.php';
@@ -8,31 +13,338 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   Source Sans 3, self-hosted.
+
+   Served from our own origin rather than a font CDN: a venue machine is often
+   on a locked-down or offline network mid-competition, and a UI that loses its
+   typeface at the scorers' table is a UI nobody trusts. Files come from the
+   official Adobe release (3.052R, WOFF2 package) and live in
+   public/fonts/source-sans-3/.
+
+   Four upright weights — 400/500/600/700, the range the interface uses — plus
+   italic at the regular weight, which is used for asides and empty states and
+   never for running text.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-Regular.woff2') format('woff2');
+    font-weight: 400;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-It.woff2') format('woff2');
+    font-weight: 400;
+    font-style: italic;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-Medium.woff2') format('woff2');
+    font-weight: 500;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-Semibold.woff2') format('woff2');
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Source Sans 3';
+    src: url('/fonts/source-sans-3/SourceSans3-Bold.woff2') format('woff2');
+    font-weight: 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   IKA brand tokens — Soft SaaS direction.
+
+   Two groups, split by whether they invert between themes:
+
+   - Ground, surface, ink, muted, the two line weights, the soft tints and the
+     shadows DO invert, so they are plain custom properties redefined under
+     .dark and mapped into Tailwind with `@theme inline`. Inline matters: it
+     makes the generated utility hold the var *reference*, so `bg-surface`
+     follows the theme with no `dark:` variant at the call site.
+   - The green, blue and red themselves do NOT invert — the federation's
+     colours are the same in both themes — so they are ordinary `@theme`
+     entries.
+
+   `.dark` is the class Flux's appearance setting already puts on <html>.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+    --ground: #f6f8f7;
+    --surface: #ffffff;
+    --ink: #16211d;
+    --muted: #6b7a74;
+
+    /* Two line weights, and only two: `line` draws a border, `line-soft`
+       separates rows and fills a hover. */
+    --line: #e4eae7;
+    --line-soft: #eef2f0;
+
+    /* The soft tints are backgrounds for a state, never text. They invert,
+       because a wash that reads as "quietly green" on paper-white has to
+       become a deep green to read the same way on a dark ground. */
+    --green-soft: #e9f7ee;
+    --blue-soft: #e8f6fd;
+    --amber-soft: #fbf0d8;
+    --red-soft: #fdeaee;
+
+    /* The -deep roles are the readable-text end of each hue, and they invert
+       too: on a light surface the readable end is the dark ink, on a dark one
+       it is the pale tint. The bright hues below are for fills, rails and bars
+       only — #c98a00 on white is 2.95:1 and fails large-text contrast, so a
+       label in amber has to be amber-deep or it is not a label anyone can
+       read. */
+    --green-deep: #046830;
+    --blue-deep: #086690;
+    --amber-deep: #6f4d00;
+    --red-deep: #8f1626;
+
+    /* A neutral ramp for the few places that need a step between surface and
+       line — avatars, disabled fills, capacity bars. */
+    --n-100: #f6f8f7;
+    --n-200: #eef2f0;
+    --n-300: #e4eae7;
+    --n-400: #cbd5d1;
+    --n-500: #a6b3ae;
+    --n-600: #8a9791;
+    --n-700: #6b7a74;
+    --n-800: #45524d;
+    --n-900: #26332e;
+
+    /* ── Navigation drawer ──────────────────────────────────────────────
+       The drawer is one hue taken to opposite ends of the lightness scale —
+       pale sage on a light page, deep pine on a dark one — so it reads as the
+       same surface in either theme rather than as two different panels.
+
+       It carries its own ink and muted values because the page's greys were
+       measured against the page ground: --muted on this sage fill does not
+       reach 4.5:1, and a group label nobody can read is not a label. */
+    --nav-bg: #dcebe2;
+    --nav-line: #c4d9cb;
+    --nav-ink: #12211a;
+    --nav-muted: #4f6559;
+    --nav-hover: rgb(11 26 20 / 0.06);
+    --nav-active-bg: rgb(1 154 68 / 0.16);
+    --nav-active-ink: #04331a;
+    --nav-card: #ffffff;
+
+    /* Soft, wide and cheap: the card shadow does the work borders used to. */
+    --sh-sm: 0 1px 2px rgb(16 33 29 / 0.06), 0 1px 3px rgb(16 33 29 / 0.04);
+    --sh-md: 0 4px 16px rgb(16 33 29 / 0.07), 0 1px 3px rgb(16 33 29 / 0.05);
+    --sh-lg: 0 12px 32px rgb(16 33 29 / 0.10);
+}
+
+.dark {
+    --ground: #101614;
+    --surface: #18211e;
+    --ink: #eaf2ee;
+    --muted: #90a099;
+
+    --line: #263230;
+    --line-soft: #1f2a27;
+
+    --green-soft: #12291d;
+    --blue-soft: #0f2733;
+    --amber-soft: #2b2109;
+    --red-soft: #2a1418;
+
+    --green-deep: #6fd898;
+    --blue-deep: #7fd0f0;
+    --amber-deep: #e8bf62;
+    /* The handoff names no dark red-deep; this is the same lightness step as
+       its three, so a failed state reads at the weight the others do. */
+    --red-deep: #f38a98;
+
+    /* Inverted: 100 is the darkest step here, so a component written against
+       n-200 stays the "one step off the surface" tint in both themes instead
+       of needing a dark: variant. */
+    --n-100: #141c1a;
+    --n-200: #1f2a27;
+    --n-300: #263230;
+    --n-400: #35443f;
+    --n-500: #4d5f59;
+    --n-600: #6f807a;
+    --n-700: #90a099;
+    --n-800: #c2cfc9;
+    --n-900: #eaf2ee;
+
+    --nav-bg: #0b1a14;
+    --nav-line: #16302b;
+    --nav-ink: #eaf4ee;
+    --nav-muted: #8ba99a;
+    --nav-hover: rgb(255 255 255 / 0.07);
+    --nav-active-bg: rgb(18 194 104 / 0.22);
+    --nav-active-ink: #6fe3a3;
+    --nav-card: rgb(255 255 255 / 0.06);
+
+    --sh-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --sh-md: 0 4px 16px rgb(0 0 0 / 0.45);
+    --sh-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+}
+
+@theme inline {
+    /* The platform face first, our self-hosted copy behind it: Windows renders
+       in Segoe UI, everything else falls to Source Sans 3, which we ship. */
+    --font-sans: "Segoe UI", "Segoe UI Variable", "Source Sans 3", system-ui, sans-serif;
+
+    --color-ground: var(--ground);
+    --color-surface: var(--surface);
+    --color-ink: var(--ink);
+    --color-muted: var(--muted);
+    --color-line: var(--line);
+    --color-line-soft: var(--line-soft);
+
+    --color-nav-bg: var(--nav-bg);
+    --color-nav-line: var(--nav-line);
+    --color-nav-ink: var(--nav-ink);
+    --color-nav-muted: var(--nav-muted);
+    --color-nav-hover: var(--nav-hover);
+    --color-nav-active-bg: var(--nav-active-bg);
+    --color-nav-active-ink: var(--nav-active-ink);
+    --color-nav-card: var(--nav-card);
+
+    --color-brand-soft: var(--green-soft);
+    --color-info-soft: var(--blue-soft);
+    --color-amber-soft: var(--amber-soft);
+    --color-danger-soft: var(--red-soft);
+
+    --color-brand-deep: var(--green-deep);
+    --color-info-deep: var(--blue-deep);
+    --color-amber-deep: var(--amber-deep);
+    --color-danger-deep: var(--red-deep);
+
+    --color-n-100: var(--n-100);
+    --color-n-200: var(--n-200);
+    --color-n-300: var(--n-300);
+    --color-n-400: var(--n-400);
+    --color-n-500: var(--n-500);
+    --color-n-600: var(--n-600);
+    --color-n-700: var(--n-700);
+    --color-n-800: var(--n-800);
+    --color-n-900: var(--n-900);
+
+    /* Named for what they are used for, so a card says shadow-card rather than
+       picking a step off a scale. The plain Tailwind names are mapped to the
+       same three values below, because Flux reaches for those. */
+    --shadow-card: var(--sh-md);
+    --shadow-chip: var(--sh-sm);
+    --shadow-pop: var(--sh-lg);
+
+    --shadow-2xs: var(--sh-sm);
+    --shadow-xs: var(--sh-sm);
+    --shadow-sm: var(--sh-sm);
+    --shadow-md: var(--sh-md);
+    --shadow-lg: var(--sh-md);
+    --shadow-xl: var(--sh-lg);
+    --shadow-2xl: var(--sh-lg);
+}
+
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    /* IKA green — primary actions, active nav, pass states, progress fills,
+       the gold column. `brand` is the colour itself; `brand-deep` is the text
+       weight of it, used on a green-soft ground. */
+    --color-brand: #019a44;
 
-    --color-zinc-50: #fafafa;
-    --color-zinc-100: #f5f5f5;
-    --color-zinc-200: #e5e5e5;
-    --color-zinc-300: #d4d4d4;
-    --color-zinc-400: #a3a3a3;
-    --color-zinc-500: #737373;
-    --color-zinc-600: #525252;
-    --color-zinc-700: #404040;
-    --color-zinc-800: #262626;
-    --color-zinc-900: #171717;
-    --color-zinc-950: #0a0a0a;
+    --color-brand-100: #e9f7ee;
+    --color-brand-200: #c8f1d6;
+    --color-brand-300: #8fdfae;
+    --color-brand-400: #3dbd6f;
+    --color-brand-500: #019a44;
+    --color-brand-600: #01813a;
+    --color-brand-700: #046830;
+    --color-brand-800: #084d26;
+    --color-brand-900: #0b371d;
 
-    --color-accent: var(--color-neutral-800);
-    --color-accent-content: var(--color-neutral-800);
-    --color-accent-foreground: var(--color-white);
+    /* IKA blue — info pills, the blue corner, secondary emphasis. */
+    --color-info: #1a9fd8;
+
+    --color-info-100: #e8f6fd;
+    --color-info-200: #c8eafa;
+    --color-info-300: #93d7f2;
+    --color-info-400: #4fbce8;
+    --color-info-500: #1a9fd8;
+    --color-info-600: #0c81b4;
+    --color-info-700: #086690;
+    --color-info-800: #0c4c69;
+    --color-info-900: #0f3749;
+
+    /* IKA red — destructive and fail states only. Never decorative. */
+    --color-danger: #d7263d;
+
+    --color-danger-100: #fdeaee;
+    --color-danger-200: #f9cdd4;
+    --color-danger-500: #d7263d;
+    --color-danger-700: #8f1626;
+
+    /* Medal amber — the third data hue. Medals, honours and "needs attention",
+       and nothing else: it is close enough to a warning that spending it on
+       decoration would cost it its meaning. */
+    --color-amber: #c98a00;
+
+    /* The scoring yellow.
+
+       The federation's own convention for the board: G, Y and C are set in
+       yellow, D and T in red. It is the medal amber opened into a scale rather
+       than a fourth hue, because a board carrying two yellows is a board where
+       neither means anything. */
+    --color-warn: #c98a00;
+    --color-warn-100: #fdf3dd;
+    --color-warn-200: #f8e3ae;
+    --color-warn-300: #efcb6e;
+    --color-warn-400: #e0a83c;
+    --color-warn-500: #c98a00;
+    --color-warn-600: #a97200;
+    --color-warn-700: #855a00;
+    --color-warn-800: #614200;
+    --color-warn-900: #402c00;
+
+    /* Two more steps on the red, for text that has to hold on a dark panel
+       without the 500 vibrating against it. */
+    --color-danger-300: #f0a3ae;
+    --color-danger-400: #e5687c;
+    --color-danger-600: #b41d31;
+
+    /* Soft and rounded. Flux's components read this same scale, so overriding
+       it here is what gives its inputs, buttons and menus the new shape:
+       8px on anything you type into, 12px on inner cells, 18px on cards. */
+    --radius-xs: 6px;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+    --radius-xl: 18px;
+    --radius-2xl: 20px;
+    --radius-3xl: 24px;
+    --radius-4xl: 28px;
+    --radius-pill: 999px;
+
+    /* Flux reads these for primary buttons, focus rings and selection. */
+    --color-accent: #019a44;
+    --color-accent-content: #046830;
+    --color-accent-foreground: #ffffff;
 }
 
 @layer theme {
     .dark {
-        --color-accent: var(--color-white);
-        --color-accent-content: var(--color-white);
-        --color-accent-foreground: var(--color-neutral-800);
+        /* Green stays the accent in dark; only the step changes, so it holds
+           contrast against the dark ground. */
+        --color-accent: #019a44;
+        --color-accent-content: #8fdfae;
+        --color-accent-foreground: #ffffff;
     }
 }
 
@@ -43,8 +355,135 @@
     ::before,
     ::backdrop,
     ::file-selector-button {
-        border-color: var(--color-gray-200, currentColor);
+        border-color: var(--line);
     }
+
+    body {
+        background: var(--ground);
+        color: var(--ink);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+    }
+
+    /* Links are green at its readable end, which is what green-deep means in
+       either theme — so this needs no dark: counterpart. */
+    a {
+        color: var(--green-deep);
+    }
+
+    a:hover {
+        color: var(--color-brand-500);
+    }
+
+    .dark a:hover {
+        color: var(--color-brand-300);
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-brand-500);
+        outline-offset: 2px;
+    }
+
+    /* Anything Alpine hides on load must be hidden before Alpine boots, or a
+       collapsed form and a closed popover both flash open on every page load. */
+    [x-cloak] {
+        display: none !important;
+    }
+
+    ::selection {
+        background: color-mix(in srgb, var(--color-brand-500) 24%, transparent);
+    }
+}
+
+@layer components {
+    /* The one place all-caps survives: a group label in the sidebar and the
+       small captions on stat tiles. Everything else is sentence case. */
+    .kicker {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        line-height: 1.4;
+        color: var(--muted);
+    }
+
+    .rule-2 {
+        height: 1px;
+        background: var(--line);
+        flex: none;
+    }
+
+    /* The system table. It lives in a card with no padding and hidden
+       overflow, so the rules run the full width of the card and the corners
+       stay rounded. */
+    .t {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .t th {
+        padding: 12px 20px;
+        text-align: left;
+        white-space: nowrap;
+        font-size: 11.5px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--muted);
+        border-bottom: 1px solid var(--line);
+    }
+
+    .t td {
+        padding: 13px 20px;
+        border-bottom: 1px solid var(--line-soft);
+        vertical-align: middle;
+    }
+
+    .t tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .t tbody tr:hover {
+        background: var(--line-soft);
+    }
+
+    .t .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Flux, re-shaped.
+
+   These rules sit outside every @layer on purpose: unlayered declarations beat
+   layered ones, which is what lets them win against the utility classes Flux
+   puts on its own markup. Overriding the components here rather than at each
+   call site is what keeps a Flux button and a hand-written one the same
+   object.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Anything you press is a pill, at weight 600. */
+[data-flux-button] {
+    border-radius: var(--radius-pill);
+    font-weight: 600;
+}
+
+/* Anything you type into is an inset: the page ground on a white card, a 1px
+   line, and the small radius. */
+input[data-flux-control],
+textarea[data-flux-control],
+select[data-flux-control] {
+    border-radius: var(--radius-sm);
+    background-color: var(--ground);
 }
 
 [data-flux-field]:not(ui-radio, ui-checkbox) {
@@ -52,7 +491,7 @@
 }
 
 [data-flux-label] {
-    @apply  !mb-0 !leading-tight;
+    @apply !mb-0 !leading-tight;
 }
 
 input:focus[data-flux-control],
@@ -60,7 +499,3 @@ textarea:focus[data-flux-control],
 select:focus[data-flux-control] {
     @apply outline-hidden ring-2 ring-accent ring-offset-2 ring-offset-accent-foreground;
 }
-
-/* \[:where(&)\]:size-4 {
-    @apply size-4;
-} */

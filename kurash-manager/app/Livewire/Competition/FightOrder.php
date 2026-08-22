@@ -3,6 +3,7 @@
 namespace App\Livewire\Competition;
 
 use App\Jobs\PushBoutToScoreboard;
+use App\Livewire\Concerns\ScopesToCompetition;
 use App\Models\Bout;
 use App\Models\Championship;
 use App\Services\FightOrderScheduler;
@@ -12,6 +13,8 @@ use Livewire\Component;
 
 class FightOrder extends Component
 {
+    use ScopesToCompetition;
+
     public Championship $championship;
 
     public int $minimumRest = FightOrderScheduler::DEFAULT_REST;
@@ -95,6 +98,7 @@ class FightOrder extends Component
         $bouts = $this->championship->bouts()
             ->whereNotNull('fight_number')
             ->when($this->hideCompleted, fn ($q) => $q->where('status', '!=', Bout::STATUS_COMPLETED))
+            ->tap(fn ($q) => $this->scopeBouts($q))
             ->with(['athleteA', 'athleteB', 'winner', 'weightCategory.ageCategory', 'court'])
             ->orderBy('fight_number')
             ->get();

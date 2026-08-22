@@ -213,7 +213,7 @@ describe('audit trail', function () {
         $this->generator->generate($category);
 
         $opener = $category->bouts()->where('round', 1)->where('position_in_round', 0)->first();
-        $this->advancer->recordResult($opener, $athletes[1]->id, ['score_a' => 10, 'score_b' => 0], 'halal', $user, 'scoreboard');
+        $this->advancer->recordResult($opener, $athletes[1]->id, ['score_a' => 10, 'score_b' => 0], 'khalol', $user, 'scoreboard');
 
         $event = BoutEvent::where('bout_id', $opener->id)->where('action', 'result_recorded')->first();
 

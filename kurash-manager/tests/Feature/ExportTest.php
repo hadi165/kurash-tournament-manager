@@ -1,10 +1,16 @@
 <?php
 
+use App\Exports\BracketSheet;
+use App\Exports\BracketSheetWriter;
 use App\Exports\ConfirmedWeighInReport;
+use App\Exports\DocumentReference;
+use App\Exports\DrawNumbersReport;
 use App\Exports\DrawSheetReport;
 use App\Exports\EntriesByWeightCategoryReport;
 use App\Exports\FightOrderReport;
+use App\Exports\HasTotal;
 use App\Exports\MedalStandingReport;
+use App\Exports\Report;
 use App\Exports\ResultsReport;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
@@ -15,6 +21,8 @@ use App\Services\BoutAdvancer;
 use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
 use App\Services\MedalTable;
+use App\Support\BracketSeeding;
+use PhpOffice\PhpSpreadsheet\IOFactory;
 
 beforeEach(function () {
     $this->admin = User::factory()->create(['role' => 'admin']);
@@ -148,7 +156,7 @@ describe('the fight order sheet', function () {
         app(BoutAdvancer::class)->recordResult(
             bout: $bout,
             winnerAthleteId: $bout->athlete_a_id,
-            winType: 'halal',
+            winType: 'khalol',
             user: $this->admin,
             source: 'operator',
         );
@@ -209,7 +217,7 @@ describe('results and medal standing', function () {
                     $advancer->recordResult(
                         bout: $bout,
                         winnerAthleteId: $bout->athlete_a_id,
-                        winType: 'halal',
+                        winType: 'khalol',
                         user: null,
                         source: 'operator',
                     );
@@ -318,8 +326,264 @@ describe('serving the files', function () {
     it('rejects a format it does not produce', function () {
         $category = weighedClass(4);
 
+        // pdf, xlsx and csv are the three; anything else is not a document
+        // this system makes.
         $this->actingAs($this->admin)
-            ->get("/exports/weight-classes/{$category->id}/weigh-in.xlsx")
+            ->get("/exports/weight-classes/{$category->id}/weigh-in.docx")
             ->assertNotFound();
+    });
+
+    it('produces the spreadsheet the Excel buttons ask for', function () {
+        $category = weighedClass(4);
+
+        $this->actingAs($this->admin)
+            ->get(route('exports.weigh-in', ['weightCategory' => $category, 'format' => 'xlsx']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    });
+});
+
+describe('the printed sheet', function () {
+    beforeEach(fn () => $this->actingAs($this->admin));
+
+    /** Rendered as HTML rather than as a PDF: the template is what is on trial. */
+    function renderedSheet(Report $report): string
+    {
+        return view('exports.table', [
+            'title' => $report->title(),
+            'meta' => $report->meta(),
+            'headings' => $report->headings(),
+            'rows' => $report->rows(),
+            'documentTag' => DocumentReference::tag($report),
+            'documentReference' => DocumentReference::reference($report),
+            'total' => $report instanceof HasTotal ? $report->total() : null,
+            'footerLine' => $report->meta()['Competition'] ?? null,
+        ])->render();
+    }
+
+    it('carries a document type and a filing reference', function () {
+        $category = weighedClass(4);
+        $championship = $category->ageCategory->championship;
+
+        $html = renderedSheet(new EntriesByWeightCategoryReport($championship));
+
+        expect($html)->toContain('Entries by Weight Category')
+            ->and($html)->toContain('IKA-ENT-'.now()->format('Y'));
+    });
+
+    /**
+     * The reference is cited in correspondence weeks later, so the same
+     * document has to keep producing the same one.
+     */
+    it('gives the same document the same reference every time', function () {
+        $category = weighedClass(4);
+        $championship = $category->ageCategory->championship;
+
+        $first = DocumentReference::reference(new EntriesByWeightCategoryReport($championship));
+        $second = DocumentReference::reference(new EntriesByWeightCategoryReport($championship));
+
+        expect($first)->toBe($second);
+    });
+
+    it('sets draw status as a chip in the fixed vocabulary', function () {
+        $category = weighedClass(4);
+        $championship = $category->ageCategory->championship;
+
+        $html = renderedSheet(new EntriesByWeightCategoryReport($championship));
+
+        expect($html)->toContain('chip-status chip-idle');
+
+        app(BracketGenerator::class)->generate($category);
+
+        expect(renderedSheet(new EntriesByWeightCategoryReport($championship)))
+            ->toContain('chip-status chip-done');
+    });
+
+    it('totals the reports that have something to add up', function () {
+        $category = weighedClass(6);
+        $championship = $category->ageCategory->championship;
+
+        $report = new EntriesByWeightCategoryReport($championship);
+
+        expect($report->total())->toBe(['label' => 'Total weighed in', 'value' => 6])
+            ->and(renderedSheet($report))->toContain('Total weighed in');
+    });
+
+    /** A running order has nothing to sum, and a spurious total is worse than none. */
+    it('leaves the total off a report that has no meaningful sum', function () {
+        $category = weighedClass(4);
+        $championship = $category->ageCategory->championship;
+
+        expect(new FightOrderReport($championship))->not->toBeInstanceOf(HasTotal::class);
+    });
+
+    it('drops the total row when there is nothing to report', function () {
+        $championship = Championship::factory()->create();
+
+        expect(renderedSheet(new EntriesByWeightCategoryReport($championship)))
+            ->toContain('Nothing to report yet.')
+            ->and(renderedSheet(new EntriesByWeightCategoryReport($championship)))
+            ->not->toContain('Total weighed in');
+    });
+});
+
+describe('the draw numbers', function () {
+    beforeEach(fn () => $this->actingAs($this->admin));
+
+    it('lists everybody holding a number, in draw order', function () {
+        $category = weighedClass(6);
+        app(BracketGenerator::class)->generate($category);
+
+        $report = new DrawNumbersReport($category->refresh());
+        $rows = $report->rows();
+
+        expect($rows)->toHaveCount(6)
+            ->and(array_column($rows, 0))->toBe([1, 2, 3, 4, 5, 6])
+            ->and($rows[0][1])->toBe('Athlete 1');
+    });
+
+    /**
+     * The confirmed weigh-in list leaves the column blank on purpose — it is
+     * the sheet the numbers are written onto. This is the other half.
+     */
+    it('is the answer sheet, where the weigh-in list is the blank one', function () {
+        $category = weighedClass(4);
+
+        $weighIn = (new ConfirmedWeighInReport($category))->rows();
+        $numbers = (new DrawNumbersReport($category))->rows();
+
+        expect(array_column($weighIn, 5))->each->toBe('')
+            ->and(array_filter(array_column($numbers, 0)))->toHaveCount(4);
+    });
+
+    /**
+     * The sheet is the numbers and who holds them. How each was arrived at is
+     * recorded on the athlete and stays off the printed list.
+     */
+    it('prints the number and the athlete, and nothing about the method', function () {
+        $category = weighedClass(4);
+        $category->athletes()->update(['draw_number_source' => 'random']);
+
+        $report = new DrawNumbersReport($category->refresh());
+
+        expect($report->headings())->toBe(['Draw No.', "Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Country'])
+            ->and($report->rows()[0])->toHaveCount(5)
+            ->and(collect($report->rows())->flatten()->contains('Random draw'))->toBeFalse();
+    });
+
+    it('leaves out anybody who was never drawn', function () {
+        $category = weighedClass(5);
+        $category->athletes()->orderByDesc('draw_number')->first()->update(['draw_number' => null]);
+
+        expect((new DrawNumbersReport($category->refresh()))->rows())->toHaveCount(4);
+    });
+
+    it('downloads in both formats', function () {
+        $category = weighedClass(4);
+
+        $this->get(route('exports.draw-numbers', ['weightCategory' => $category, 'format' => 'pdf']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $this->get(route('exports.draw-numbers', ['weightCategory' => $category, 'format' => 'csv']))
+            ->assertOk();
+    });
+
+    it('reports the bracket the draw was actually built for', function () {
+        $category = weighedClass(6);
+        app(BracketGenerator::class)->generate($category);
+
+        expect((new DrawNumbersReport($category->refresh()))->meta()['Bracket'])->toBe('Bracket of 8');
+    });
+});
+
+describe('the bracket sheet', function () {
+    beforeEach(fn () => $this->actingAs($this->admin));
+
+    it('seats the tree in the order the draw seeded it', function () {
+        $category = weighedClass(8);
+        app(BracketGenerator::class)->generate($category);
+
+        $sheet = new BracketSheet($category->refresh());
+
+        expect($sheet->size())->toBe(8)
+            ->and($sheet->rounds())->toBe(3)
+            ->and(array_column($sheet->seats(), 'seed'))->toBe(BracketSeeding::order(8))
+            // The upper seat of every pair is blue, the lower green.
+            ->and(array_column($sheet->seats(), 'corner'))->toBe(['blue', 'green', 'blue', 'green', 'blue', 'green', 'blue', 'green']);
+    });
+
+    it('puts a square on every match, with its fight number', function () {
+        $championship = championshipWithBrackets(['-66' => 8]);
+        app(FightOrderScheduler::class)->schedule($championship);
+
+        $category = $championship->ageCategories()->first()->weightCategories()->first();
+        $sheet = new BracketSheet($category->refresh());
+
+        expect($sheet->matches(1))->toHaveCount(4)
+            ->and($sheet->matches(2))->toHaveCount(2)
+            ->and($sheet->matches(3))->toHaveCount(1)
+            // Each spans the rows it feeds from: 2, 4, 8.
+            ->and(array_column($sheet->matches(2), 'span'))->toBe([4, 4])
+            ->and($sheet->matches(1)[0]['fight'])->toStartWith('No. ');
+    });
+
+    it('marks the empty seats as byes rather than inventing people', function () {
+        $category = weighedClass(5);
+        app(BracketGenerator::class)->generate($category);
+
+        $seats = (new BracketSheet($category->refresh()))->seats();
+
+        expect(collect($seats)->where('bye', true))->toHaveCount(3)
+            ->and(collect($seats)->firstWhere('bye', true)['name'])->toBe('BYE');
+    });
+
+    it('downloads as a PDF and as a spreadsheet', function () {
+        $category = weighedClass(8);
+        app(BracketGenerator::class)->generate($category);
+
+        $this->get(route('exports.bracket-sheet', ['weightCategory' => $category, 'format' => 'pdf']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $this->get(route('exports.bracket-sheet', ['weightCategory' => $category, 'format' => 'xlsx']))
+            ->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    });
+
+    it('has nothing to draw before the draw is made', function () {
+        $category = weighedClass(8);
+
+        $this->get(route('exports.bracket-sheet', ['weightCategory' => $category, 'format' => 'pdf']))
+            ->assertNotFound();
+    });
+
+    /** The fight number goes in the square, which on a worksheet is a merged range. */
+    it('writes each fight number into the cell that spans its match', function () {
+        $championship = championshipWithBrackets(['-66' => 8]);
+        app(FightOrderScheduler::class)->schedule($championship);
+
+        $category = $championship->ageCategories()->first()->weightCategories()->first();
+
+        $path = tempnam(sys_get_temp_dir(), 'bracket').'.xlsx';
+        $response = app(BracketSheetWriter::class)->xlsx(new BracketSheet($category->refresh()));
+
+        ob_start();
+        $response->sendContent();
+        file_put_contents($path, ob_get_clean());
+
+        $book = IOFactory::load($path);
+        $page = $book->getActiveSheet();
+
+        // Four first-round matches, two quarters, one final, plus the champion.
+        expect($page->getMergeCells())->toHaveCount(8);
+
+        $numbers = collect($page->getMergeCells())
+            ->map(fn (string $range) => (string) $page->getCell(explode(':', $range)[0])->getValue())
+            ->filter(fn (string $value) => str_starts_with($value, 'No. '));
+
+        expect($numbers)->toHaveCount(7);
+
+        unlink($path);
     });
 });

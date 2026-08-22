@@ -20,6 +20,8 @@ use Illuminate\Support\Carbon;
  * @property int|null $clock_seconds_left
  * @property bool $clock_running
  * @property Carbon|null $clock_updated_at
+ * @property Carbon|null $jazzo_called_at
+ * @property Carbon|null $jazzo_resumed_at
  */
 class Bout extends Model
 {
@@ -44,6 +46,7 @@ class Bout extends Model
         'score_a', 'score_b', 'win_type', 'winner_athlete_id',
         'status', 'is_bye', 'frozen_snapshot', 'scoreboard_synced_at',
         'clock_seconds_left', 'clock_running', 'clock_updated_at',
+        'jazzo_called_at', 'jazzo_resumed_at',
     ];
 
     protected function casts(): array
@@ -56,6 +59,8 @@ class Bout extends Model
             'score_b' => 'decimal:1',
             'clock_running' => 'boolean',
             'clock_updated_at' => 'datetime',
+            'jazzo_called_at' => 'datetime',
+            'jazzo_resumed_at' => 'datetime',
         ];
     }
 
@@ -85,6 +90,20 @@ class Bout extends Model
     public function championship(): BelongsTo
     {
         return $this->belongsTo(Championship::class);
+    }
+
+    /**
+     * The division this contest belongs to.
+     *
+     * Declared even though the weight class also reaches it: contest length is
+     * set here, and a bout that has lost its weight class to a mid-competition
+     * edit should still be able to say how long it runs for.
+     *
+     * @return BelongsTo<AgeCategory, $this>
+     */
+    public function ageCategory(): BelongsTo
+    {
+        return $this->belongsTo(AgeCategory::class);
     }
 
     /** @return BelongsTo<WeightCategory, $this> */
@@ -146,6 +165,21 @@ class Bout extends Model
     public function isDecided(): bool
     {
         return $this->winner_athlete_id !== null;
+    }
+
+    /**
+     * Is this contest stopped for jazzo right now?
+     *
+     * Called and not yet resumed. The two timestamps are kept rather than one
+     * flag because the board's yellow box belongs on screen only while this is
+     * true, and a contest that was stopped and restarted must not be stopped
+     * again at the same halfway mark.
+     */
+    public function isInJazzo(): bool
+    {
+        return $this->jazzo_called_at !== null
+            && $this->jazzo_resumed_at === null
+            && ! $this->isDecided();
     }
 
     /** Both athletes present and no winner yet — this one can actually be fought. */
