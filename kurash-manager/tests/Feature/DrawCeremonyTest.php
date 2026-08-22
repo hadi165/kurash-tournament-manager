@@ -661,3 +661,44 @@ describe('finding the next class', function () {
             ->assertDontSee('All classes');
     });
 });
+
+/**
+ * The whole draw, on whatever screen it is opened on.
+ *
+ * The board used to pick a row height from the bracket size — 46px, or 30px
+ * once there were thirty-two seats. That fitted a 1080 projector and put the
+ * bottom of a sixteen-draw below the fold of a laptop, where nothing scrolled
+ * to reach it. The stylesheet divides the viewport by this instead.
+ */
+describe('the board fits the screen it is on', function () {
+    it('tells the stylesheet how many seats there are to fit', function () {
+        [$category] = categoryWithAthletes(12);
+        app(BracketGenerator::class)->generate($category);
+        $category->forceFill(['draw_published_at' => now()])->save();
+
+        // Twelve athletes are drawn into a bracket of sixteen, and it is the
+        // seats that have to fit, not the entries.
+        Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $category->refresh()])
+            ->assertViewHas('size', 16)
+            ->assertSee('--dc-seats: 16', false);
+    });
+
+    it('counts a smaller bracket down rather than up', function () {
+        [$category] = categoryWithAthletes(5);
+        app(BracketGenerator::class)->generate($category);
+
+        Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $category->refresh()])
+            ->assertSee('--dc-seats: 8', false);
+    });
+
+    /** A class with nothing drawn still has to render something sane. */
+    it('never divides by nothing', function () {
+        [$category] = categoryWithAthletes(0);
+
+        Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $category])
+            ->assertSee('--dc-seats: 1', false);
+    });
+});

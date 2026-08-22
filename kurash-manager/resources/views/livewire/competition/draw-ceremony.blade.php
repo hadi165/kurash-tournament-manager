@@ -21,7 +21,12 @@
 
 <div
     wire:poll.2s
-    class="dc dc-board-page {{ $size >= 32 ? 'dc-board-32' : '' }} {{ $complete ? 'dc-complete' : '' }}"
+    class="dc dc-board-page {{ $complete ? 'dc-complete' : '' }}"
+    {{-- How many seats there are to fit. The stylesheet divides what is left
+         of the viewport by this rather than guessing from the bracket size,
+         which is how a draw of sixteen came to have five of its rows below
+         the bottom of a laptop screen. --}}
+    style="--dc-seats: {{ max(1, $size) }}"
     x-data="{
         seen: Date.now(),
         stale: false,

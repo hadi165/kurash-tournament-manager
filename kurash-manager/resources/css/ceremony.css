@@ -262,18 +262,32 @@
 
 .dc-board-page {
     --dc-conn: rgb(255 255 255 / 0.14);
-    --dc-row: 46px;
+
+    /* How many seats the board is drawing, written on the element by the
+       view. Everything below sizes itself from it. */
+    --dc-seats: 16;
+
+    /* Head, body padding, column heads and footer — the fixed furniture the
+       rows have to fit underneath. */
+    --dc-chrome: 250px;
+
+    /* A draw board that has to be scrolled in front of a hall is not a draw
+       board, so the rows shrink to fit the screen rather than the sheet
+       running off the bottom of it. Two hard-coded sizes used to do this —
+       46px, or 30px for a bracket of 32 — which fitted a 1080 projector and
+       hid a third of the draw on a laptop.
+
+       Floored at 25px, which is what a bracket of thirty-two needs to fit a
+       1080 projector exactly. Below that the names stop being readable, and a
+       board nobody can read is worse than one that scrolls — which is what
+       the overflow on .dc-board leaves it free to do. */
+    --dc-row: clamp(25px, calc((100vh - var(--dc-chrome)) / var(--dc-seats)), 46px);
 
     min-height: 100vh;
     display: flex;
     flex-direction: column;
     background: var(--dc-bg);
 }
-
-/* A bracket of 32 does not fit a 1080 screen at 46px a row. The rows shrink
-   rather than the sheet scrolling, because a draw board that has to be
-   scrolled in front of a hall is not a draw board. */
-.dc-board-32 { --dc-row: 30px; }
 
 .dc-head {
     display: flex;
@@ -440,7 +454,9 @@
 
 /* ── The tree ───────────────────────────────────────────────────────────── */
 
-.dc-board { flex: 1; min-width: 0; overflow-x: auto; }
+/* Both axes. The rows fit the height on any reasonable screen; where they
+   cannot, this scrolls rather than cutting the bottom of the draw off. */
+.dc-board { flex: 1; min-width: 0; overflow: auto; }
 
 .dc-heads { display: grid; margin-bottom: 10px; }
 
@@ -495,7 +511,10 @@
 .dc-seat-name {
     flex: 1;
     min-width: 0;
-    font-size: 16px;
+    /* Scaled from the row rather than from the bracket size, so a name is as
+       large as its row can carry on whatever screen the board is open on.
+       Two lines at the floor of both is 24.6px, which fits a 25px row. */
+    font-size: clamp(11px, calc(var(--dc-row) * 0.36), 16px);
     font-weight: 600;
     line-height: 1.12;
     overflow-wrap: anywhere;
@@ -505,10 +524,6 @@
     overflow: hidden;
 }
 
-/* A draw of thirty-two runs on 30px rows. One line is all there is room for,
-   so it is set smaller to fit more of the name on it. */
-.dc-board-32 .dc-seat-name { font-size: 13.5px; -webkit-line-clamp: 1; }
-
 .dc-seat-empty { color: var(--dc-dim); }
 .dc-seat-noc { font-size: 13px; font-weight: 700; color: var(--dc-muted); }
 
@@ -516,14 +531,12 @@
    distorted. Smaller than the pool's, because it sits on a contest row. */
 .dc-seat-flag {
     flex: none;
-    width: 24px;
-    height: 16px;
+    height: clamp(10px, calc(var(--dc-row) * 0.35), 16px);
+    aspect-ratio: 3 / 2;
     object-fit: cover;
     border-radius: 2px;
     box-shadow: 0 0 0 1px var(--dc-line);
 }
-
-.dc-board-32 .dc-seat-flag { width: 20px; height: 13px; }
 
 .dc-match {
     border-left: 1px solid var(--dc-conn);
@@ -816,7 +829,9 @@
 }
 
 @media (max-width: 720px) {
-    .dc-board-page { --dc-row: 34px; }
+    /* Less furniture around the board on a phone, so more of the height is
+       the board's. The row still fits itself to what is left. */
+    .dc-board-page { --dc-chrome: 300px; }
     .dc-head { flex-direction: column; align-items: flex-start; gap: 12px; }
     .dc-body { padding: 18px; gap: 18px; }
     .dc-foot { flex-direction: column; align-items: flex-start; gap: 12px; }
@@ -824,7 +839,6 @@
     .dc-champ { font-size: 20px; }
     .dc-now { padding: 16px; }
     .dc-now-name { font-size: 22px; }
-    .dc-seat-name { font-size: 15px; }
 }
 
 /* The beat before a name lands. It pulses once per position rather than
