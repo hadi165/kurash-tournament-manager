@@ -162,7 +162,25 @@
                     <div class="dc-pool-row" wire:key="pool-{{ $entry['noc'] }}">
                         <span class="dc-pool-noc">{{ $entry['noc'] }}</span>
                         <span class="dc-pool-name">{{ $entry['name'] }}</span>
-                        <span class="dc-pool-count">{{ $entry['count'] }}</span>
+
+                        {{-- A plain img with a ceremony class, not the shared
+                             flag component: this screen loads the ceremony
+                             stylesheet and none of the application's, so a
+                             utility class here would name a rule that is not
+                             there and the flag would come out unsized. --}}
+                        @if ($entry['iso'])
+                            <img class="dc-pool-flag"
+                                 src="{{ asset('flags/'.$entry['iso'].'.svg') }}"
+                                 alt="{{ $entry['name'] ?? $entry['noc'] }}"
+                                 title="{{ $entry['name'] ?? $entry['noc'] }}">
+                        @else
+                            {{-- A delegation competing without one, or a code
+                                 this system does not know. The box stays so the
+                                 column does not collapse around it. --}}
+                            <span class="dc-pool-flag dc-pool-flag--none"
+                                  title="{{ $entry['noc'] }}"
+                                  aria-hidden="true"></span>
+                        @endif
                     </div>
                 @empty
                     <div class="dc-pool-empty">{{ __('Every position has been drawn.') }}</div>

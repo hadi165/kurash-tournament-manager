@@ -198,6 +198,10 @@ class DrawCeremony extends Component
                     'noc' => Noc::normalise($noc),
                     'name' => $group->first()?->noc_name,
                     'count' => $group->count(),
+                    // Resolved here rather than in the view: which flag a
+                    // three-letter code belongs to is a question about the
+                    // nation, not about the markup.
+                    'iso' => Noc::iso($noc),
                 ])
                 ->sortByDesc('count')
                 ->values(),

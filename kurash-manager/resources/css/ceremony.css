@@ -403,7 +403,19 @@
 
 .dc-pool-noc { font-weight: 700; min-width: 42px; }
 .dc-pool-name { color: var(--dc-muted); flex: 1; min-width: 0; }
-.dc-pool-count { font-variant-numeric: tabular-nums; font-weight: 700; }
+/* Sized in the sidebar's own terms. The artwork is the nation's, so it is
+   never recoloured and never distorted — cover, on a hairline that separates a
+   white field from the panel behind it. */
+.dc-pool-flag {
+    flex: none;
+    width: 30px;
+    height: 20px;
+    object-fit: cover;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px var(--dc-line);
+}
+
+.dc-pool-flag--none { background: var(--dc-line); }
 .dc-pool-empty { padding: 14px 12px; font-size: 14px; color: var(--dc-muted); }
 
 /* ── The tree ───────────────────────────────────────────────────────────── */

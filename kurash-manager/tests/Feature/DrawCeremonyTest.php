@@ -5,6 +5,7 @@ use App\Livewire\Competition\DrawCeremony;
 use App\Models\User;
 use App\Services\BracketGenerator;
 use App\Support\BracketSeeding;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Livewire\Livewire;
@@ -520,5 +521,61 @@ describe('the component is bound to its markup', function () {
             ->map(fn ($file) => $file->getRelativePathname());
 
         expect($offenders)->toBeEmpty();
+    });
+});
+
+/**
+ * The pot, as the hall reads it.
+ *
+ * A three-letter code is not something a room full of delegations reads at a
+ * glance; a flag is. So the sidebar carries the nation's own artwork beside
+ * its code rather than a number only the operator has any use for.
+ */
+describe('the pool sidebar', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+
+        $this->operator = User::factory()->official()->create();
+
+        // Nothing revealed yet, so everybody is still in the pot.
+        Cache::forget(DrawCeremony::paceKey($this->category->id));
+    });
+
+    /** @return Collection<int, array<string, mixed>> */
+    function poolOf(mixed $category, mixed $operator)
+    {
+        return Livewire::actingAs($operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $category, 'ceremony' => true])
+            ->viewData('pool');
+    }
+
+    it('carries a flag for every nation still to be drawn', function () {
+        $pool = poolOf($this->category, $this->operator);
+
+        expect($pool)->not->toBeEmpty();
+
+        foreach ($pool as $entry) {
+            expect($entry)->toHaveKeys(['noc', 'name', 'iso']);
+        }
+    });
+
+    /**
+     * Resolved from the code rather than derived from it. BRN is Bahrain and
+     * BRU is Brunei, and no rule turns one into the other.
+     */
+    it('resolves the flag through the code table, not by guessing', function () {
+        $this->category->athletes()->update(['noc_code' => 'BRN']);
+
+        expect(poolOf($this->category, $this->operator)->first()['iso'])->toBe('bh');
+    });
+
+    /** A code with no artwork keeps its row rather than collapsing it. */
+    it('leaves a nation with no flag a box of its own', function () {
+        $this->category->athletes()->update(['noc_code' => 'ZZZ']);
+
+        expect(poolOf($this->category, $this->operator)->first()['iso'])->toBeNull();
     });
 });
