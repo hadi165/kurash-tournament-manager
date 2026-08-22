@@ -97,8 +97,91 @@
                     </div>
 
                     <div class="mt-[18px] border-t border-line-soft pt-4">
-                        <div class="text-xl font-bold leading-none tabular-nums">{{ $court->bouts_count }}</div>
-                        <div class="mt-0.5 text-xs text-muted">{{ __('Bouts assigned') }}</div>
+                        <div class="flex items-end justify-between gap-3">
+                            <div>
+                                <div class="text-xl font-bold leading-none tabular-nums">{{ $court->bouts_count }}</div>
+                                <div class="mt-0.5 text-xs text-muted">{{ __('Bouts assigned') }}</div>
+                            </div>
+
+                            @if ($court->bouts_count > 0)
+                                <x-ui.chip wire:click="toggleBouts({{ $court->id }})">
+                                    {{ $showingBoutsFor === $court->id ? __('Hide') : __('Show more') }}
+                                </x-ui.chip>
+                            @endif
+                        </div>
+
+                        {{-- What is standing between this mat and being
+                             deleted, and the means of moving it. --}}
+                        @if ($showingBoutsFor === $court->id)
+                            <div class="mt-4 rounded-md border border-line bg-ground p-3.5">
+                                @can('manage-competition')
+                                    @if ($moveTargets->isNotEmpty())
+                                        <div class="mb-3 flex flex-wrap items-center gap-2">
+                                            <span class="text-[12.5px] font-semibold text-muted">{{ __('Move everything to') }}</span>
+
+                                            <flux:select wire:model="moveTargetId" size="sm" class="w-[150px]">
+                                                @foreach ($moveTargets as $target)
+                                                    <flux:select.option value="{{ $target->id }}">{{ $target->label() }}</flux:select.option>
+                                                @endforeach
+                                            </flux:select>
+
+                                            <flux:button
+                                                size="sm"
+                                                wire:click="moveAll({{ $court->id }})"
+                                                wire:confirm="{{ __('Move every contest off this mat?') }}"
+                                            >{{ __('Move all') }}</flux:button>
+                                        </div>
+                                    @else
+                                        <p class="m-0 mb-3 text-[13px] text-muted">
+                                            {{ __('There is no other mat to move these to. Add one first.') }}
+                                        </p>
+                                    @endif
+                                @endcan
+
+                                <div class="flex flex-col gap-1.5">
+                                    @foreach ($assignedBouts as $bout)
+                                        <div wire:key="assigned-{{ $bout->id }}" class="flex flex-wrap items-center gap-2 rounded-md bg-surface px-3 py-2">
+                                            <span class="w-9 flex-none text-[13px] font-bold tabular-nums">
+                                                {{ $bout->fight_number ? '#'.$bout->fight_number : '—' }}
+                                            </span>
+
+                                            <span class="min-w-0 flex-1 truncate text-[13px]">
+                                                <span class="text-muted">{{ $bout->weightCategory?->ageCategory?->name }} {{ $bout->weightCategory?->label }}</span>
+                                                <span class="ms-1.5">
+                                                    {{ $bout->athleteA?->fullname ?? __('TBD') }}
+                                                    <span class="text-muted">{{ __('v') }}</span>
+                                                    {{ $bout->athleteB?->fullname ?? __('TBD') }}
+                                                </span>
+                                            </span>
+
+                                            {{-- A decided contest carries where it
+                                                 was fought, so moving one is
+                                                 changing a record and says so. --}}
+                                            @if ($bout->status === \App\Models\Bout::STATUS_COMPLETED)
+                                                <x-ui.tag variant="muted">{{ __('Decided') }}</x-ui.tag>
+                                            @elseif ($bout->status === \App\Models\Bout::STATUS_ON_COURT)
+                                                <x-ui.tag variant="danger">{{ __('On the mat') }}</x-ui.tag>
+                                            @endif
+
+                                            @can('manage-competition')
+                                                @foreach ($moveTargets as $target)
+                                                    @if ($bout->status === \App\Models\Bout::STATUS_COMPLETED)
+                                                        <x-ui.chip
+                                                            wire:click="moveBout({{ $bout->id }}, {{ $target->id }})"
+                                                            wire:confirm="{{ __('This contest has been decided. Moving it changes where the record says it was fought. Move it anyway?') }}"
+                                                        >{{ __('→ :mat', ['mat' => $target->label()]) }}</x-ui.chip>
+                                                    @else
+                                                        <x-ui.chip wire:click="moveBout({{ $bout->id }}, {{ $target->id }})">
+                                                            {{ __('→ :mat', ['mat' => $target->label()]) }}
+                                                        </x-ui.chip>
+                                                    @endif
+                                                @endforeach
+                                            @endcan
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endif
                     </div>
 
                     <div class="mt-[18px] flex flex-wrap gap-2">

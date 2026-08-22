@@ -404,6 +404,105 @@ describe('mat management', function () {
         expect(Court::find($court->id))->not->toBeNull();
     });
 
+    /**
+     * Refusing on its own is a dead end: it names a problem and offers no way
+     * to it. The card opens on what is assigned so it can be moved.
+     */
+    it('opens the mat on what is blocking its deletion', function () {
+        [$category] = categoryWithAthletes(4);
+        app(BracketGenerator::class)->generate($category);
+
+        $court = Court::factory()->create(['championship_id' => $category->ageCategory->championship_id]);
+        $bout = $category->bouts()->first();
+        $bout->update(['court_id' => $court->id]);
+
+        Livewire::test(Courts::class, ['championship' => $court->championship])
+            ->call('delete', $court->id)
+            ->assertSet('showingBoutsFor', $court->id)
+            ->assertSee($bout->athleteA->fullname);
+    });
+
+    it('shows and hides what is assigned to a mat', function () {
+        $court = Court::factory()->create();
+
+        Livewire::test(Courts::class, ['championship' => $court->championship])
+            ->call('toggleBouts', $court->id)
+            ->assertSet('showingBoutsFor', $court->id)
+            ->call('toggleBouts', $court->id)
+            ->assertSet('showingBoutsFor', null);
+    });
+
+    it('moves one contest to another mat', function () {
+        [$category] = categoryWithAthletes(4);
+        app(BracketGenerator::class)->generate($category);
+
+        $championship = $category->ageCategory->championship;
+        $from = Court::factory()->create(['championship_id' => $championship->id, 'number' => 1]);
+        $to = Court::factory()->create(['championship_id' => $championship->id, 'number' => 2]);
+
+        $bout = $category->bouts()->first();
+        $bout->update(['court_id' => $from->id]);
+
+        Livewire::test(Courts::class, ['championship' => $championship])
+            ->call('moveBout', $bout->id, $to->id);
+
+        expect($bout->refresh()->court_id)->toBe($to->id);
+    });
+
+    /** Emptying a mat is what deleting one needs, so it is one action. */
+    it('moves everything off a mat at once, and then it can be deleted', function () {
+        [$category] = categoryWithAthletes(4);
+        app(BracketGenerator::class)->generate($category);
+
+        $championship = $category->ageCategory->championship;
+        $from = Court::factory()->create(['championship_id' => $championship->id, 'number' => 1]);
+        $to = Court::factory()->create(['championship_id' => $championship->id, 'number' => 2]);
+
+        $championship->bouts()->update(['court_id' => $from->id]);
+        $assigned = $championship->bouts()->count();
+
+        Livewire::test(Courts::class, ['championship' => $championship])
+            ->set('moveTargetId', $to->id)
+            ->call('moveAll', $from->id)
+            ->call('delete', $from->id);
+
+        expect($to->bouts()->count())->toBe($assigned)
+            ->and(Court::find($from->id))->toBeNull();
+    });
+
+    /** A mat in another championship is not somewhere to move work to. */
+    it('refuses to move a contest to a mat in another championship', function () {
+        [$category] = categoryWithAthletes(4);
+        app(BracketGenerator::class)->generate($category);
+
+        $championship = $category->ageCategory->championship;
+        $from = Court::factory()->create(['championship_id' => $championship->id]);
+        $elsewhere = Court::factory()->create();
+
+        $bout = $category->bouts()->first();
+        $bout->update(['court_id' => $from->id]);
+
+        Livewire::test(Courts::class, ['championship' => $championship])
+            ->call('moveBout', $bout->id, $elsewhere->id);
+
+        expect($bout->refresh()->court_id)->toBe($from->id);
+    });
+
+    it('refuses to move everything onto the mat it is already on', function () {
+        [$category] = categoryWithAthletes(4);
+        app(BracketGenerator::class)->generate($category);
+
+        $championship = $category->ageCategory->championship;
+        $court = Court::factory()->create(['championship_id' => $championship->id]);
+        $championship->bouts()->update(['court_id' => $court->id]);
+
+        Livewire::test(Courts::class, ['championship' => $championship])
+            ->set('moveTargetId', $court->id)
+            ->call('moveAll', $court->id);
+
+        expect($court->bouts()->count())->toBe($championship->bouts()->count());
+    });
+
     it('reports whether a mat answers', function () {
         $court = Court::factory()->create();
 
