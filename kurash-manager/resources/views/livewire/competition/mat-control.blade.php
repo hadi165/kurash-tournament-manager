@@ -76,6 +76,43 @@
         {{-- target=_blank on purpose: this goes on the projector or a second
              monitor, and the operator must not lose the mat screen to it. --}}
         <x-slot:actions>
+            {{-- Chosen by ear, which is why the preview is beside the choice
+                 rather than somewhere in a settings screen. The mat next to
+                 this one wants a different one. --}}
+            @can('score-bout', $court)
+                @if (! empty($finishSounds))
+                    <div class="flex items-center gap-1.5 px-2" x-data="{
+                        preview: null,
+                        play(src) {
+                            {{-- Stopped before the next one starts, or holding
+                                 the button lays them over each other. --}}
+                            if (this.preview) { this.preview.pause() }
+                            this.preview = new Audio(src)
+                            this.preview.play().catch(() => {})
+                        },
+                    }">
+                        <label for="mat-sound" class="text-xs font-semibold text-muted">{{ __('End sound') }}</label>
+
+                        <flux:select id="mat-sound" wire:model.live="finishSound" size="sm" class="w-[110px]">
+                            @foreach ($finishSounds as $path => $label)
+                                <flux:select.option value="{{ $path }}" :selected="$finishSound === $path">{{ __($label) }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
+
+                        {{-- The chosen file, straight from the server: the
+                             select saves as it changes, so this is always what
+                             the mat would actually sound. --}}
+                        <button type="button"
+                                x-on:click="play(@js(asset($court->finishSound() ?? '')))"
+                                class="rounded-full px-2 py-1 text-xs font-bold text-brand-700 hover:bg-brand-500/10 dark:text-brand-400">
+                            {{ __('Play') }}
+                        </button>
+                    </div>
+
+                    <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
+                @endif
+            @endcan
+
             <a href="{{ route('display.scoreboard', $court) }}" target="_blank"
                class="px-2.5 py-1 text-xs font-bold text-brand-700 no-underline hover:bg-brand-500/10 dark:text-brand-400">{{ __('Open scoreboard') }}</a>
             <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
@@ -84,7 +121,7 @@
         {{-- The operator hears the same buzzer the hall does, at the same
              moment, because it is the same component reading the same
              state. --}}
-        <x-competition.finish-bell :bout="$bout" :decided="(bool) $bout?->isDecided()" />
+        <x-competition.finish-bell :court="$court" :bout="$bout" :decided="(bool) $bout?->isDecided()" />
 
         <x-competition.flash />
 

@@ -27,7 +27,7 @@ describe('the code table', function () {
     });
 
     it('names the nations a competition names, not the ones a map does', function () {
-        expect(Noc::name('IRI'))->toBe('Iran')
+        expect(Noc::name('IRI'))->toBe('Islamic Republic of Iran')
             ->and(Noc::name('TPE'))->toBe('Chinese Taipei')
             ->and(Noc::name('GBR'))->toBe('Great Britain')
             // The pair this table exists for: neither is derivable.
@@ -49,7 +49,7 @@ describe('matching what has been typed', function () {
         $matches = Noc::startingWith('IR', 20);
 
         expect(array_keys($matches))->toBe(['IRI', 'IRL', 'IRQ'])
-            ->and($matches['IRI'])->toBe('Iran');
+            ->and($matches['IRI'])->toBe('Islamic Republic of Iran');
     });
 
     it('narrows as more is typed', function () {
@@ -82,7 +82,7 @@ describe('matching what has been typed', function () {
 
     /** A code typed in full is one match, which is what closes the list. */
     it('returns the one code when it is typed out', function () {
-        expect(Noc::startingWith('IRI'))->toBe(['IRI' => 'Iran']);
+        expect(Noc::startingWith('IRI'))->toBe(['IRI' => 'Islamic Republic of Iran']);
     });
 });
 
@@ -104,7 +104,7 @@ describe('the registration form', function () {
             'championship' => $this->division->championship,
             'competition' => 'M',
         ])
-            ->assertViewHas('nations', fn (array $nations) => $nations['IRI'] === 'Iran')
+            ->assertViewHas('nations', fn (array $nations) => $nations['IRI'] === 'Islamic Republic of Iran')
             ->assertSee('nocSuggest')
             ->assertSee('Chinese Taipei');
     });

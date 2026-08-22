@@ -41,6 +41,33 @@ class MatControl extends Component
     /** Set when time expired level all the way down and a decision is owed. */
     public bool $awaitingDecision = false;
 
+    /**
+     * Which buzzer this mat ends a contest on.
+     *
+     * Chosen here rather than in the mat's settings because the person who
+     * needs to tell this mat from the one beside it is the person sitting at
+     * it, and they will want to change it after hearing both.
+     */
+    public string $finishSound = '';
+
+    public function updatedFinishSound(string $value): void
+    {
+        Gate::authorize('score-bout', $this->court);
+
+        $choices = config('scoreboard.finish_sounds');
+
+        // Only one of the offered files, and nothing else: this ends up in a
+        // src attribute on the wall board.
+        if (! is_array($choices) || ! isset($choices[$value])) {
+            $this->finishSound = (string) $this->court->finishSound();
+
+            return;
+        }
+
+        $this->court->update(['finish_sound' => $value]);
+        $this->court->refresh();
+    }
+
     public function mount(Court $court): void
     {
         // The mat named in the URL is authorised before it is accepted. The
@@ -50,6 +77,7 @@ class MatControl extends Component
         Gate::authorize('mat.view', $court);
 
         $this->court = $court->load('championship');
+        $this->finishSound = (string) $court->finishSound();
     }
 
     /**
@@ -710,6 +738,9 @@ class MatControl extends Component
                 ? 0
                 : (int) ($bout->weightCategory->bouts()->max('round') ?? $bout->round),
             'upNext' => $this->upNext(),
+            // Offered here rather than in the mat's settings: whoever picks
+            // this wants to hear both first, and they are sitting at the mat.
+            'finishSounds' => config('scoreboard.finish_sounds'),
             'justDecided' => $this->justDecided(),
         ]);
     }

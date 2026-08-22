@@ -75,7 +75,7 @@
         $hasBrandLogo = $brandLogo && is_file(public_path($brandLogo));
     @endphp
 
-    <x-competition.finish-bell :bout="$bout" :decided="$winnerSide !== null" />
+    <x-competition.finish-bell :court="$court" :bout="$bout" :decided="$winnerSide !== null" />
 
     <header class="head">
         <div class="head__id">

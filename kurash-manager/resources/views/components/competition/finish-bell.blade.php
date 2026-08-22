@@ -1,9 +1,10 @@
 @props([
+    'court',              // whose buzzer this is — each mat has its own
     'bout' => null,       // the contest on screen, or null
     'decided' => false,   // whether it has been won
 ])
 
-@php($source = trim((string) config('scoreboard.finish_sound')))
+@php($source = (string) $court->finishSound())
 
 {{-- The buzzer a contest ends on.
 

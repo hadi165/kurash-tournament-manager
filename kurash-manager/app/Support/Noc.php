@@ -115,7 +115,7 @@ final class Noc
         'HUN' => ['hu', 'Hungary'],
         'INA' => ['id', 'Indonesia'],
         'IND' => ['in', 'India'],
-        'IRI' => ['ir', 'Iran'],
+        'IRI' => ['ir', 'Islamic Republic of Iran'],
         'IRL' => ['ie', 'Ireland'],
         'IRQ' => ['iq', 'Iraq'],
         'ISL' => ['is', 'Iceland'],

@@ -3,6 +3,7 @@
 use App\Livewire\Competition\MatControl;
 use App\Livewire\Competition\Scoreboard;
 use App\Models\Bout;
+use App\Models\Court;
 use App\Models\User;
 use Livewire\Livewire;
 
@@ -25,7 +26,7 @@ it('carries the bell on the wall board', function () {
 
     Livewire::test(Scoreboard::class, ['court' => $court])
         ->assertSee('finishBell')
-        ->assertSee('match-end.wav');
+        ->assertSee('match-end01.wav');
 });
 
 it('carries the bell on the mat screen', function () {
@@ -33,19 +34,80 @@ it('carries the bell on the mat screen', function () {
 
     Livewire::test(MatControl::class, ['court' => $court])
         ->assertSee('finishBell')
-        ->assertSee('match-end.wav');
+        ->assertSee('match-end01.wav');
 });
 
 /**
- * The file is on the venue's own machine. At match time there may be no route
- * off the hall's network, and a buzzer that has to be fetched is a buzzer that
- * does not sound.
+ * The files are on the venue's own machine. At match time there may be no
+ * route off the hall's network, and a buzzer that has to be fetched is a
+ * buzzer that does not sound.
  */
-it('ships the sound rather than fetching it', function () {
-    $configured = config('scoreboard.finish_sound');
+it('ships every sound rather than fetching it', function () {
+    $choices = config('scoreboard.finish_sounds');
 
-    expect(is_file(public_path($configured)))->toBeTrue()
-        ->and($configured)->not->toStartWith('http');
+    expect($choices)->not->toBeEmpty();
+
+    foreach (array_keys($choices) as $path) {
+        expect(is_file(public_path($path)))->toBeTrue()
+            ->and($path)->not->toStartWith('http');
+    }
+
+    expect(array_keys($choices))->toContain(config('scoreboard.finish_sound'));
+});
+
+describe('choosing a mat\'s buzzer', function () {
+    /**
+     * Held per mat, because two mats running side by side want to be told
+     * apart by ear.
+     */
+    it('lets a mat be given its own', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->set('finishSound', 'sounds/match-end02.wav');
+
+        expect($court->refresh()->finishSound())->toBe('sounds/match-end02.wav');
+    });
+
+    it('sounds it on that mat\'s wall board too', function () {
+        [$court] = boutOnMat();
+        $court->update(['finish_sound' => 'sounds/match-end02.wav']);
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertSee('match-end02.wav')
+            ->assertDontSee('match-end01.wav');
+    });
+
+    it('leaves another mat on its own', function () {
+        [$mine] = boutOnMat();
+        $theirs = Court::factory()->create(['championship_id' => $mine->championship_id]);
+
+        Livewire::test(MatControl::class, ['court' => $mine])
+            ->set('finishSound', 'sounds/match-end02.wav');
+
+        expect($theirs->refresh()->finishSound())->toBe('sounds/match-end01.wav');
+    });
+
+    /** This ends up in a src attribute, so nothing but an offered file. */
+    it('refuses a file that is not one of the offered ones', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->set('finishSound', '../../.env');
+
+        expect($court->refresh()->finish_sound)->toBeNull();
+    });
+
+    /**
+     * A file dropped from the venue leaves the mats that chose it pointing at
+     * nothing, so they fall back rather than falling silent.
+     */
+    it('falls back when the chosen file is no longer offered', function () {
+        [$court] = boutOnMat();
+        $court->forceFill(['finish_sound' => 'sounds/retired.wav'])->save();
+
+        expect($court->refresh()->finishSound())->toBe('sounds/match-end01.wav');
+    });
 });
 
 /**
@@ -88,7 +150,7 @@ it('has no contest to ring for on an empty mat', function () {
 
 /** Turned off by configuration, and then nothing is rendered at all. */
 it('is silent when the championship runs without one', function () {
-    config(['scoreboard.finish_sound' => '']);
+    config(['scoreboard.finish_sound' => '', 'scoreboard.finish_sounds' => []]);
 
     [$court] = boutOnMat();
 
