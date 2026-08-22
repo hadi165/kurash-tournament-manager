@@ -74,13 +74,12 @@
                 // filter in the query string.
                 $boundCompetition = (string) (request()->route('competition') ?? '');
                 $queriedCompetition = (string) (request()->query('competition') ?? '');
-                $openDivision = (string) (request()->query('division') ?? '');
 
                 // One rule to know rather than seven.
-                $itemsFor = fn (string $route, string $pattern, string $open, string $key = 'competition') => collect($competitions)
+                $itemsFor = fn (string $route, string $pattern, string $open) => collect($competitions)
                     ->map(fn (string $gender) => [
                         'label' => __(\App\Support\Gender::label($gender)),
-                        'href' => route($route, ['championship' => $current, $key => $gender]),
+                        'href' => route($route, ['championship' => $current, 'competition' => $gender]),
                         'active' => request()->routeIs($pattern) && $open === $gender,
                     ])
                     ->all();
@@ -92,10 +91,7 @@
                 $bracketItems = $itemsFor('brackets.index', 'brackets.*', $queriedCompetition);
                 $matItems = $itemsFor('courts.index', 'courts.*', $queriedCompetition);
                 $medalItems = $itemsFor('medals.index', 'medals.*', $queriedCompetition);
-
-                // The running order calls it "division", because that control
-                // takes a single division's id as well as a competition.
-                $competitionItems = $itemsFor('fight-order.index', 'fight-order.*', $openDivision, 'division');
+                $fightOrderItems = $itemsFor('fight-order.index', 'fight-order.*', $queriedCompetition);
             @endphp
 
             @if (auth()->user()?->isReferee())
@@ -224,7 +220,7 @@
                     @if (count($competitions) > 1)
                         <x-nav-group
                             :label="__('Fight Order')"
-                            :items="$competitionItems"
+                            :items="$fightOrderItems"
                             :active="request()->routeIs('fight-order.*')"
                         />
                     @else

@@ -16,7 +16,6 @@ use App\Models\WeightCategory;
 use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
 use App\Services\MedalTable;
-use App\Support\DivisionFilter;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -137,87 +136,66 @@ describe('the running order says which competition', function () {
     });
 
     /** Filtered in the query: the other competition is not in the payload. */
-    it('narrows to one division without carrying the other', function () {
+    it('narrows to one competition without carrying the other', function () {
         Livewire::test(FightOrder::class, ['championship' => $this->championship])
-            ->set('division', (string) $this->women->id)
+            ->set('competition', 'F')
             ->assertSee('Female -66')
             ->assertDontSee('Man 1')
-            ->set('division', (string) $this->men->id)
+            ->set('competition', 'M')
             ->assertSee('Male -66')
             ->assertDontSee('Woman 1');
     });
 
     /**
-     * The same control narrows to a whole competition. A championship can run
-     * "Men Junior" beside "Men Senior", and a table official working the men's
-     * mat wants both without reading past the women's.
+     * A championship can run "Men Junior" beside "Men Senior", and a table
+     * official working the men's mat wants both without reading past the
+     * women's — so the scope is the competition, not a single division.
      */
-    it('narrows to a whole competition from the same control', function () {
+    it('keeps every age group of the competition it is reading', function () {
         Livewire::test(FightOrder::class, ['championship' => $this->championship])
-            ->set('division', DivisionFilter::WOMEN)
-            ->assertSee('Woman 1')
-            ->assertDontSee('Man 1')
-            ->set('division', DivisionFilter::MEN)
-            ->assertSee('Man 1')
-            ->assertDontSee('Woman 1');
+            ->set('competition', 'M')
+            ->assertSee('Men Senior')
+            ->assertDontSee('Women Senior');
     });
 
     /**
-     * The control offers the competitions and nothing finer. Every division
-     * belongs to one of them, so listing the divisions too would be listing
-     * the same split twice over.
+     * The way back out. The sidebar can take you into a competition but not
+     * out of it, so the screen says what it is narrowed to and offers the
+     * link that widens it again.
      */
-    it('offers the competitions and nothing finer', function () {
-        $html = Livewire::test(FightOrder::class, ['championship' => $this->championship])
-            ->assertSeeInOrder(['All divisions', 'Men', 'Women'])
-            ->html();
-
-        $options = substr_count(substr($html, 0, strpos($html, '</select>') ?: 0), '<option');
-
-        expect($options)->toBe(3);
+    it('says what it is narrowed to, and offers the way out', function () {
+        Livewire::test(FightOrder::class, ['championship' => $this->championship])
+            ->assertDontSee('Showing this competition only.')
+            ->set('competition', 'M')
+            ->assertSee('Men')
+            ->assertSee('Showing this competition only.')
+            ->assertSee('Show all');
     });
 
     /** The sheet a table official carries away is scoped the same way. */
-    it('prints one division to its own sheet', function () {
-        $report = new FightOrderReport(
-            $this->championship,
-            DivisionFilter::for($this->championship, (string) $this->women->id),
-        );
-        $names = array_column($report->rows(), 4);
-
-        expect($names)->not->toBeEmpty()
-            ->and(collect($names)->every(fn ($name) => ! str_starts_with($name, 'Man ')))->toBeTrue()
-            ->and($report->meta()['Division'])->toBe('Women Senior');
-    });
-
     it('prints one competition to its own sheet', function () {
-        $report = new FightOrderReport(
-            $this->championship,
-            DivisionFilter::for($this->championship, DivisionFilter::MEN),
-        );
+        $report = new FightOrderReport($this->championship, 'M');
         $names = array_column($report->rows(), 4);
 
         expect($names)->not->toBeEmpty()
             ->and(collect($names)->every(fn ($name) => ! str_starts_with($name, 'Woman ')))->toBeTrue()
-            ->and($report->meta()['Division'])->toBe('Men')
+            ->and($report->meta()['Classes'])->toBe('Men')
             ->and($report->filename())->toEndWith('-men');
     });
 
-    it('prints every division when none is chosen', function () {
+    it('prints every competition when none is chosen', function () {
         $names = array_column((new FightOrderReport($this->championship))->rows(), 4);
 
         expect(collect($names)->contains(fn ($n) => str_starts_with($n, 'Man ')))->toBeTrue()
             ->and(collect($names)->contains(fn ($n) => str_starts_with($n, 'Woman ')))->toBeTrue();
     });
 
-    /** An id belonging to another championship must not narrow this sheet. */
-    it('ignores a division from another championship', function () {
-        $other = AgeCategory::factory()->create(['gender' => 'M', 'age_group' => 'Senior']);
-
+    /** A competition this championship does not run must not narrow the sheet. */
+    it('ignores a competition the championship does not run', function () {
         $body = $this->get(route('exports.fight-order', [
             'championship' => $this->championship,
             'format' => 'csv',
-            'division' => $other->id,
+            'competition' => 'X',
         ]))->assertOk()->streamedContent();
 
         expect($body)->toContain('Man 1')->toContain('Woman 1');

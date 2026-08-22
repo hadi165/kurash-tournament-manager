@@ -428,12 +428,14 @@ describe('one competition, several age groups', function () {
 });
 
 describe('the running order is bound by the configuration', function () {
-    it('offers only the competitions the championship runs', function () {
+    /** The scope is one of the championship's own competitions or nothing. */
+    it('ignores a competition the championship does not run', function () {
         $womenOnly = Championship::factory()->create(['genders' => ['F'], 'age_groups' => ['Senior']]);
         AgeCategory::factory()->for($womenOnly)->create(['gender' => 'F', 'age_group' => 'Senior']);
 
-        Livewire::test(FightOrder::class, ['championship' => $womenOnly])
-            ->assertSee('Women')
-            ->assertDontSee('Men');
+        $order = Livewire::test(FightOrder::class, ['championship' => $womenOnly]);
+
+        expect($order->set('competition', 'F')->instance()->competitionLabel())->toBe('Women')
+            ->and($order->set('competition', 'M')->instance()->competitionLabel())->toBeNull();
     });
 });

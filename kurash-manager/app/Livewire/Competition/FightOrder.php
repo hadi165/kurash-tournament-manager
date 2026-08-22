@@ -3,31 +3,23 @@
 namespace App\Livewire\Competition;
 
 use App\Jobs\PushBoutToScoreboard;
+use App\Livewire\Concerns\ScopesToCompetition;
 use App\Models\Bout;
 use App\Models\Championship;
 use App\Services\FightOrderScheduler;
-use App\Support\DivisionFilter;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
-use Livewire\Attributes\Url;
 use Livewire\Component;
 
 class FightOrder extends Component
 {
+    use ScopesToCompetition;
+
     public Championship $championship;
 
     public int $minimumRest = FightOrderScheduler::DEFAULT_REST;
 
     public bool $hideCompleted = false;
-
-    /**
-     * What the running order is narrowed to: a whole competition ('M' or 'F')
-     * or a single division by id. One control, because the divisions are named
-     * for their competition and a second men/women select would ask the same
-     * question twice.
-     */
-    #[Url]
-    public string $division = '';
 
     public function mount(Championship $championship): void
     {
@@ -102,12 +94,11 @@ class FightOrder extends Component
     public function render(): View
     {
         $scheduler = app(FightOrderScheduler::class);
-        $filter = DivisionFilter::for($this->championship, $this->division);
 
         $bouts = $this->championship->bouts()
             ->whereNotNull('fight_number')
             ->when($this->hideCompleted, fn ($q) => $q->where('status', '!=', Bout::STATUS_COMPLETED))
-            ->tap(fn ($q) => $filter->apply($q))
+            ->tap(fn ($q) => $this->scopeBouts($q))
             ->with(['athleteA', 'athleteB', 'winner', 'weightCategory.ageCategory', 'court'])
             ->orderBy('fight_number')
             ->get();
@@ -124,9 +115,6 @@ class FightOrder extends Component
             'courts' => $this->championship->courts()->where('is_active', true)->orderBy('number')->get(),
             'violations' => $scheduler->restViolations($this->championship, $this->minimumRest),
             'unscheduled' => $this->championship->bouts()->whereNull('fight_number')->where('is_bye', false)->count(),
-            // The competitions this championship declared, not a fixed pair:
-            // a women-only championship has no men's entry to offer.
-            'genders' => $this->championship->configuredGenders(),
         ]);
     }
 }

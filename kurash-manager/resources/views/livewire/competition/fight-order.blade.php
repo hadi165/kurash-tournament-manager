@@ -9,8 +9,8 @@
 >
     <x-slot:aside>
         {{-- The sheet leaves the room with whoever printed it, so it is scoped
-             to the division on screen rather than silently widening to all. --}}
-        @php($exportScope = ['championship' => $championship] + ($division === '' ? [] : ['division' => $division]))
+             to the competition on screen rather than silently widening. --}}
+        @php($exportScope = ['championship' => $championship] + ($this->scopedCompetition() === null ? [] : ['competition' => $this->scopedCompetition()]))
         <x-ui.chip :href="route('exports.fight-order', $exportScope + ['format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
         <x-ui.chip :href="route('exports.fight-order', $exportScope + ['format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
         <x-ui.chip onclick="window.print()">{{ __('Print') }}</x-ui.chip>
@@ -20,7 +20,11 @@
         <h1 class="text-xl font-bold">{{ $championship->title }} — {{ __('Fight order') }}</h1>
     </div>
 
-    <div class="print:hidden"><x-competition.flash /></div>
+    <div class="print:hidden">
+        <x-competition.scope :label="$this->competitionLabel()" route="fight-order.index" :championship="$championship" />
+
+        <x-competition.flash />
+    </div>
 
     @can('manage-competition')
         <x-ui.card class="print:hidden">
@@ -37,25 +41,7 @@
                     </flux:button>
                 </div>
 
-                <div class="flex flex-wrap items-end gap-3">
-                    <div class="flex flex-col gap-[7px]">
-                        <label for="fo-division" class="text-[12.5px] font-semibold text-muted">{{ __('Division') }}</label>
-                        {{-- The competitions the championship runs, and
-                             nothing finer. Every division belongs to one of
-                             them, so listing the divisions as well would be
-                             listing the same split twice over. --}}
-                        <flux:select id="fo-division" wire:model.live="division" size="sm" class="w-[190px]">
-                            <flux:select.option value="" :selected="$division === ''">{{ __('All divisions') }}</flux:select.option>
-                            @foreach ($genders as $competition)
-                                <flux:select.option value="{{ $competition }}" :selected="$division === $competition">
-                                    {{ __(\App\Support\Gender::label($competition)) }}
-                                </flux:select.option>
-                            @endforeach
-                        </flux:select>
-                    </div>
-
-                    <flux:checkbox wire:model.live="hideCompleted" :label="__('Hide finished')" />
-                </div>
+                <flux:checkbox wire:model.live="hideCompleted" :label="__('Hide finished')" />
             </div>
 
             {{-- Without a mat there is nowhere to send a bout, so the whole

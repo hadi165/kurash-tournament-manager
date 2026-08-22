@@ -39,8 +39,8 @@ it('opens the fight order on each competition the championship runs', function (
     $this->actingAs(User::factory()->create())
         ->get(route('championships.show', $championship))
         ->assertOk()
-        ->assertSee(route('fight-order.index', ['championship' => $championship, 'division' => 'M']), false)
-        ->assertSee(route('fight-order.index', ['championship' => $championship, 'division' => 'F']), false);
+        ->assertSee(route('fight-order.index', ['championship' => $championship, 'competition' => 'M']), false)
+        ->assertSee(route('fight-order.index', ['championship' => $championship, 'competition' => 'F']), false);
 });
 
 /** A submenu of one is not a choice, so it stays a plain link. */
@@ -52,7 +52,7 @@ it('links straight through when the championship runs one competition', function
         ->get(route('championships.show', $championship))
         ->assertOk()
         ->assertSee(route('fight-order.index', $championship), false)
-        ->assertDontSee(route('fight-order.index', ['championship' => $championship, 'division' => 'F']), false);
+        ->assertDontSee(route('fight-order.index', ['championship' => $championship, 'competition' => 'F']), false);
 });
 
 /**
@@ -67,7 +67,7 @@ it('splits every championship screen by competition', function () {
         ->get(route('championships.show', $championship))
         ->assertOk();
 
-    foreach (['entries.index', 'brackets.index', 'courts.index', 'medals.index'] as $route) {
+    foreach (['entries.index', 'brackets.index', 'courts.index', 'medals.index', 'fight-order.index'] as $route) {
         foreach (['M', 'F'] as $competition) {
             $response->assertSee(
                 route($route, ['championship' => $championship, 'competition' => $competition]),
