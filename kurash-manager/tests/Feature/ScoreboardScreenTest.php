@@ -138,6 +138,11 @@ describe('the shared clock', function () {
     });
 
     it('counts down from the anchor while it is running', function () {
+        // Frozen: the anchor is written from one reading of the clock and the
+        // countdown is computed from another, so a second ticking over between
+        // them made this fail on ten seconds having become eleven.
+        $this->freezeSecond();
+
         [$court, $bout] = boutOnMat();
 
         $bout->update([
