@@ -56,7 +56,7 @@ describe('flags and branding on the screens', function () {
         ]);
 
         $this->actingAs(User::factory()->create(['role' => 'admin']))
-            ->get(route('weighin.index', $ageCategory))
+            ->get(route('weighin.index', ['championship' => $ageCategory->championship, 'competition' => $ageCategory->gender]))
             ->assertOk()
             ->assertSee('flags/uz.svg')     // resolved despite the case
             ->assertSee('UZB');             // and displayed normalised

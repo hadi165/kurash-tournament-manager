@@ -4,6 +4,7 @@ use App\Livewire\Competition\Categories;
 use App\Livewire\Competition\Championships;
 use App\Livewire\Competition\FightOrder;
 use App\Livewire\Competition\Registration;
+use App\Livewire\Competition\WeighIn;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Championship;
@@ -381,6 +382,33 @@ describe('one competition, several age groups', function () {
             ->assertHasErrors('weight_category_id');
 
         expect(Athlete::where('fullname', 'Mismatched')->exists())->toBeFalse();
+    });
+
+    /**
+     * The scale works through a competition too, for the same reason: one
+     * queue for the men, whatever age group each of them is in.
+     */
+    it('weighs the whole competition, whatever age group they are in', function () {
+        foreach ([[$this->senior, $this->seniorClass, 'A Senior'], [$this->junior, $this->juniorClass, 'A Junior']] as [$division, $class, $name]) {
+            Athlete::factory()->create([
+                'championship_id' => $this->championship->id,
+                'age_category_id' => $division->id,
+                'weight_category_id' => $class->id,
+                'fullname' => $name,
+                'gender' => 'M',
+            ]);
+        }
+
+        Livewire::test(WeighIn::class, ['championship' => $this->championship, 'competition' => 'M'])
+            ->assertSee('A Senior')
+            ->assertSee('A Junior');
+    });
+
+    it('has no weigh-in for a competition the championship does not run', function () {
+        $this->get(route('weighin.index', [
+            'championship' => $this->championship,
+            'competition' => 'F',
+        ]))->assertNotFound();
     });
 
     /** An age group from another championship is simply not found. */

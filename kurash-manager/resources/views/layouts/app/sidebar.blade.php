@@ -59,32 +59,12 @@
                 // is in view and the top-level items stay put either way.
                 $current = \App\Support\CurrentChampionship::resolve();
 
-                // Registration and the weigh-in form both work on one age
-                // category. One category — most championships — goes straight
-                // there; several open as a group listing them, because the
-                // choice is the thing standing between the click and the
-                // screen.
-                $ageCategories = $current ? $current->ageCategories()->get() : collect();
-                $soleCategory = $ageCategories->count() === 1 ? $ageCategories->first() : null;
-
-                // Which one is open is read from the bound route model rather
-                // than from the id in the URL, so it cannot go stale if the
-                // route ever changes shape.
-                $boundCategory = request()->route('ageCategory');
-                $boundCategory = $boundCategory instanceof \App\Models\AgeCategory ? $boundCategory : null;
-
-                $categoryItems = fn (string $route) => $ageCategories
-                    ->map(fn ($category) => [
-                        'label' => $category->name,
-                        'href' => route($route, $category),
-                        'active' => $boundCategory?->is($category) ?? false,
-                    ])
-                    ->all();
-
-                // The running order splits by competition, so the item carries
-                // that split rather than making it a control to find once the
-                // page is open. One competition needs no choice, and the item
-                // stays a plain link.
+                // Registration, the weigh-in and the running order all split by
+                // competition — the age groups were settled when the
+                // championship was created, so they are not a place to
+                // navigate to. Each item carries that split rather than making
+                // it a control to find once the page is open, and one
+                // competition needs no choice at all.
                 $competitions = $current ? $current->configuredGenders() : [];
                 $openCompetition = (string) request()->query('division', '');
 
@@ -106,6 +86,16 @@
                         'label' => __(\App\Support\Gender::label($gender)),
                         'href' => route('athletes.index', ['championship' => $current, 'competition' => $gender]),
                         'active' => request()->routeIs('athletes.*') && $boundCompetition === $gender,
+                    ])
+                    ->all();
+
+                // The scale works through a competition for the same reason:
+                // the age groups were settled when the championship was made.
+                $weighInItems = collect($competitions)
+                    ->map(fn (string $gender) => [
+                        'label' => __(\App\Support\Gender::label($gender)),
+                        'href' => route('weighin.index', ['championship' => $current, 'competition' => $gender]),
+                        'active' => request()->routeIs('weighin.*') && $boundCompetition === $gender,
                     ])
                     ->all();
             @endphp
@@ -194,16 +184,19 @@
                         </x-nav-item>
                     @endif
 
-                    @if ($soleCategory)
-                        <x-nav-item :href="route('weighin.index', $soleCategory)" :active="request()->routeIs('weighin.*')">
-                            {{ __('Weigh-in Form') }}
-                        </x-nav-item>
-                    @elseif ($ageCategories->isNotEmpty())
+                    @if (count($competitions) > 1)
                         <x-nav-group
                             :label="__('Weigh-in Form')"
-                            :items="$categoryItems('weighin.index')"
+                            :items="$weighInItems"
                             :active="request()->routeIs('weighin.*')"
                         />
+                    @else
+                        <x-nav-item
+                            :href="route('weighin.index', ['championship' => $current, 'competition' => $competitions[0] ?? 'M'])"
+                            :active="request()->routeIs('weighin.*')"
+                        >
+                            {{ __('Weigh-in Form') }}
+                        </x-nav-item>
                     @endif
 
                     <x-nav-item :href="route('entries.index', $current)" :active="request()->routeIs('entries.*')">

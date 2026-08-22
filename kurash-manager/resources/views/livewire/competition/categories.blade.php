@@ -273,7 +273,7 @@
                     <flux:button size="sm" :href="route('athletes.index', ['championship' => $championship, 'competition' => $ageCategory->gender])" wire:navigate>
                         {{ __('Registration') }}
                     </flux:button>
-                    <flux:button size="sm" :href="route('weighin.index', $ageCategory)" wire:navigate>
+                    <flux:button size="sm" :href="route('weighin.index', ['championship' => $championship, 'competition' => $ageCategory->gender])" wire:navigate>
                         {{ __('Weigh-in') }}
                     </flux:button>
 

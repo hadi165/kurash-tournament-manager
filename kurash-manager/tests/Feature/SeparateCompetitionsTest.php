@@ -293,11 +293,11 @@ describe('the weigh-in lists are separate', function () {
         ($this->seat)($this->mens66, 3, 'M', 'Man');
         ($this->seat)($this->womens66, 3, 'F', 'Woman');
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $this->men])
+        Livewire::test(WeighIn::class, ['championship' => $this->championship, 'competition' => 'M'])
             ->assertSee('Man 1')
             ->assertDontSee('Woman 1');
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $this->women])
+        Livewire::test(WeighIn::class, ['championship' => $this->championship, 'competition' => 'F'])
             ->assertSee('Woman 1')
             ->assertDontSee('Man 1');
     });

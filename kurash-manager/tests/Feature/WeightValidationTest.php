@@ -154,7 +154,7 @@ describe('at the scale', function () {
             'fullname' => 'Test Athlete',
         ]);
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $this->division])
+        Livewire::test(WeighIn::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set("weights.{$athlete->id}", '56.100')
             ->call('record', $athlete->id);
 
@@ -170,7 +170,7 @@ describe('at the scale', function () {
             'fullname' => 'Heavy Athlete',
         ]);
 
-        $component = Livewire::test(WeighIn::class, ['ageCategory' => $this->division])
+        $component = Livewire::test(WeighIn::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set("weights.{$athlete->id}", '61.4')
             ->call('record', $athlete->id);
 

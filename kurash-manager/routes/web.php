@@ -165,7 +165,9 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('championships/{championship}/athletes/{competition}', Registration::class)
         ->whereIn('competition', ['M', 'F', 'X'])
         ->name('athletes.index');
-    Route::get('categories/{ageCategory}/weigh-in', WeighIn::class)->name('weighin.index');
+    Route::get('championships/{championship}/weigh-in/{competition}', WeighIn::class)
+        ->whereIn('competition', ['M', 'F', 'X'])
+        ->name('weighin.index');
 
     Route::get('weight-classes/{weightCategory}/bracket', Bracket::class)
         ->middleware('can:manage-competition')

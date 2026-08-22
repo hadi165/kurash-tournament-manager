@@ -14,8 +14,8 @@ it('lists every age category under registration and weigh-in', function () {
         ->assertOk()
         ->assertSee(route('athletes.index', ['championship' => $championship, 'competition' => 'M']), false)
         ->assertSee(route('athletes.index', ['championship' => $championship, 'competition' => 'F']), false)
-        ->assertSee(route('weighin.index', $a), false)
-        ->assertSee(route('weighin.index', $b), false);
+        ->assertSee(route('weighin.index', ['championship' => $championship, 'competition' => 'M']), false)
+        ->assertSee(route('weighin.index', ['championship' => $championship, 'competition' => 'F']), false);
 });
 
 it('links straight through when there is one category', function () {
@@ -25,7 +25,7 @@ it('links straight through when there is one category', function () {
     $this->actingAs(User::factory()->create())
         ->get(route('championships.show', $championship))
         ->assertOk()
-        ->assertSee(route('weighin.index', $only), false);
+        ->assertSee(route('weighin.index', ['championship' => $championship, 'competition' => 'M']), false);
 });
 
 /**

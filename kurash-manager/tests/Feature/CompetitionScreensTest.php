@@ -30,7 +30,7 @@ describe('access', function () {
             'championships.show' => route('championships.show', $championship),
             'medals.index' => route('medals.index', $championship),
             'athletes.index' => route('athletes.index', ['championship' => $championship, 'competition' => 'M']),
-            'weighin.index' => route('weighin.index', $ageCategory),
+            'weighin.index' => route('weighin.index', ['championship' => $championship, 'competition' => 'M']),
             'bracket.show' => route('bracket.show', $weightCategory),
         };
 
@@ -51,7 +51,7 @@ describe('access', function () {
         $this->get(route('championships.show', $championship))->assertOk();
         $this->get(route('medals.index', $championship))->assertOk();
         $this->get(route('athletes.index', ['championship' => $championship, 'competition' => 'M']))->assertOk();
-        $this->get(route('weighin.index', $ageCategory))->assertOk();
+        $this->get(route('weighin.index', ['championship' => $championship, 'competition' => 'M']))->assertOk();
     });
 
     /**
@@ -91,7 +91,10 @@ describe('access', function () {
 
         $this->actingAs($this->viewer);
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $category->ageCategory])
+        Livewire::test(WeighIn::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => $category->ageCategory->gender,
+        ])
             ->set("weights.{$athlete->id}", '64.8')
             ->call('record', $athlete->id)
             ->assertForbidden();
@@ -290,7 +293,10 @@ describe('weigh-in', function () {
         [$category] = categoryWithAthletes(1);   // -66 class, floor 60, ceiling 66
         $athlete = $category->athletes()->first();
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $category->ageCategory])
+        Livewire::test(WeighIn::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => $category->ageCategory->gender,
+        ])
             ->set("weights.{$athlete->id}", (string) $kg)
             ->call('record', $athlete->id);
 
@@ -309,7 +315,10 @@ describe('weigh-in', function () {
         [$category] = categoryWithAthletes(1);
         $athlete = $category->athletes()->first();
 
-        Livewire::test(WeighIn::class, ['ageCategory' => $category->ageCategory])
+        Livewire::test(WeighIn::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => $category->ageCategory->gender,
+        ])
             ->set("weights.{$athlete->id}", 'heavy')
             ->call('record', $athlete->id);
 

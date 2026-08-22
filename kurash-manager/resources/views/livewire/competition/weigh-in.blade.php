@@ -7,13 +7,13 @@
 @endphp
 
 <x-page
-    :kicker="$ageCategory->name"
+    :kicker="__(App\Support\Gender::label($competition))"
     kicker-variant="info"
     :title="__('Weigh-in')"
     :subtitle="__('A 0.5 kg tolerance applies below an upper limit. Open classes have no upper bound.')"
     :breadcrumbs="[
         ['label' => __('Championships'), 'href' => route('championships.index')],
-        ['label' => $ageCategory->championship->title, 'href' => route('championships.show', $ageCategory->championship)],
+        ['label' => $championship->title, 'href' => route('championships.show', $championship)],
         ['label' => __('Weigh-in')],
     ]"
 >
@@ -31,8 +31,13 @@
                 <label for="weigh-filter" class="text-[12.5px] font-semibold text-muted">{{ __('Weight class') }}</label>
                 <flux:select id="weigh-filter" wire:model.live="weightFilter" size="sm" class="w-[200px]">
                     <flux:select.option value="">{{ __('All classes') }}</flux:select.option>
+                    {{-- Prefixed with the age group only where there is more
+                         than one, because otherwise two -66s in the same list
+                         say nothing about which is which. --}}
                     @foreach ($weightCategories as $weightCategory)
-                        <flux:select.option value="{{ $weightCategory->id }}">{{ $weightCategory->label }} {{ __('kg') }}</flux:select.option>
+                        <flux:select.option value="{{ $weightCategory->id }}">
+                            @if ($divisions->count() > 1){{ $weightCategory->ageCategory?->age_group }} @endif{{ $weightCategory->label }} {{ __('kg') }}
+                        </flux:select.option>
                     @endforeach
                 </flux:select>
             </div>

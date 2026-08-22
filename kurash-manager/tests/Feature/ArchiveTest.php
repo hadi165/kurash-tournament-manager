@@ -142,7 +142,10 @@ describe('the freeze', function () {
 
         $athlete = $category->athletes()->first();
 
-        expect(fn () => Livewire::test(WeighIn::class, ['ageCategory' => $category->ageCategory])
+        expect(fn () => Livewire::test(WeighIn::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => $category->ageCategory->gender,
+        ])
             ->set("weights.{$athlete->id}", '64.8')
             ->call('record', $athlete->id))
             ->toThrow(ChampionshipArchivedException::class);
