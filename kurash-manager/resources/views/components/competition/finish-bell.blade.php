@@ -6,6 +6,13 @@
 
 @php($source = (string) $court->finishSound())
 
+{{-- Host-relative on purpose. asset() builds from APP_URL, which is the
+     address the server was started on — a board opened at 127.0.0.1 would then
+     be sent to fetch its buzzer from the LAN address, across an origin, from a
+     host that machine may not even be able to reach. Served from wherever the
+     page came from instead. --}}
+@php($src = $source === '' ? '' : '/'.ltrim($source, '/'))
+
 {{-- The buzzer a contest ends on.
 
      Sits on both the mat screen and the wall board, from one file, because two
@@ -13,8 +20,14 @@
      that did not — is worse than either. --}}
 @if ($source !== '')
     <div
-        x-data="finishBell({ src: @js(asset($source)), bout: @js($bout?->getKey()), decided: @js((bool) $decided) })"
-        x-effect="watch(@js($bout?->getKey()), @js((bool) $decided))"
+        x-data="finishBell({ src: @js($src), bout: @js($bout?->getKey()), decided: @js((bool) $decided) })"
+        {{-- Read from the element rather than from an expression Alpine would
+             have to be re-evaluated to see. Livewire rewrites these on every
+             poll, and the component reads them on its own clock — a buzzer is
+             not something to hang on which framework notices an attribute
+             changed. --}}
+        data-bout="{{ $bout?->getKey() }}"
+        data-decided="{{ $decided ? '1' : '0' }}"
         style="display: contents"
     >
         {{-- A board on a projector may never be touched, and a browser will

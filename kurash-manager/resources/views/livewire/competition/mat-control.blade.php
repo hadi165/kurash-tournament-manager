@@ -107,7 +107,7 @@
                              a buzzer before turning it on is a reasonable
                              thing to want to do. --}}
                         <button type="button"
-                                x-on:click="play(@js(asset($court->finishSoundFile() ?? '')))"
+                                x-on:click="play(@js('/'.ltrim((string) $court->finishSoundFile(), '/')))"
                                 class="rounded-full px-2 py-1 text-xs font-bold text-brand-700 hover:bg-brand-500/10 dark:text-brand-400">
                             {{ __('Play') }}
                         </button>

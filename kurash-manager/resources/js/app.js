@@ -115,6 +115,7 @@ document.addEventListener('alpine:init', () => {
         // on a projector may never be touched, so this is surfaced rather than
         // failing quietly — the operator gets something to press.
         armed: false,
+        poll: null,
         sounded: decided ? bout : null,
 
         init() {
@@ -131,6 +132,24 @@ document.addEventListener('alpine:init', () => {
 
             document.addEventListener('pointerdown', unlock, { once: true })
             document.addEventListener('keydown', unlock, { once: true })
+
+            // Watched on its own clock rather than through a reactive
+            // expression. The board is re-rendered by Livewire every couple of
+            // seconds and the attributes below are rewritten with it; reading
+            // them four times a second is the one way of noticing that does
+            // not depend on how a morph happens to be applied.
+            this.poll = setInterval(() => this.read(), 250)
+            this.read()
+        },
+
+        destroy() {
+            clearInterval(this.poll)
+        },
+
+        read() {
+            const bout = this.$el.dataset.bout
+
+            this.watch(bout === '' || bout === undefined ? null : Number(bout), this.$el.dataset.decided === '1')
         },
 
         /** Play once, silently, which is what a browser accepts as consent. */
