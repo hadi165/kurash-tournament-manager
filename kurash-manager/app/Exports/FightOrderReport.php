@@ -2,6 +2,7 @@
 
 namespace App\Exports;
 
+use App\Models\Athlete;
 use App\Models\Bout;
 use App\Models\Championship;
 use App\Support\Gender;
@@ -10,10 +11,12 @@ use App\Support\Noc;
 /**
  * The running order for a whole championship — specification §8.1.
  *
- * One row per competitor rather than per bout, because the required columns
- * include Color: the federation's sheets list the blue corner and the green
- * corner as separate lines sharing a fight number, and the table officials read
- * down that column.
+ * One row per contest, the same columns in the same order as the screen it is
+ * printed from. It used to be one row per competitor — the blue corner and the
+ * green corner on separate lines sharing a fight number — which is how the
+ * federation's own sheets are ruled, but it meant the sheet and the screen were
+ * two different documents describing the same thing, and a table official
+ * checking one against the other had to translate between them.
  */
 class FightOrderReport implements Report
 {
@@ -59,7 +62,7 @@ class FightOrderReport implements Report
 
     public function headings(): array
     {
-        return ['Fight No.', 'Gender / Weight Category', 'Phase', 'Color', 'Athlete', 'NOC', 'Mat', 'Winner'];
+        return ['No.', 'Category', 'Phase', 'Blue', 'Green', 'Mat', 'Winner'];
     }
 
     public function rows(): array
@@ -88,29 +91,33 @@ class FightOrderReport implements Report
         foreach ($bouts as $bout) {
             $totalRounds = (int) ($roundsByCategory[$bout->weight_category_id] ?? $bout->round);
 
-            // Read through the foreign keys: a corner is empty until the bout
-            // feeding it is decided, so these relations are genuinely optional.
-            $corners = [
-                ['Blue', $bout->athlete_a_id === null ? null : $bout->athleteA],
-                ['Green', $bout->athlete_b_id === null ? null : $bout->athleteB],
+            $rows[] = [
+                $bout->fight_number,
+                // The screen sets the division under the class; a sheet has one
+                // line for it, so they run together.
+                $bout->weightCategory->ageCategory->name.' '.$bout->weightCategory->label.' kg',
+                $bout->phase($totalRounds),
+                // Read through the foreign keys: a corner is empty until the
+                // bout feeding it is decided, so these are genuinely optional.
+                $this->competitor($bout->athlete_a_id === null ? null : $bout->athleteA, $bout->is_bye),
+                $this->competitor($bout->athlete_b_id === null ? null : $bout->athleteB, $bout->is_bye),
+                $bout->court?->label(),
+                $this->competitor($bout->winner_athlete_id === null ? null : $bout->winner, false),
             ];
-
-            foreach ($corners as [$colour, $athlete]) {
-                $rows[] = [
-                    $bout->fight_number,
-                    $bout->weightCategory->exportName(),
-                    $bout->phase($totalRounds),
-                    $colour,
-                    $athlete !== null ? $athlete->fullname : ($bout->is_bye ? 'BYE' : '—'),
-                    Noc::normalise($athlete?->noc_code),
-                    $bout->court?->label(),
-                    // Marked on the winner's own line, so scanning the Winner
-                    // column down the page reads as a list of results.
-                    $athlete !== null && $bout->winner_athlete_id === $athlete->id ? 'WIN' : '',
-                ];
-            }
         }
 
         return $rows;
+    }
+
+    /** "Rustam Kamolov (UZB)", the way the screen sets a corner. */
+    private function competitor(?Athlete $athlete, bool $isBye): string
+    {
+        if ($athlete === null) {
+            return $isBye ? 'BYE' : '—';
+        }
+
+        $noc = Noc::normalise($athlete->noc_code);
+
+        return $noc === null ? $athlete->fullname : $athlete->fullname.' ('.$noc.')';
     }
 }

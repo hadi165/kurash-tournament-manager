@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Throwable;
 
@@ -58,6 +59,18 @@ class MatControl extends Component
      * needs to tell this mat from the one beside it is the person sitting at
      * it, and they will want to change it after hearing both.
      */
+    /**
+     * A finished contest asked for by name, rather than whichever this mat
+     * finished last.
+     *
+     * The running order lists every decided bout in the championship, and the
+     * question asked of one of them — what was called, and was it right — is
+     * answered on the mat screen. So the running order links here, and this is
+     * what it points at.
+     */
+    #[Url]
+    public ?int $review = null;
+
     public string $finishSound = '';
 
     /** Whether this mat sounds it at all. */
@@ -139,6 +152,10 @@ class MatControl extends Component
             ->with(['athleteA', 'athleteB', 'events'])
             ->where('status', Bout::STATUS_COMPLETED)
             ->whereNotNull('winner_athlete_id')
+            // Asked for by name, or else the last one this mat finished.
+            // Scoped to this mat's own contests either way, so an id from
+            // another mat finds nothing rather than being caught after.
+            ->when($this->review !== null, fn ($q) => $q->whereKey($this->review))
             ->orderByDesc('updated_at')
             ->first();
     }
@@ -637,6 +654,9 @@ class MatControl extends Component
         unset($this->bout, $this->justDecided);
         $this->awaitingDecision = false;
 
+        // Reopened, so it is on the mat rather than under review.
+        $this->review = null;
+
         session()->flash('status', __('Contest reopened. The call that ended it has been taken back.'));
     }
 
@@ -679,6 +699,9 @@ class MatControl extends Component
         }
 
         $bout->update(['court_id' => $this->court->id, 'status' => Bout::STATUS_ON_COURT]);
+
+        // Whatever was being reviewed is no longer what this mat is about.
+        $this->review = null;
 
         // A new contest starts from the top of its own division's clock. Left
         // to the previous bout's anchor, the wall board would open the next

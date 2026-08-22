@@ -132,21 +132,40 @@ describe('the draw sheet', function () {
 
 describe('the fight order sheet', function () {
     /**
-     * The federation's sheets list each corner on its own line sharing a fight
-     * number, which is why Color is a column rather than two athlete columns.
+     * The sheet is the screen. One row per contest, the same seven columns in
+     * the same order, so a table official checking one against the other is
+     * not translating between two documents.
      */
-    it('gives the blue and green corners a row each', function () {
+    it('prints one row per contest, in the screen\'s columns', function () {
         $category = weighedClass(4);
         app(BracketGenerator::class)->generate($category);
-        app(FightOrderScheduler::class)->schedule($category->ageCategory->championship);
+        $championship = $category->ageCategory->championship;
+        app(FightOrderScheduler::class)->schedule($championship);
 
-        $rows = (new FightOrderReport($category->ageCategory->championship))->rows();
+        $report = new FightOrderReport($championship);
 
-        expect($rows)->toHaveCount(6)                      // 3 bouts, two corners each
-            ->and(array_column($rows, 3))->toBe(['Blue', 'Green', 'Blue', 'Green', 'Blue', 'Green']);
+        expect($report->headings())->toBe(['No.', 'Category', 'Phase', 'Blue', 'Green', 'Mat', 'Winner'])
+            ->and($report->rows())->toHaveCount(3);   // three contests, three rows
     });
 
-    it('marks the win on the winner\'s own line', function () {
+    it('names each corner the way the screen does', function () {
+        $category = weighedClass(4);
+        app(BracketGenerator::class)->generate($category);
+        $championship = $category->ageCategory->championship;
+        app(FightOrderScheduler::class)->schedule($championship);
+
+        $bout = $championship->bouts()->where('fight_number', 1)->first();
+        $blue = $bout->athleteA;
+
+        $row = collect((new FightOrderReport($championship))->rows())
+            ->firstWhere(0, 1);
+
+        expect($row[3])->toBe($blue->fullname.' ('.$blue->noc_code.')')
+            ->and($row[1])->toContain($category->label)
+            ->and($row[1])->toContain($category->ageCategory->name);
+    });
+
+    it('puts the winner in the winner\'s column', function () {
         $category = weighedClass(4);
         app(BracketGenerator::class)->generate($category);
         $championship = $category->ageCategory->championship;
@@ -161,11 +180,11 @@ describe('the fight order sheet', function () {
             source: 'operator',
         );
 
-        $rows = (new FightOrderReport($championship->refresh()))->rows();
+        $rows = collect((new FightOrderReport($championship->refresh()))->rows());
 
-        // Row 0 is fight 1's blue corner — the winner — and row 1 its green.
-        expect($rows[0][7])->toBe('WIN')
-            ->and($rows[1][7])->toBe('');
+        expect($rows->firstWhere(0, 1)[6])->toContain($bout->athleteA->fullname)
+            // An undecided contest has nobody in it yet.
+            ->and($rows->firstWhere(0, 3)[6])->toBe('—');
     });
 
     it('omits bouts with no fight number', function () {

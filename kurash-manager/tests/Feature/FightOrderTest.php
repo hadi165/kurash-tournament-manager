@@ -1,13 +1,14 @@
 <?php
 
 use App\Livewire\Competition\FightOrder;
-use App\Models\AgeCategory;
+use App\Livewire\Competition\MatControl;
 use App\Models\Athlete;
 use App\Models\Bout;
 use App\Models\Championship;
 use App\Models\Court;
 use App\Models\User;
 use App\Models\WeightCategory;
+use App\Services\BoutAdvancer;
 use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
 use Livewire\Livewire;
@@ -17,36 +18,6 @@ beforeEach(function () {
     $this->admin = User::factory()->create(['role' => 'admin']);
     $this->viewer = User::factory()->create(['role' => 'viewer']);
 });
-
-/**
- * Build a championship with several weight classes, each drawn and bracketed.
- *
- * @param  array<string, int>  $classes  label => athlete count
- */
-function championshipWithBrackets(array $classes): Championship
-{
-    $ageCategory = AgeCategory::factory()->create();
-
-    foreach ($classes as $label => $count) {
-        $category = WeightCategory::factory()->create([
-            'age_category_id' => $ageCategory->id,
-            'label' => $label,
-        ]);
-
-        foreach (range(1, $count) as $draw) {
-            Athlete::factory()->drawn($draw)->create([
-                'championship_id' => $ageCategory->championship_id,
-                'age_category_id' => $ageCategory->id,
-                'weight_category_id' => $category->id,
-                'fullname' => "{$label} #{$draw}",
-            ]);
-        }
-
-        app(BracketGenerator::class)->generate($category->refresh());
-    }
-
-    return $ageCategory->championship->refresh();
-}
 
 describe('building the running order', function () {
     it('numbers every contested bout once, with no gaps', function () {
@@ -349,5 +320,107 @@ describe('the fight order screen', function () {
         Livewire::test(FightOrder::class, ['championship' => $championship])
             ->set('hideCompleted', true)
             ->assertDontSee($first->athleteA->fullname);
+    });
+});
+
+/**
+ * A decided contest raises a question about the record — what was called, and
+ * was it right. That is answered on the mat it was fought on, where the log
+ * and the way back both live, so the running order links there.
+ */
+describe('reviewing a finished contest', function () {
+    beforeEach(function () {
+        // The mat screen authorises the mat on mount, so somebody has to be
+        // holding it.
+        $this->actingAs($this->admin);
+
+        $this->championship = championshipWithBrackets(['-66' => 4]);
+        app(FightOrderScheduler::class)->schedule($this->championship);
+
+        $this->court = Court::factory()->create(['championship_id' => $this->championship->id]);
+        $this->bout = $this->championship->bouts()->where('fight_number', 1)->first();
+    });
+
+    it('offers no review of a contest still to be fought', function () {
+        Livewire::test(FightOrder::class, ['championship' => $this->championship])
+            ->assertDontSee('Review');
+    });
+
+    it('links a decided contest to the mat it was fought on', function () {
+        $this->bout->update(['court_id' => $this->court->id]);
+
+        app(BoutAdvancer::class)->recordResult(
+            bout: $this->bout->refresh(),
+            winnerAthleteId: $this->bout->athlete_a_id,
+            winType: 'khalol',
+            user: $this->admin,
+            source: 'operator',
+        );
+
+        Livewire::test(FightOrder::class, ['championship' => $this->championship])
+            ->assertSee('Review')
+            ->assertSee(
+                route('mats.live', ['court' => $this->court->id, 'review' => $this->bout->id]),
+                false,
+            );
+    });
+
+    /** A contest decided without ever reaching a mat has no mat to review on. */
+    it('offers nothing for a contest that never went to a mat', function () {
+        app(BoutAdvancer::class)->recordResult(
+            bout: $this->bout,
+            winnerAthleteId: $this->bout->athlete_a_id,
+            winType: 'khalol',
+            user: $this->admin,
+            source: 'operator',
+        );
+
+        Livewire::test(FightOrder::class, ['championship' => $this->championship])
+            ->assertDontSee('Review');
+    });
+
+    /** The mat shows the contest it was asked for, not the last one it ran. */
+    it('opens the contest the running order asked for', function () {
+        $bouts = $this->championship->bouts()->orderBy('fight_number')->take(2)->get();
+
+        foreach ($bouts as $bout) {
+            $bout->update(['court_id' => $this->court->id]);
+
+            app(BoutAdvancer::class)->recordResult(
+                bout: $bout->refresh(),
+                winnerAthleteId: $bout->athlete_a_id,
+                winType: 'khalol',
+                user: $this->admin,
+                source: 'operator',
+            );
+        }
+
+        $older = $bouts->first();
+
+        // The older of the two, not the one this mat finished last. There is
+        // no call log here because the result was recorded rather than
+        // refereed — what a log looks like is MatControlTest's business.
+        Livewire::test(MatControl::class, ['court' => $this->court, 'review' => $older->id])
+            ->assertSee($older->athleteA->fullname)
+            ->assertSee('Reopen contest')
+            ->assertViewHas('reviewing', fn ($bout) => $bout->is($older));
+    });
+
+    /** An id from another mat is not something this one will show. */
+    it('refuses to review a contest from a different mat', function () {
+        $elsewhere = Court::factory()->create(['championship_id' => $this->championship->id]);
+
+        $this->bout->update(['court_id' => $elsewhere->id]);
+
+        app(BoutAdvancer::class)->recordResult(
+            bout: $this->bout->refresh(),
+            winnerAthleteId: $this->bout->athlete_a_id,
+            winType: 'khalol',
+            user: $this->admin,
+            source: 'operator',
+        );
+
+        Livewire::test(MatControl::class, ['court' => $this->court, 'review' => $this->bout->id])
+            ->assertDontSee('Reopen contest');
     });
 });

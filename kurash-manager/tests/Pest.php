@@ -3,6 +3,7 @@
 use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Bout;
+use App\Models\Championship;
 use App\Models\Court;
 use App\Models\WeightCategory;
 use App\Services\BoutAdvancer;
@@ -142,4 +143,37 @@ function runTournament(WeightCategory $category): int
     }
 
     return $fought;
+}
+
+/**
+ * Build a championship with several weight classes, each drawn and bracketed.
+ *
+ * Here rather than in one test file: two files were already using it, and the
+ * second only passed when the first happened to have been loaded first.
+ *
+ * @param  array<string, int>  $classes  label => athlete count
+ */
+function championshipWithBrackets(array $classes): Championship
+{
+    $ageCategory = AgeCategory::factory()->create();
+
+    foreach ($classes as $label => $count) {
+        $category = WeightCategory::factory()->create([
+            'age_category_id' => $ageCategory->id,
+            'label' => $label,
+        ]);
+
+        foreach (range(1, $count) as $draw) {
+            Athlete::factory()->drawn($draw)->create([
+                'championship_id' => $ageCategory->championship_id,
+                'age_category_id' => $ageCategory->id,
+                'weight_category_id' => $category->id,
+                'fullname' => "{$label} #{$draw}",
+            ]);
+        }
+
+        app(BracketGenerator::class)->generate($category->refresh());
+    }
+
+    return $ageCategory->championship->refresh();
 }
