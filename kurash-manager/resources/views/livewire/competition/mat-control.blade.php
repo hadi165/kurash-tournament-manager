@@ -18,6 +18,18 @@
         tick() {
             if (this.left <= 0) { this.stop(); return }
             this.left--
+
+            {{-- Full time is not a thing anybody should have to press. The
+                 clock reaching zero is the event; the server reads the score
+                 and applies the priority rules, and asks the referees only
+                 when it is genuinely level. --}}
+            if (this.left <= 0) {
+                this.stop()
+                $wire.finishOnTime()
+
+                return
+            }
+
             this.offerJazzo()
         },
         start() {
@@ -53,6 +65,15 @@
             if (seconds) this.total = seconds
             this.left = this.total
         },
+        {{-- Space is the shortcut, so it must not fire while somebody is
+             typing into the search box or a weight field — and it must not
+             scroll the page, which is what the browser would otherwise do. --}}
+        typing(event) {
+            const el = event.target
+
+            return el.isContentEditable
+                || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)
+        },
         get display() {
             const m = Math.floor(this.left / 60)
             const s = String(this.left % 60).padStart(2, '0')
@@ -60,6 +81,7 @@
         },
     }"
     x-on:bout-changed.window="reset($event.detail?.seconds ?? null)"
+    x-on:keydown.window.space="if (! typing($event)) { $event.preventDefault(); toggle() }"
 >    <x-page
         :kicker="$court->championship->title"
         :title="$court->label()"
@@ -233,22 +255,22 @@
                                     <div class="flex flex-wrap justify-center gap-2">
                                         @if ($inJazzo)
                                             <flux:button size="sm" variant="primary"
+                                                title="{{ __('Bring them back to the centre and restart the clock after jazzo.') }}"
                                                 x-on:click="$wire.resume(left).then(() => start())">{{ __('Resume') }}</flux:button>
                                         @else
                                             <flux:button size="sm" variant="primary" x-on:click="toggle()"
-                                                x-text="running ? @js(__('Tuxta')) : @js(__('Kurash'))"></flux:button>
+                                                title="{{ __('Start or pause the contest clock. Shortcut: space') }}"
+                                                x-text="running ? @js(__('Pause')) : @js(__('Start'))"></flux:button>
                                         @endif
 
                                         <flux:button size="sm" variant="ghost"
+                                            title="{{ __('Stop the clock and record why — an injury, a mat sweep, an equipment change.') }}"
                                             x-on:click="stop(); $wire.stoppage(left)">{{ __('Log stoppage') }}</flux:button>
                                     </div>
 
                                     <div class="flex flex-wrap justify-center gap-2">
-                                        <flux:button size="sm" variant="ghost" x-on:click="stop(); $wire.finishOnTime()">
-                                            {{ __('Time — decide') }}
-                                        </flux:button>
-
-                                        <flux:button size="sm" variant="ghost" wire:click="resetClock">
+                                        <flux:button size="sm" variant="ghost" wire:click="resetClock"
+                                            title="{{ __('Put the clock back to the full contest time. Scores already called are not touched.') }}">
                                             {{ __('Reset time') }}
                                         </flux:button>
                                     </div>
@@ -337,10 +359,13 @@
                                 <div class="mt-auto flex flex-col gap-2">
                                     <div class="flex flex-wrap gap-2">
                                         <flux:button size="sm" variant="primary"
+                                            title="{{ __('The complete throw. Ends the contest at once — this side wins.') }}"
                                             x-on:click="stop(); $wire.score('khalol', @js($key), left)">{{ __('Khalol') }}</flux:button>
                                         <flux:button size="sm"
+                                            title="{{ __(':n of these make a khalol and end the contest.', ['n' => config('kurash.yonbosh_for_khalol')]) }}"
                                             x-on:click="$wire.score('yonbosh', @js($key), left)">{{ __('Yonbosh') }}</flux:button>
                                         <flux:button size="sm"
+                                            title="{{ __('The smallest score. However many are called, they never add up to a yonbosh — they decide a contest that reaches full time level.') }}"
                                             x-on:click="$wire.score('chala', @js($key), left)">{{ __('Chala') }}</flux:button>
                                     </div>
 
@@ -351,12 +376,16 @@
                                          rules, not by a second press. --}}
                                     <div class="flex flex-wrap gap-2">
                                         <flux:button size="sm" variant="danger"
+                                            title="{{ __('Warning against this side. Hands the opponent a chala automatically — do not call that as well.') }}"
                                             x-on:click="$wire.score('tanbeh', @js($key), left)">{{ __('Tanbeh') }}</flux:button>
                                         <flux:button size="sm" variant="danger"
+                                            title="{{ __('Serious warning against this side. Hands the opponent a yonbosh and withdraws the chala an earlier tanbeh gave them.') }}"
                                             x-on:click="$wire.score('dakki', @js($key), left)">{{ __('Dakki') }}</flux:button>
                                         <flux:button size="sm" variant="danger"
+                                            title="{{ __('Disqualification of this side. Ends the contest at once — the opponent wins.') }}"
                                             x-on:click="stop(); $wire.score('girrom', @js($key), left)">{{ __('Girrom') }}</flux:button>
                                         <flux:button size="sm" variant="danger"
+                                            title="{{ __('Medical attention for this side. :n of these ends the contest as a defeat, and no score passes to the opponent.', ['n' => config('kurash.madichal_for_defeat')]) }}"
                                             x-on:click="$wire.score('madichal', @js($key), left)">{{ __('Madichal') }}</flux:button>
                                     </div>
                                 </div>

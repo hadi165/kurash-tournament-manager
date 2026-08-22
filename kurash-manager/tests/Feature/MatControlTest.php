@@ -383,3 +383,61 @@ describe('the mat', function () {
         expect($waiting->refresh()->court_id)->toBeNull();
     });
 });
+
+/**
+ * What the operator is told about the controls.
+ *
+ * The mat screen is worked at speed by somebody who is watching the contest
+ * rather than the screen, so what each call does to the score is written on
+ * the control that makes it rather than left to a rulebook beside the desk.
+ */
+describe('the controls say what they do', function () {
+    beforeEach(function () {
+        $this->actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]));
+    });
+
+    it('names the clock control for what it does, and gives its shortcut', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSee('Pause')
+            ->assertSee('Start')
+            ->assertSee('Shortcut: space');
+    });
+
+    /**
+     * Full time is not something anybody should have to press. The clock
+     * reaching zero is the event, and the rules decide from there.
+     */
+    it('no longer asks the operator to end a contest that ran out of time', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertDontSee('Time — decide');
+    });
+
+    /** The rule each call applies, on the control that applies it. */
+    it('says what every call does to the score', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSee('Ends the contest at once')          // khalol
+            ->assertSee('make a khalol')                     // yonbosh
+            ->assertSee('never add up to a yonbosh')         // chala
+            ->assertSee('Hands the opponent a chala')        // tanbeh
+            ->assertSee('Hands the opponent a yonbosh')      // dakki
+            ->assertSee('the opponent wins')                 // girrom
+            ->assertSee('no score passes to the opponent');  // madichal
+    });
+
+    /** Read from the rules rather than written into the sentence twice. */
+    it('takes the thresholds it quotes from the rules themselves', function () {
+        config(['kurash.yonbosh_for_khalol' => 3, 'kurash.madichal_for_defeat' => 4]);
+
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSee('3 of these make a khalol')
+            ->assertSee('4 of these ends the contest');
+    });
+});

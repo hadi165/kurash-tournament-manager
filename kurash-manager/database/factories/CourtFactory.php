@@ -9,18 +9,29 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 /** @extends Factory<Court> */
 class CourtFactory extends Factory
 {
+    /**
+     * Counted rather than drawn.
+     *
+     * Two mats are unique on their number within a championship, and a test
+     * proving one mat is not offered needs the other to be called something
+     * else. Faker's unique() gave neither reliably — it handed out the same
+     * number twice often enough to fail a suite at random, which is the worst
+     * kind of failing test: the one that is not about anything.
+     */
+    private static int $sequence = 0;
+
     public function definition(): array
     {
-        // Named after its own number rather than after a random letter. Two
-        // mats drawing the same letter gave them the same label, and a test
-        // asserting one mat is not offered would fail because the other one
-        // happened to be called the same thing.
-        $number = fake()->unique()->numberBetween(1, 8);
+        $sequence = self::$sequence++;
 
         return [
             'championship_id' => Championship::factory(),
-            'number' => $number,
-            'name' => 'Mat '.chr(64 + $number),
+            // Wrapped inside the range the form accepts. Two mats sharing a
+            // number in different championships is allowed; sharing one in the
+            // same championship is what the constraint forbids, and a counter
+            // will not do that in any test that creates fewer than ninety.
+            'number' => ($sequence % 90) + 1,
+            'name' => 'Mat '.($sequence + 1),
             'scoreboard_base_url' => 'http://192.168.1.'.fake()->numberBetween(20, 90),
             'scoreboard_api_key' => 'test-key',
             'is_active' => true,
