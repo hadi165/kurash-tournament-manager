@@ -50,6 +50,17 @@ class MatControl extends Component
      */
     public string $finishSound = '';
 
+    /** Whether this mat sounds it at all. */
+    public bool $finishSoundEnabled = true;
+
+    public function updatedFinishSoundEnabled(bool $value): void
+    {
+        Gate::authorize('score-bout', $this->court);
+
+        $this->court->update(['finish_sound_enabled' => $value]);
+        $this->court->refresh();
+    }
+
     public function updatedFinishSound(string $value): void
     {
         Gate::authorize('score-bout', $this->court);
@@ -59,7 +70,7 @@ class MatControl extends Component
         // Only one of the offered files, and nothing else: this ends up in a
         // src attribute on the wall board.
         if (! is_array($choices) || ! isset($choices[$value])) {
-            $this->finishSound = (string) $this->court->finishSound();
+            $this->finishSound = (string) $this->court->finishSoundFile();
 
             return;
         }
@@ -77,7 +88,8 @@ class MatControl extends Component
         Gate::authorize('mat.view', $court);
 
         $this->court = $court->load('championship');
-        $this->finishSound = (string) $court->finishSound();
+        $this->finishSound = (string) $court->finishSoundFile();
+        $this->finishSoundEnabled = (bool) $court->finish_sound_enabled;
     }
 
     /**

@@ -116,6 +116,61 @@ describe('choosing a mat\'s buzzer', function () {
         expect($court->refresh()->finish_sound)->toBeNull();
     });
 
+    /** On unless somebody says otherwise, which is what it always did. */
+    it('sounds by default', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSet('finishSoundEnabled', true);
+
+        expect($court->finishSound())->toBe('sounds/match-end01.wav');
+    });
+
+    it('can be switched off for a mat', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->set('finishSoundEnabled', false);
+
+        expect($court->refresh()->finishSound())->toBeNull();
+    });
+
+    /**
+     * Switched off renders no player and no prompt to enable one: a silent
+     * player is not something anybody can tell from a broken one.
+     */
+    it('renders nothing at all on a mat switched off', function () {
+        [$court] = boutOnMat();
+        $court->update(['finish_sound_enabled' => false]);
+
+        Livewire::test(Scoreboard::class, ['court' => $court->refresh()])
+            ->assertDontSee('finishBell')
+            ->assertDontSee('Tap anywhere');
+    });
+
+    /** Switching it off is not the same as forgetting which one it was. */
+    it('keeps the chosen file while it is switched off', function () {
+        [$court] = boutOnMat();
+        $court->update(['finish_sound' => 'sounds/match-end02.wav']);
+
+        Livewire::test(MatControl::class, ['court' => $court->refresh()])
+            ->set('finishSoundEnabled', false)
+            ->assertSet('finishSound', 'sounds/match-end02.wav')
+            ->set('finishSoundEnabled', true);
+
+        expect($court->refresh()->finishSound())->toBe('sounds/match-end02.wav');
+    });
+
+    it('leaves another mat sounding when one is switched off', function () {
+        [$mine] = boutOnMat();
+        $theirs = Court::factory()->create(['championship_id' => $mine->championship_id]);
+
+        Livewire::test(MatControl::class, ['court' => $mine])
+            ->set('finishSoundEnabled', false);
+
+        expect($theirs->refresh()->finishSound())->toBe('sounds/match-end01.wav');
+    });
+
     /**
      * A file dropped from the venue leaves the mats that chose it pointing at
      * nothing, so they fall back rather than falling silent.

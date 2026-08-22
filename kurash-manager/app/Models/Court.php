@@ -15,13 +15,25 @@ class Court extends Model
 
     protected $fillable = [
         'championship_id', 'number', 'name',
-        'scoreboard_base_url', 'scoreboard_api_key', 'is_active', 'finish_sound',
+        'scoreboard_base_url', 'scoreboard_api_key', 'is_active', 'finish_sound', 'finish_sound_enabled',
+    ];
+
+    /**
+     * A column default is applied by the database on insert, which the model
+     * that did the inserting never sees. Stated here as well, so a mat is
+     * switched on the moment it exists rather than from the next read.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'finish_sound_enabled' => true,
     ];
 
     protected function casts(): array
     {
         return [
             'is_active' => 'boolean',
+            'finish_sound_enabled' => 'boolean',
             // Encrypted at rest: a database dump should not hand over the keys
             // to every scoreboard in the venue.
             'scoreboard_api_key' => 'encrypted',
@@ -29,14 +41,28 @@ class Court extends Model
     }
 
     /**
-     * The sound this mat ends a contest on, as a path under public/.
+     * What this mat sounds at the end of a contest, or null for nothing.
+     *
+     * The one question the buzzer asks, so that a mat switched off renders no
+     * sound and no prompt to enable one rather than a silent player nobody can
+     * tell from a broken one.
+     */
+    public function finishSound(): ?string
+    {
+        return $this->finish_sound_enabled ? $this->finishSoundFile() : null;
+    }
+
+    /**
+     * The file this mat would use, whether or not it is switched on. What the
+     * chooser offers and the preview plays: auditioning a buzzer is a
+     * reasonable thing to do before turning it on.
      *
      * Resolved against the configured list rather than trusted from the row:
      * a file removed from the venue would otherwise leave a mat pointing at
      * something that no longer exists, and a silent buzzer is a bug nobody
      * notices until the moment it matters.
      */
-    public function finishSound(): ?string
+    public function finishSoundFile(): ?string
     {
         $configured = config('scoreboard.finish_sounds');
         $choices = is_array($configured) ? $configured : [];

@@ -91,9 +91,10 @@
                             this.preview.play().catch(() => {})
                         },
                     }">
-                        <label for="mat-sound" class="text-xs font-semibold text-muted">{{ __('End sound') }}</label>
+                        <flux:checkbox wire:model.live="finishSoundEnabled" :label="__('End sound')" />
 
-                        <flux:select id="mat-sound" wire:model.live="finishSound" size="sm" class="w-[110px]">
+                        <flux:select id="mat-sound" wire:model.live="finishSound" size="sm" class="w-[110px]"
+                                     :disabled="! $finishSoundEnabled">
                             @foreach ($finishSounds as $path => $label)
                                 <flux:select.option value="{{ $path }}" :selected="$finishSound === $path">{{ __($label) }}</flux:select.option>
                             @endforeach
@@ -102,8 +103,11 @@
                         {{-- The chosen file, straight from the server: the
                              select saves as it changes, so this is always what
                              the mat would actually sound. --}}
+                        {{-- Playable while the mat is switched off: auditioning
+                             a buzzer before turning it on is a reasonable
+                             thing to want to do. --}}
                         <button type="button"
-                                x-on:click="play(@js(asset($court->finishSound() ?? '')))"
+                                x-on:click="play(@js(asset($court->finishSoundFile() ?? '')))"
                                 class="rounded-full px-2 py-1 text-xs font-bold text-brand-700 hover:bg-brand-500/10 dark:text-brand-400">
                             {{ __('Play') }}
                         </button>
