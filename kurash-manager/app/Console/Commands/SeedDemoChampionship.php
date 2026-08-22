@@ -80,6 +80,8 @@ class SeedDemoChampionship extends Command
             'location' => (string) $this->option('location'),
             'starts_on' => now()->subDays(2)->toDateString(),
             'ends_on' => now()->addDay()->toDateString(),
+            'genders' => ['M', 'F'],
+            'age_groups' => ['Senior'],
         ]);
 
         $this->info("Building “{$title}”…");
@@ -152,10 +154,11 @@ class SeedDemoChampionship extends Command
     {
         $categories = collect();
 
-        foreach (['M' => 'Men Senior', 'F' => 'Women Senior'] as $gender => $name) {
+        foreach (['M', 'F'] as $gender) {
             $ageCategory = AgeCategory::create([
                 'championship_id' => $championship->id,
-                'name' => $name,
+                'gender' => $gender,
+                'age_group' => 'Senior',
                 'sort_order' => $gender === 'M' ? 1 : 2,
             ]);
 

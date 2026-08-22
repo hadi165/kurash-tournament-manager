@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Bout;
 use App\Models\Championship;
+use App\Support\DivisionFilter;
 use App\Support\Noc;
 
 /**
@@ -17,29 +18,29 @@ use App\Support\Noc;
 class FightOrderReport implements Report
 {
     /**
-     * @param  string|null  $gender  'M' or 'F' to print one competition's order
-     *                               on its own. The men's and women's classes
-     *                               run as separate competitions, and a table
-     *                               official working one of them should not have
-     *                               to read past the other.
+     * @param  DivisionFilter|null  $division  One competition or one division
+     *                                         to print on its own. A table
+     *                                         official working the women's
+     *                                         classes should never have to read
+     *                                         past the men's.
      */
     public function __construct(
         private readonly Championship $championship,
-        private readonly ?string $gender = null,
+        private readonly ?DivisionFilter $division = null,
     ) {}
 
     public function title(): string
     {
-        return $this->gender === null
+        return $this->everything()
             ? 'Fight Order'
-            : 'Fight Order — '.$this->competition();
+            : 'Fight Order — '.$this->division->label();
     }
 
     public function filename(): string
     {
         $name = 'Fight-Order-'.str($this->championship->title)->slug();
 
-        return $this->gender === null ? $name : $name.'-'.str($this->competition())->slug();
+        return $this->everything() ? $name : $name.'-'.str($this->division->label())->slug();
     }
 
     public function meta(): array
@@ -48,19 +49,15 @@ class FightOrderReport implements Report
             'Competition' => $this->championship->title,
             'Location' => $this->championship->location ?? '—',
             // Stated on the sheet, not only in the filename: a printout that
-            // leaves the room has to say which competition it is.
-            'Classes' => $this->gender === null ? 'Men and women' : $this->competition(),
+            // leaves the room has to say which classes it covers.
+            'Division' => $this->everything() ? 'All divisions' : $this->division->label(),
         ]);
     }
 
-    /** "Men" or "Women", the way the sheet names the competition. */
-    private function competition(): string
+    /** @phpstan-assert-if-false !null $this->division */
+    private function everything(): bool
     {
-        return match ($this->gender) {
-            'M' => 'Men',
-            'F' => 'Women',
-            default => 'Men and women',
-        };
+        return $this->division === null || $this->division->isEverything();
     }
 
     public function headings(): array
@@ -74,10 +71,7 @@ class FightOrderReport implements Report
             ->whereNotNull('fight_number')
             // Scoped in the query: a men's sheet does not fetch the women's
             // bouts and drop them while writing.
-            ->when($this->gender !== null, fn ($q) => $q->whereHas(
-                'weightCategory',
-                fn ($category) => $category->where('gender', $this->gender)
-            ))
+            ->tap(fn ($q) => $this->division?->apply($q))
             ->with(['athleteA', 'athleteB', 'winner', 'weightCategory.ageCategory', 'court'])
             ->orderBy('fight_number')
             ->get();

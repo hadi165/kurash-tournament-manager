@@ -121,7 +121,7 @@ describe('what a referee is refused', function () {
             route('brackets.index', $this->championship),
             route('fight-order.index', $this->championship),
             route('bracket.show', $this->category),
-            route('athletes.index', $this->championship->ageCategories()->first()),
+            route('athletes.index', ['championship' => $this->championship, 'competition' => 'M']),
             route('weighin.index', $this->championship->ageCategories()->first()),
             route('operator.draws.index'),
         ] as $url) {

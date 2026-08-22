@@ -26,7 +26,7 @@ beforeEach(function () {
     $this->admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
     $this->actingAs($this->admin);
 
-    $this->division = AgeCategory::factory()->create(['name' => 'Men Senior']);
+    $this->division = AgeCategory::factory()->create(['gender' => 'M', 'age_group' => 'Senior']);
 
     foreach (['-60' => 60, '-66' => 66, '-73' => 73] as $label => $max) {
         WeightCategory::factory()->create([
@@ -38,8 +38,17 @@ beforeEach(function () {
         ]);
     }
 
+    // The women's classes live in the women's division, not alongside the
+    // men's: a division belongs to one competition.
+    $this->womens = AgeCategory::factory()->create([
+        'championship_id' => $this->division->championship_id,
+        'gender' => 'F',
+        'age_group' => 'Senior',
+        'sort_order' => 1,
+    ]);
+
     WeightCategory::factory()->create([
-        'age_category_id' => $this->division->id,
+        'age_category_id' => $this->womens->id,
         'label' => '-57',
         'min_kg' => null,
         'max_kg' => 57,
@@ -93,7 +102,7 @@ describe('reading a file', function () {
             entry(['name' => 'Bekzod Yuldashev', 'weight' => '-73', 'noc' => 'KAZ']),
         ]);
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->call('confirmImport');
@@ -111,7 +120,7 @@ describe('reading a file', function () {
     });
 
     it('writes nothing until the import is confirmed', function () {
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', workbook([entry()]))
             ->call('previewImport');
 
@@ -126,7 +135,7 @@ describe('reading a file', function () {
             ["Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Gender', 'Weight Category', 'Bracket Title'],
         );
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->call('confirmImport');
@@ -140,7 +149,7 @@ describe('reading a file', function () {
             ["Athlete's Name", 'NOC', 'Gender', 'Weight Category', 'Favourite Colour'],
         );
 
-        $preview = Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        $preview = Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->get('preview');
@@ -150,7 +159,7 @@ describe('reading a file', function () {
     });
 
     it('accepts a weight class however the sheet spells it', function (string $spelling) {
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', workbook([entry(['weight' => $spelling])]))
             ->call('previewImport')
             ->call('confirmImport');
@@ -159,7 +168,7 @@ describe('reading a file', function () {
     })->with(['-66', '66', '-66 kg', '66kg', ' -66 ']);
 
     it('accepts a gender however the sheet spells it', function (string $spelling, string $stored) {
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->womens->championship, 'competition' => 'F'])
             ->set('importFile', workbook([entry(['gender' => $spelling, 'weight' => '-57'])]))
             ->call('previewImport')
             ->call('confirmImport');
@@ -176,7 +185,7 @@ describe('reading a file', function () {
             entry(['name' => 'Aziz Turaev']),
         ]);
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->call('confirmImport');
@@ -200,7 +209,7 @@ describe('rows it refuses', function () {
             entry(['name' => 'Bad Class', 'weight' => '-99']),      // row 7
         ]);
 
-        $preview = Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        $preview = Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->get('preview');
@@ -224,7 +233,7 @@ describe('rows it refuses', function () {
             entry(['name' => 'Aziz Turaev', 'weight' => '-60']),
         ]);
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->call('confirmImport');
@@ -233,21 +242,37 @@ describe('rows it refuses', function () {
             ->toBe(['Aziz Turaev', 'Rustam Kamolov']);
     });
 
-    /** A men's and a women's class sharing a label are different competitions. */
-    it('refuses an athlete entered in a class of the other gender', function () {
-        $preview = Livewire::test(Registration::class, ['ageCategory' => $this->division])
+    /**
+     * A division belongs to one competition, so a file loaded into the wrong
+     * one is caught row by row rather than registering a hall full of people
+     * in a competition they are not in.
+     */
+    it('refuses an athlete of the other competition', function () {
+        $preview = Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
+            ->set('importFile', workbook([entry(['gender' => 'F', 'weight' => '-66'])]))
+            ->call('previewImport')
+            ->get('preview');
+
+        expect($preview->readyCount())->toBe(0)
+            ->and($preview->rejected()[0]->reason())->toContain('Men Senior')
+            ->and($preview->rejected()[0]->reason())->toContain('men');
+    });
+
+    /** A class belonging to another division is not reachable from this one. */
+    it('refuses a weight class from another division', function () {
+        $preview = Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', workbook([entry(['gender' => 'M', 'weight' => '-57'])]))
             ->call('previewImport')
             ->get('preview');
 
         expect($preview->readyCount())->toBe(0)
-            ->and($preview->rejected()[0]->reason())->toContain('female');
+            ->and($preview->rejected()[0]->reason())->toContain('not a weight class');
     });
 
     it('refuses a file it cannot read', function () {
         $file = UploadedFile::fake()->createWithContent('entries.csv', '');
 
-        $preview = Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        $preview = Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->get('preview');
@@ -259,7 +284,7 @@ describe('rows it refuses', function () {
     it('refuses a sheet with no name column', function () {
         $file = workbook([['UZB', 'M', '-66']], ['NOC', 'Gender', 'Weight Category']);
 
-        $preview = Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        $preview = Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->get('preview');
@@ -268,7 +293,7 @@ describe('rows it refuses', function () {
     });
 
     it('refuses anything that is not a spreadsheet', function () {
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', UploadedFile::fake()->create('photo.jpg', 40, 'image/jpeg'))
             ->call('previewImport')
             ->assertHasErrors('importFile');
@@ -287,7 +312,7 @@ describe('duplicates', function () {
             'noc_code' => 'UZB',
         ]);
 
-        $preview = Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        $preview = Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', workbook([entry(['name' => 'Rustam Kamolov'])]))
             ->call('previewImport')
             ->get('preview');
@@ -303,7 +328,7 @@ describe('duplicates', function () {
             entry(['name' => 'rustam  kamolov']),   // same person, sloppier typing
         ]);
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->call('confirmImport');
@@ -318,7 +343,7 @@ describe('duplicates', function () {
             entry(['name' => 'R. Kamolov', 'national_id' => 'aa123456']),
         ]);
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->call('confirmImport');
@@ -333,7 +358,7 @@ describe('duplicates', function () {
             entry(['name' => 'Ali Khan', 'noc' => 'KAZ']),
         ]);
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', $file)
             ->call('previewImport')
             ->call('confirmImport');
@@ -345,7 +370,7 @@ describe('duplicates', function () {
         $rows = [entry(['name' => 'Rustam Kamolov']), entry(['name' => 'Aziz Turaev'])];
 
         foreach ([1, 2] as $attempt) {
-            Livewire::test(Registration::class, ['ageCategory' => $this->division])
+            Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
                 ->set('importFile', workbook($rows))
                 ->call('previewImport')
                 ->call('confirmImport');
@@ -359,7 +384,7 @@ describe('access', function () {
     it('is closed to an account that cannot change competition data', function () {
         $this->actingAs(User::factory()->official()->create());
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->division])
+        Livewire::test(Registration::class, ['championship' => $this->division->championship, 'competition' => 'M'])
             ->set('importFile', workbook([entry()]))
             ->call('previewImport')
             ->assertForbidden();

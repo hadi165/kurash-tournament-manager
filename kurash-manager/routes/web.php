@@ -159,7 +159,12 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
     Route::get('championships/{championship}/brackets', Brackets::class)->name('brackets.index');
     Route::get('championships/{championship}/fight-order', FightOrder::class)->name('fight-order.index');
 
-    Route::get('categories/{ageCategory}/athletes', Registration::class)->name('athletes.index');
+    // Scoped to a competition rather than to a division: the age groups a
+    // championship runs are settled when it is created, so they are a field on
+    // the entry and not a place to navigate to.
+    Route::get('championships/{championship}/athletes/{competition}', Registration::class)
+        ->whereIn('competition', ['M', 'F', 'X'])
+        ->name('athletes.index');
     Route::get('categories/{ageCategory}/weigh-in', WeighIn::class)->name('weighin.index');
 
     Route::get('weight-classes/{weightCategory}/bracket', Bracket::class)

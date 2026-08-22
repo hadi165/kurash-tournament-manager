@@ -39,6 +39,33 @@
                             </div>
                         </div>
 
+                        {{-- Everything downstream reads these two lists. A
+                             championship that runs only seniors will not offer a
+                             junior on registration, at the weigh-in or in a
+                             draw, because there is nowhere else for one to come
+                             from. --}}
+                        <div class="mt-[22px] grid gap-[18px] md:grid-cols-[1fr_2fr]">
+                            <div class="flex flex-col gap-[7px]">
+                                <span class="text-[12.5px] font-semibold text-muted">{{ __('Competitions') }}</span>
+                                <div class="flex flex-wrap items-center gap-4 pt-1.5">
+                                    @foreach ([\App\Support\Gender::MEN => __('Men'), \App\Support\Gender::WOMEN => __('Women'), \App\Support\Gender::OPEN => __('Open')] as $value => $label)
+                                        <flux:checkbox wire:model="genders" value="{{ $value }}" :label="$label" />
+                                    @endforeach
+                                </div>
+                                @error('genders')
+                                    <span class="text-[12.5px] text-danger">{{ $message }}</span>
+                                @enderror
+                            </div>
+
+                            <div class="flex flex-col gap-[7px]">
+                                <label for="champ-age-groups" class="text-[12.5px] font-semibold text-muted">{{ __('Age groups') }}</label>
+                                <flux:input id="champ-age-groups" wire:model="ageGroups" placeholder="{{ __('Senior, Junior, Cadet') }}" required />
+                                <span class="text-[12.5px] text-muted">
+                                    {{ __('Comma separated. Every division is one competition paired with one of these.') }}
+                                </span>
+                            </div>
+                        </div>
+
                         <div class="mt-[22px] flex gap-2.5">
                             <flux:button type="submit" variant="primary">
                                 {{ $editingId ? __('Save changes') : __('Create championship') }}

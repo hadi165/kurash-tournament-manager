@@ -1,5 +1,6 @@
 <?php
 
+use App\Exports\FightOrderReport;
 use App\Livewire\Competition\Entries;
 use App\Livewire\Competition\FightOrder;
 use App\Livewire\Competition\Registration;
@@ -12,6 +13,7 @@ use App\Models\WeightCategory;
 use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
 use App\Services\MedalTable;
+use App\Support\DivisionFilter;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -22,8 +24,8 @@ beforeEach(function () {
 
     // The situation this is all about: the same weight label in two
     // competitions that have nothing to do with each other.
-    $this->men = AgeCategory::factory()->for($this->championship)->create(['name' => 'Senior Men', 'sort_order' => 0]);
-    $this->women = AgeCategory::factory()->for($this->championship)->create(['name' => 'Senior Women', 'sort_order' => 1]);
+    $this->men = AgeCategory::factory()->for($this->championship)->create(['gender' => 'M', 'age_group' => 'Senior', 'sort_order' => 0]);
+    $this->women = AgeCategory::factory()->for($this->championship)->create(['gender' => 'F', 'age_group' => 'Senior', 'sort_order' => 1]);
 
     $this->mens66 = WeightCategory::factory()->create([
         'age_category_id' => $this->men->id, 'label' => '-66', 'gender' => 'M',
@@ -127,56 +129,129 @@ describe('the running order says which competition', function () {
         Livewire::test(FightOrder::class, ['championship' => $this->championship])
             ->assertSee('Male -66')
             ->assertSee('Female -66')
-            ->assertSee('Senior Men')
-            ->assertSee('Senior Women');
+            ->assertSee('Men Senior')
+            ->assertSee('Women Senior');
     });
 
     /** Filtered in the query: the other competition is not in the payload. */
-    it('narrows to one competition without carrying the other', function () {
+    it('narrows to one division without carrying the other', function () {
         Livewire::test(FightOrder::class, ['championship' => $this->championship])
-            ->set('gender', 'F')
+            ->set('division', (string) $this->women->id)
             ->assertSee('Female -66')
             ->assertDontSee('Man 1')
-            ->set('gender', 'M')
+            ->set('division', (string) $this->men->id)
             ->assertSee('Male -66')
             ->assertDontSee('Woman 1');
     });
 
-    it('narrows by division too', function () {
+    /**
+     * The same control narrows to a whole competition. A championship can run
+     * "Men Junior" beside "Men Senior", and a table official working the men's
+     * mat wants both without reading past the women's.
+     */
+    it('narrows to a whole competition from the same control', function () {
         Livewire::test(FightOrder::class, ['championship' => $this->championship])
-            ->set('ageCategory', (string) $this->women->id)
+            ->set('division', DivisionFilter::WOMEN)
             ->assertSee('Woman 1')
-            ->assertDontSee('Man 1');
+            ->assertDontSee('Man 1')
+            ->set('division', DivisionFilter::MEN)
+            ->assertSee('Man 1')
+            ->assertDontSee('Woman 1');
+    });
+
+    /**
+     * The control offers the competitions and nothing finer. Every division
+     * belongs to one of them, so listing the divisions too would be listing
+     * the same split twice over.
+     */
+    it('offers the competitions and nothing finer', function () {
+        $html = Livewire::test(FightOrder::class, ['championship' => $this->championship])
+            ->assertSeeInOrder(['All divisions', 'Men', 'Women'])
+            ->html();
+
+        $options = substr_count(substr($html, 0, strpos($html, '</select>') ?: 0), '<option');
+
+        expect($options)->toBe(3);
+    });
+
+    /** The sheet a table official carries away is scoped the same way. */
+    it('prints one division to its own sheet', function () {
+        $report = new FightOrderReport(
+            $this->championship,
+            DivisionFilter::for($this->championship, (string) $this->women->id),
+        );
+        $names = array_column($report->rows(), 4);
+
+        expect($names)->not->toBeEmpty()
+            ->and(collect($names)->every(fn ($name) => ! str_starts_with($name, 'Man ')))->toBeTrue()
+            ->and($report->meta()['Division'])->toBe('Women Senior');
+    });
+
+    it('prints one competition to its own sheet', function () {
+        $report = new FightOrderReport(
+            $this->championship,
+            DivisionFilter::for($this->championship, DivisionFilter::MEN),
+        );
+        $names = array_column($report->rows(), 4);
+
+        expect($names)->not->toBeEmpty()
+            ->and(collect($names)->every(fn ($name) => ! str_starts_with($name, 'Woman ')))->toBeTrue()
+            ->and($report->meta()['Division'])->toBe('Men')
+            ->and($report->filename())->toEndWith('-men');
+    });
+
+    it('prints every division when none is chosen', function () {
+        $names = array_column((new FightOrderReport($this->championship))->rows(), 4);
+
+        expect(collect($names)->contains(fn ($n) => str_starts_with($n, 'Man ')))->toBeTrue()
+            ->and(collect($names)->contains(fn ($n) => str_starts_with($n, 'Woman ')))->toBeTrue();
+    });
+
+    /** An id belonging to another championship must not narrow this sheet. */
+    it('ignores a division from another championship', function () {
+        $other = AgeCategory::factory()->create(['gender' => 'M', 'age_group' => 'Senior']);
+
+        $body = $this->get(route('exports.fight-order', [
+            'championship' => $this->championship,
+            'format' => 'csv',
+            'division' => $other->id,
+        ]))->assertOk()->streamedContent();
+
+        expect($body)->toContain('Man 1')->toContain('Woman 1');
     });
 });
 
 describe('registration keeps them apart', function () {
-    it('refuses a woman entered into a men\'s class', function () {
-        Livewire::test(Registration::class, ['ageCategory' => $this->men])
+    /**
+     * The division is what refuses this now. It belongs to one competition, so
+     * the entry is wrong before anyone looks at which weight class was picked.
+     */
+    it('refuses a woman entered into a men\'s division', function () {
+        Livewire::test(Registration::class, ['championship' => $this->championship, 'competition' => 'M'])
             ->set('fullname', 'Mistaken Entry')
             ->set('noc_code', 'UZB')
             ->set('gender', 'F')
             ->set('weight_category_id', $this->mens66->id)
             ->call('save')
-            ->assertHasErrors('weight_category_id');
+            ->assertHasErrors('gender');
 
         expect(Athlete::where('fullname', 'Mistaken Entry')->exists())->toBeFalse();
     });
 
-    it('refuses a man entered into a women\'s class', function () {
-        Livewire::test(Registration::class, ['ageCategory' => $this->women])
+    it('refuses a man entered into a women\'s division', function () {
+        Livewire::test(Registration::class, ['championship' => $this->championship, 'competition' => 'F'])
             ->set('fullname', 'Also Mistaken')
             ->set('noc_code', 'UZB')
             ->set('gender', 'M')
             ->set('weight_category_id', $this->womens66->id)
             ->call('save')
-            ->assertHasErrors('weight_category_id');
+            ->assertHasErrors('gender');
 
         expect(Athlete::where('fullname', 'Also Mistaken')->exists())->toBeFalse();
     });
 
     it('accepts each of them into their own', function () {
-        Livewire::test(Registration::class, ['ageCategory' => $this->men])
+        Livewire::test(Registration::class, ['championship' => $this->championship, 'competition' => 'M'])
             ->set('fullname', 'Correct Man')
             ->set('noc_code', 'UZB')
             ->set('gender', 'M')
@@ -184,7 +259,7 @@ describe('registration keeps them apart', function () {
             ->call('save')
             ->assertHasNoErrors();
 
-        Livewire::test(Registration::class, ['ageCategory' => $this->women])
+        Livewire::test(Registration::class, ['championship' => $this->championship, 'competition' => 'F'])
             ->set('fullname', 'Correct Woman')
             ->set('noc_code', 'UZB')
             ->set('gender', 'F')
@@ -195,12 +270,16 @@ describe('registration keeps them apart', function () {
         expect(Athlete::whereIn('fullname', ['Correct Man', 'Correct Woman'])->count())->toBe(2);
     });
 
-    /** A class from another division cannot be reached by posting its id. */
+    /**
+     * A class from another division cannot be reached by posting its id — the
+     * gender here agrees with the division, so the class check is what has to
+     * catch it.
+     */
     it('refuses a class from another division', function () {
-        Livewire::test(Registration::class, ['ageCategory' => $this->men])
+        Livewire::test(Registration::class, ['championship' => $this->championship, 'competition' => 'M'])
             ->set('fullname', 'Forged')
             ->set('noc_code', 'UZB')
-            ->set('gender', 'F')
+            ->set('gender', 'M')
             ->set('weight_category_id', $this->womens66->id)
             ->call('save')
             ->assertHasErrors('weight_category_id');

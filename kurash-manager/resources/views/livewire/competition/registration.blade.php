@@ -1,11 +1,11 @@
 <x-page
-    :kicker="$ageCategory->name"
+    :kicker="__(App\Support\Gender::label($competition))"
     kicker-variant="info"
     :title="__('Registration')"
     :subtitle="__('Each athlete gets an IKA ID on registration, independent of any passport number.')"
     :breadcrumbs="[
         ['label' => __('Championships'), 'href' => route('championships.index')],
-        ['label' => $ageCategory->championship->title, 'href' => route('championships.show', $ageCategory->championship)],
+        ['label' => $championship->title, 'href' => route('championships.show', $championship)],
         ['label' => __('Registration')],
     ]"
 >
@@ -13,8 +13,10 @@
          to a sheet, cut on the cell borders. --}}
     <x-slot:aside>
         <span class="text-[12.5px] text-muted">{{ __('Accreditation') }}</span>
-        <x-ui.chip :href="route('exports.accreditation.category', $ageCategory)">{{ __('This category') }}</x-ui.chip>
-        <x-ui.chip :href="route('exports.accreditation', $ageCategory->championship)">{{ __('Whole championship') }}</x-ui.chip>
+        @foreach ($divisions as $division)
+            <x-ui.chip :href="route('exports.accreditation.category', $division)">{{ $division->name }}</x-ui.chip>
+        @endforeach
+        <x-ui.chip :href="route('exports.accreditation', $championship)">{{ __('Whole championship') }}</x-ui.chip>
     </x-slot:aside>
 
     <x-competition.flash />
@@ -39,13 +41,39 @@
                         </div>
                     @endforeach
 
-                    <div class="flex flex-col gap-[7px]">
-                        <label for="reg-gender" class="text-[12.5px] font-semibold text-muted">{{ __('Gender') }}</label>
-                        <flux:select id="reg-gender" wire:model="gender" required>
-                            <flux:select.option value="M">{{ __('Male') }}</flux:select.option>
-                            <flux:select.option value="F">{{ __('Female') }}</flux:select.option>
-                        </flux:select>
-                    </div>
+                    {{-- The competition is the page, so there is nothing here
+                         to get wrong. Only a competition declared open leaves
+                         the question to the form. --}}
+                    @if ($this->genderIsOpen())
+                        <div class="flex flex-col gap-[7px]">
+                            <label for="reg-gender" class="text-[12.5px] font-semibold text-muted">{{ __('Gender') }}</label>
+                            <flux:select id="reg-gender" wire:model="gender" required>
+                                <flux:select.option value="M">{{ __('Men') }}</flux:select.option>
+                                <flux:select.option value="F">{{ __('Women') }}</flux:select.option>
+                            </flux:select>
+                            @error('gender')
+                                <span class="text-[12.5px] text-danger">{{ $message }}</span>
+                            @enderror
+                        </div>
+                    @endif
+
+                    {{-- The age groups were settled when the championship was
+                         created, so this offers those and nothing else. One
+                         group needs no choice and the field stays out of the
+                         way. --}}
+                    @if ($divisions->count() > 1)
+                        <div class="flex flex-col gap-[7px]">
+                            <label for="reg-age-group" class="text-[12.5px] font-semibold text-muted">{{ __('Age group') }}</label>
+                            <flux:select id="reg-age-group" wire:model.live="age_category_id" required>
+                                @foreach ($divisions as $division)
+                                    <flux:select.option value="{{ $division->id }}">{{ $division->age_group }}</flux:select.option>
+                                @endforeach
+                            </flux:select>
+                            @error('age_category_id')
+                                <span class="text-[12.5px] text-danger">{{ $message }}</span>
+                            @enderror
+                        </div>
+                    @endif
 
                     <div class="flex flex-col gap-[7px]">
                         <label for="reg-weight" class="text-[12.5px] font-semibold text-muted">{{ __('Weight class') }}</label>
@@ -55,6 +83,9 @@
                                 <flux:select.option value="{{ $weightCategory->id }}">{{ $weightCategory->label }} {{ __('kg') }}</flux:select.option>
                             @endforeach
                         </flux:select>
+                        @error('weight_category_id')
+                            <span class="text-[12.5px] text-danger">{{ $message }}</span>
+                        @enderror
                     </div>
 
                     <div class="flex flex-col gap-[7px]">
@@ -80,6 +111,18 @@
                          native one cannot be styled to sit beside a button. --}}
                     @unless ($editingId)
                         <span class="mx-1 h-6 w-px bg-line"></span>
+
+                        {{-- A workbook lists one age group's delegation, and
+                             the federation's template has no column saying
+                             which. So it is said here, before the file is
+                             read. --}}
+                        @if ($divisions->count() > 1)
+                            <flux:select wire:model="importAgeCategoryId" size="sm" class="w-[150px]">
+                                @foreach ($divisions as $division)
+                                    <flux:select.option value="{{ $division->id }}">{{ $division->age_group }}</flux:select.option>
+                                @endforeach
+                            </flux:select>
+                        @endif
 
                         <label class="inline-flex cursor-pointer items-center gap-2 rounded-md border border-line bg-ground px-3.5 py-[9px]
                                       text-[13.5px] font-semibold text-ink transition-shadow hover:shadow-chip

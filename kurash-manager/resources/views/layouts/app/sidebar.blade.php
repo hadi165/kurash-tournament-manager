@@ -80,6 +80,34 @@
                         'active' => $boundCategory?->is($category) ?? false,
                     ])
                     ->all();
+
+                // The running order splits by competition, so the item carries
+                // that split rather than making it a control to find once the
+                // page is open. One competition needs no choice, and the item
+                // stays a plain link.
+                $competitions = $current ? $current->configuredGenders() : [];
+                $openCompetition = (string) request()->query('division', '');
+
+                $competitionItems = collect($competitions)
+                    ->map(fn (string $gender) => [
+                        'label' => __(\App\Support\Gender::label($gender)),
+                        'href' => route('fight-order.index', ['championship' => $current, 'division' => $gender]),
+                        'active' => request()->routeIs('fight-order.*') && $openCompetition === $gender,
+                    ])
+                    ->all();
+
+                // Registration works on a whole competition, so it splits the
+                // same way. Which one is open comes from the bound route
+                // parameter rather than from the path.
+                $boundCompetition = (string) (request()->route('competition') ?? '');
+
+                $registrationItems = collect($competitions)
+                    ->map(fn (string $gender) => [
+                        'label' => __(\App\Support\Gender::label($gender)),
+                        'href' => route('athletes.index', ['championship' => $current, 'competition' => $gender]),
+                        'active' => request()->routeIs('athletes.*') && $boundCompetition === $gender,
+                    ])
+                    ->all();
             @endphp
 
             @if (auth()->user()?->isReferee())
@@ -151,21 +179,26 @@
                         {{ __('Categories') }}
                     </x-nav-item>
 
-                    @if ($soleCategory)
-                        <x-nav-item :href="route('athletes.index', $soleCategory)" :active="request()->routeIs('athletes.*')">
+                    @if (count($competitions) > 1)
+                        <x-nav-group
+                            :label="__('Athlete Registration')"
+                            :items="$registrationItems"
+                            :active="request()->routeIs('athletes.*')"
+                        />
+                    @else
+                        <x-nav-item
+                            :href="route('athletes.index', ['championship' => $current, 'competition' => $competitions[0] ?? 'M'])"
+                            :active="request()->routeIs('athletes.*')"
+                        >
                             {{ __('Athlete Registration') }}
                         </x-nav-item>
+                    @endif
 
+                    @if ($soleCategory)
                         <x-nav-item :href="route('weighin.index', $soleCategory)" :active="request()->routeIs('weighin.*')">
                             {{ __('Weigh-in Form') }}
                         </x-nav-item>
                     @elseif ($ageCategories->isNotEmpty())
-                        <x-nav-group
-                            :label="__('Athlete Registration')"
-                            :items="$categoryItems('athletes.index')"
-                            :active="request()->routeIs('athletes.*')"
-                        />
-
                         <x-nav-group
                             :label="__('Weigh-in Form')"
                             :items="$categoryItems('weighin.index')"
@@ -181,9 +214,17 @@
                         {{ __('Bracket') }}
                     </x-nav-item>
 
-                    <x-nav-item :href="route('fight-order.index', $current)" :active="request()->routeIs('fight-order.*')">
-                        {{ __('Fight Order') }}
-                    </x-nav-item>
+                    @if (count($competitions) > 1)
+                        <x-nav-group
+                            :label="__('Fight Order')"
+                            :items="$competitionItems"
+                            :active="request()->routeIs('fight-order.*')"
+                        />
+                    @else
+                        <x-nav-item :href="route('fight-order.index', $current)" :active="request()->routeIs('fight-order.*')">
+                            {{ __('Fight Order') }}
+                        </x-nav-item>
+                    @endif
 
                     <x-nav-item :href="route('courts.index', $current)" :active="request()->routeIs('courts.*') || request()->routeIs('mats.*')">
                         {{ __('Mats') }}

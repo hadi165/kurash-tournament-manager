@@ -29,7 +29,7 @@ describe('access', function () {
             'championships.index' => route('championships.index'),
             'championships.show' => route('championships.show', $championship),
             'medals.index' => route('medals.index', $championship),
-            'athletes.index' => route('athletes.index', $ageCategory),
+            'athletes.index' => route('athletes.index', ['championship' => $championship, 'competition' => 'M']),
             'weighin.index' => route('weighin.index', $ageCategory),
             'bracket.show' => route('bracket.show', $weightCategory),
         };
@@ -50,7 +50,7 @@ describe('access', function () {
         $this->get(route('championships.index'))->assertOk();
         $this->get(route('championships.show', $championship))->assertOk();
         $this->get(route('medals.index', $championship))->assertOk();
-        $this->get(route('athletes.index', $ageCategory))->assertOk();
+        $this->get(route('athletes.index', ['championship' => $championship, 'competition' => 'M']))->assertOk();
         $this->get(route('weighin.index', $ageCategory))->assertOk();
     });
 
@@ -157,7 +157,7 @@ describe('categories', function () {
         $championship = Championship::factory()->create();
 
         Livewire::test(Categories::class, ['championship' => $championship])
-            ->set('ageCategoryName', 'Men Senior')
+            ->set('ageGroup', 'Senior')
             ->set('weightLabels', '-60, -66, -73, +90')
             ->set('gender', 'M')
             ->call('save')
@@ -173,7 +173,7 @@ describe('categories', function () {
         $championship = Championship::factory()->create();
 
         Livewire::test(Categories::class, ['championship' => $championship])
-            ->set('ageCategoryName', 'Men Senior')
+            ->set('ageGroup', 'Senior')
             ->set('weightLabels', '-66, +90')
             ->call('save');
 
@@ -189,7 +189,7 @@ describe('categories', function () {
         $championship = Championship::factory()->create();
 
         Livewire::test(Categories::class, ['championship' => $championship])
-            ->set('ageCategoryName', 'Men Senior')
+            ->set('ageGroup', 'Senior')
             ->set('weightLabels', ' , , ')
             ->call('save')
             ->assertHasErrors('weightLabels');
@@ -214,7 +214,10 @@ describe('registration', function () {
     it('registers an athlete and issues an IKA ID', function () {
         [$category] = categoryWithAthletes(0);
 
-        Livewire::test(Registration::class, ['ageCategory' => $category->ageCategory])
+        Livewire::test(Registration::class, [
+            'championship' => $category->ageCategory->championship,
+            'competition' => 'M',
+        ])
             ->set('fullname', 'Ghader Nasb')
             ->set('noc_code', 'afg')
             ->set('gender', 'M')
@@ -237,7 +240,10 @@ describe('registration', function () {
         [$mine] = categoryWithAthletes(0);
         [$theirs] = categoryWithAthletes(0, '-73');
 
-        Livewire::test(Registration::class, ['ageCategory' => $mine->ageCategory])
+        Livewire::test(Registration::class, [
+            'championship' => $mine->ageCategory->championship,
+            'competition' => 'M',
+        ])
             ->set('fullname', 'Intruder')
             ->set('noc_code', 'UZB')
             ->set('weight_category_id', $theirs->id)
@@ -258,7 +264,10 @@ describe('registration', function () {
             'weight_category_id' => $from->id,
         ]);
 
-        Livewire::test(Registration::class, ['ageCategory' => $ageCategory])
+        Livewire::test(Registration::class, [
+            'championship' => $ageCategory->championship,
+            'competition' => 'M',
+        ])
             ->call('edit', $athlete->id)
             ->set('weight_category_id', $to->id)
             ->call('save');
@@ -385,7 +394,10 @@ describe('bracket screen', function () {
             $ageCategory = $category->ageCategory;
             $athlete = $category->athletes()->firstOrFail();
 
-            Livewire::test(Registration::class, ['ageCategory' => $ageCategory])
+            Livewire::test(Registration::class, [
+                'championship' => $ageCategory->championship,
+                'competition' => 'M',
+            ])
                 ->call('delete', $athlete->id);
 
             expect(Athlete::find($athlete->id))->toBeNull();

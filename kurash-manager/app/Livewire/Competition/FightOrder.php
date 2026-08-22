@@ -6,6 +6,7 @@ use App\Jobs\PushBoutToScoreboard;
 use App\Models\Bout;
 use App\Models\Championship;
 use App\Services\FightOrderScheduler;
+use App\Support\DivisionFilter;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Livewire\Attributes\Url;
@@ -19,12 +20,14 @@ class FightOrder extends Component
 
     public bool $hideCompleted = false;
 
-    /** Which competition the running order is being read for. */
+    /**
+     * What the running order is narrowed to: a whole competition ('M' or 'F')
+     * or a single division by id. One control, because the divisions are named
+     * for their competition and a second men/women select would ask the same
+     * question twice.
+     */
     #[Url]
-    public string $gender = '';
-
-    #[Url]
-    public string $ageCategory = '';
+    public string $division = '';
 
     public function mount(Championship $championship): void
     {
@@ -99,18 +102,12 @@ class FightOrder extends Component
     public function render(): View
     {
         $scheduler = app(FightOrderScheduler::class);
+        $filter = DivisionFilter::for($this->championship, $this->division);
 
         $bouts = $this->championship->bouts()
             ->whereNotNull('fight_number')
             ->when($this->hideCompleted, fn ($q) => $q->where('status', '!=', Bout::STATUS_COMPLETED))
-            // Filtered in the query, not in the row: a running order narrowed
-            // to the women's classes must not carry the men's bouts in the
-            // payload with the rows merely hidden.
-            ->when($this->gender !== '', fn ($q) => $q->whereHas(
-                'weightCategory',
-                fn ($category) => $category->where('gender', $this->gender)
-            ))
-            ->when($this->ageCategory !== '', fn ($q) => $q->where('age_category_id', $this->ageCategory))
+            ->tap(fn ($q) => $filter->apply($q))
             ->with(['athleteA', 'athleteB', 'winner', 'weightCategory.ageCategory', 'court'])
             ->orderBy('fight_number')
             ->get();
@@ -127,7 +124,9 @@ class FightOrder extends Component
             'courts' => $this->championship->courts()->where('is_active', true)->orderBy('number')->get(),
             'violations' => $scheduler->restViolations($this->championship, $this->minimumRest),
             'unscheduled' => $this->championship->bouts()->whereNull('fight_number')->where('is_bye', false)->count(),
-            'ageCategories' => $this->championship->ageCategories()->orderBy('sort_order')->get(),
+            // The competitions this championship declared, not a fixed pair:
+            // a women-only championship has no men's entry to offer.
+            'genders' => $this->championship->configuredGenders(),
         ]);
     }
 }

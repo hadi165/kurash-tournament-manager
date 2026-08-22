@@ -19,7 +19,7 @@ beforeEach(function () {
     $this->admin = User::factory()->create(['role' => User::ROLE_ADMIN]);
     $this->actingAs($this->admin);
 
-    $this->division = AgeCategory::factory()->create(['name' => 'Men Senior']);
+    $this->division = AgeCategory::factory()->create(['gender' => 'M', 'age_group' => 'Senior']);
 
     // A division built the way a federation writes one, so the class below is
     // a real neighbour rather than a fixture convenience.

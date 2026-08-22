@@ -143,9 +143,21 @@
                 <x-ui.card :title="$editingId ? __('Edit age category') : __('New age category')">
                     <form wire:submit="save">
                         <div class="grid items-start gap-[18px] md:grid-cols-[1fr_2fr_auto_auto]">
+                            {{-- Chosen, not typed. A division is one of the
+                                 championship's competitions paired with one of
+                                 its age groups, and its name follows from the
+                                 pair rather than being entered beside it. --}}
                             <div class="flex flex-col gap-[7px]">
-                                <label for="cat-name" class="text-[12.5px] font-semibold text-muted">{{ __('Name') }}</label>
-                                <flux:input id="cat-name" wire:model="ageCategoryName" placeholder="{{ __('Men Senior') }}" required />
+                                <label for="cat-age-group" class="text-[12.5px] font-semibold text-muted">{{ __('Age group') }}</label>
+                                <flux:select id="cat-age-group" wire:model="ageGroup" required>
+                                    @foreach ($ageGroups as $group)
+                                        <flux:select.option value="{{ $group }}" :selected="$group === $ageGroup">{{ $group }}</flux:select.option>
+                                    @endforeach
+                                </flux:select>
+                                <p class="text-xs text-muted">
+                                    {{ __('Set on the championship.') }}
+                                    <a href="{{ route('championships.index') }}" class="underline" wire:navigate>{{ __('Change') }}</a>
+                                </p>
                             </div>
 
                             <div class="flex flex-col gap-[7px]">
@@ -168,23 +180,31 @@
                             </div>
 
                             <div class="flex flex-col gap-[7px]">
-                                <span class="text-[12.5px] font-semibold text-muted">{{ __('Gender') }}</span>
+                                <span class="text-[12.5px] font-semibold text-muted">{{ __('Competition') }}</span>
 
-                                {{-- A segmented control over the same wire:model
-                                     the select used, so the component is
-                                     untouched — only the control changed. --}}
+                                {{-- Only the competitions this championship
+                                     declared. If it runs women only, there is
+                                     no men's control here to press. --}}
                                 <div class="flex gap-1 rounded-full bg-ground p-1">
-                                    @foreach ([['M', __('Male')], ['F', __('Female')], ['X', __('Mixed')]] as [$value, $label])
+                                    @foreach ($genders as $value)
                                         <label class="cursor-pointer rounded-full px-3.5 py-[7px] text-[13px] font-semibold text-muted transition-all
                                                       has-[:checked]:bg-surface has-[:checked]:text-ink has-[:checked]:shadow-chip
                                                       has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-brand">
                                             <input type="radio" wire:model="gender" value="{{ $value }}" class="sr-only">
-                                            {{ $label }}
+                                            {{ __(App\Support\Gender::label($value)) }}
                                         </label>
                                     @endforeach
                                 </div>
                             </div>
                         </div>
+
+                        @error('ageGroup')
+                            <p class="mt-3 text-[13px] text-danger">{{ $message }}</p>
+                        @enderror
+
+                        @error('gender')
+                            <p class="mt-3 text-[13px] text-danger">{{ $message }}</p>
+                        @enderror
 
                         @error('weightLabels')
                             <p class="mt-3 text-[13px] text-danger">{{ $message }}</p>
@@ -250,7 +270,7 @@
                 </div>
 
                 <div class="flex flex-wrap items-center gap-2">
-                    <flux:button size="sm" :href="route('athletes.index', $ageCategory)" wire:navigate>
+                    <flux:button size="sm" :href="route('athletes.index', ['championship' => $championship, 'competition' => $ageCategory->gender])" wire:navigate>
                         {{ __('Registration') }}
                     </flux:button>
                     <flux:button size="sm" :href="route('weighin.index', $ageCategory)" wire:navigate>
@@ -344,7 +364,7 @@
     @empty
         <x-ui.card class="py-10 text-center">
             <p class="m-0 text-[13.5px] text-muted">
-                {{ __('No age categories yet. Add one — for example "Men Senior" with -60, -66, -73, -81, -90, +90.') }}
+                {{ __('No divisions yet. Add one by pairing a competition with an age group, then give it its weight classes — for example -60, -66, -73, -81, -90, +90.') }}
             </p>
         </x-ui.card>
     @endforelse

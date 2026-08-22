@@ -8,8 +8,11 @@
     ]"
 >
     <x-slot:aside>
-        <x-ui.chip :href="route('exports.fight-order', ['championship' => $championship, 'format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
-        <x-ui.chip :href="route('exports.fight-order', ['championship' => $championship, 'format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
+        {{-- The sheet leaves the room with whoever printed it, so it is scoped
+             to the division on screen rather than silently widening to all. --}}
+        @php($exportScope = ['championship' => $championship] + ($division === '' ? [] : ['division' => $division]))
+        <x-ui.chip :href="route('exports.fight-order', $exportScope + ['format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
+        <x-ui.chip :href="route('exports.fight-order', $exportScope + ['format' => 'csv'])">{{ __('Excel') }}</x-ui.chip>
         <x-ui.chip onclick="window.print()">{{ __('Print') }}</x-ui.chip>
     </x-slot:aside>
 
@@ -37,22 +40,17 @@
                 <div class="flex flex-wrap items-end gap-3">
                     <div class="flex flex-col gap-[7px]">
                         <label for="fo-division" class="text-[12.5px] font-semibold text-muted">{{ __('Division') }}</label>
-                        <flux:select id="fo-division" wire:model.live="ageCategory" size="sm" class="w-[190px]">
-                            <flux:select.option value="" :selected="$ageCategory === ''">{{ __('All divisions') }}</flux:select.option>
-                            @foreach ($ageCategories as $division)
-                                <flux:select.option value="{{ $division->id }}" :selected="(string) $division->id === $ageCategory">
-                                    {{ $division->name }}
+                        {{-- The competitions the championship runs, and
+                             nothing finer. Every division belongs to one of
+                             them, so listing the divisions as well would be
+                             listing the same split twice over. --}}
+                        <flux:select id="fo-division" wire:model.live="division" size="sm" class="w-[190px]">
+                            <flux:select.option value="" :selected="$division === ''">{{ __('All divisions') }}</flux:select.option>
+                            @foreach ($genders as $competition)
+                                <flux:select.option value="{{ $competition }}" :selected="$division === $competition">
+                                    {{ __(\App\Support\Gender::label($competition)) }}
                                 </flux:select.option>
                             @endforeach
-                        </flux:select>
-                    </div>
-
-                    <div class="flex flex-col gap-[7px]">
-                        <label for="fo-gender" class="text-[12.5px] font-semibold text-muted">{{ __('Competition') }}</label>
-                        <flux:select id="fo-gender" wire:model.live="gender" size="sm" class="w-[150px]">
-                            <flux:select.option value="" :selected="$gender === ''">{{ __('Men and women') }}</flux:select.option>
-                            <flux:select.option value="M" :selected="$gender === 'M'">{{ __('Men') }}</flux:select.option>
-                            <flux:select.option value="F" :selected="$gender === 'F'">{{ __('Women') }}</flux:select.option>
                         </flux:select>
                     </div>
 

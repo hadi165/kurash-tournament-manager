@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\WeightCategory;
+use App\Support\Gender;
 use App\Support\Import\AthleteImportPreview;
 use App\Support\Import\AthleteImportRow;
 use App\Support\Noc;
@@ -103,7 +104,7 @@ class AthleteImporter
         $number = 2;   // row 1 was the headings
 
         foreach ($grid as $cells) {
-            $rows[] = $this->readRow($cells, $map, $number++, $classes, $existing, $seen);
+            $rows[] = $this->readRow($cells, $map, $number++, $ageCategory, $classes, $existing, $seen);
         }
 
         return new AthleteImportPreview(rows: $rows, unmappedHeadings: $unmapped);
@@ -158,6 +159,7 @@ class AthleteImporter
         array $cells,
         array $map,
         int $number,
+        AgeCategory $ageCategory,
         Collection $classes,
         array $existing,
         array &$seen,
@@ -186,6 +188,14 @@ class AthleteImporter
 
         if ($gender === null) {
             $row->fail(__('Gender must be M or F, not ":value".', ['value' => $raw['gender']]));
+        } elseif ($ageCategory->gender !== Gender::OPEN && $ageCategory->gender !== $gender) {
+            // A workbook is where a whole delegation arrives at once, so a
+            // file loaded into the wrong division is caught row by row rather
+            // than registering a hall full of people in the wrong competition.
+            $row->fail(__(':division is a :gender division.', [
+                'division' => $ageCategory->name,
+                'gender' => strtolower(Gender::label($ageCategory->gender)),
+            ]));
         }
 
         if ($noc === null) {

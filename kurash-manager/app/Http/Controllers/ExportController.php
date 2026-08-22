@@ -24,6 +24,7 @@ use App\Models\Athlete;
 use App\Models\Championship;
 use App\Models\WeightCategory;
 use App\Services\MedalTable;
+use App\Support\DivisionFilter;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -137,11 +138,10 @@ class ExportController extends Controller
 
     public function fightOrder(Championship $championship, string $format, Request $request): Response|StreamedResponse
     {
-        // Validated against the two the competition actually has: anything else
-        // prints the whole order rather than an empty sheet.
-        $gender = in_array($request->query('gender'), ['M', 'F'], true) ? $request->query('gender') : null;
+        $requested = $request->query('division');
+        $division = DivisionFilter::for($championship, is_scalar($requested) ? (string) $requested : null);
 
-        return $this->render(new FightOrderReport($championship, $gender), $format, orientation: 'landscape');
+        return $this->render(new FightOrderReport($championship, $division), $format, orientation: 'landscape');
     }
 
     public function entriesByNoc(Championship $championship, string $format): Response|StreamedResponse
