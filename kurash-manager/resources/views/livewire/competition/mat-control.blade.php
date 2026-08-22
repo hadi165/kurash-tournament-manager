@@ -81,16 +81,7 @@
                  this one wants a different one. --}}
             @can('score-bout', $court)
                 @if (! empty($finishSounds))
-                    <div class="flex items-center gap-1.5 px-2" x-data="{
-                        preview: null,
-                        play(src) {
-                            {{-- Stopped before the next one starts, or holding
-                                 the button lays them over each other. --}}
-                            if (this.preview) { this.preview.pause() }
-                            this.preview = new Audio(src)
-                            this.preview.play().catch(() => {})
-                        },
-                    }">
+                    <div class="flex items-center gap-1.5 px-2" x-data="soundPreview">
                         <flux:checkbox wire:model.live="finishSoundEnabled" :label="__('End sound')" />
 
                         <flux:select id="mat-sound" wire:model.live="finishSound" size="sm" class="w-[110px]"
