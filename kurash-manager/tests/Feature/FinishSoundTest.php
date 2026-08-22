@@ -55,6 +55,24 @@ it('ships every sound rather than fetching it', function () {
     expect(array_keys($choices))->toContain(config('scoreboard.finish_sound'));
 });
 
+/**
+ * The board renders its own shell rather than the admin one, so it has to ask
+ * for the script that defines the bell. It did not, and the board rendered
+ * perfectly and stayed silent — the one failure nobody sees coming, which is
+ * why it is asserted on the page rather than only in the component.
+ */
+it('loads the behaviour the board needs on the standalone board', function () {
+    [$court] = boutOnMat();
+
+    $manifest = json_decode((string) file_get_contents(public_path('build/manifest.json')), true);
+    $script = $manifest['resources/js/app.js']['file'];
+
+    $this->get(route('display.scoreboard', $court))
+        ->assertOk()
+        ->assertSee($script, false)
+        ->assertSee('finishBell');
+});
+
 describe('choosing a mat\'s buzzer', function () {
     /**
      * Held per mat, because two mats running side by side want to be told

@@ -29,6 +29,13 @@
          and doing nothing when pressed. --}}
     @vite('resources/css/ceremony.css')
 
+    {{-- The board's own behaviour, including the buzzer a contest ends on.
+         This shell carries Livewire but is not the admin shell, so it has to
+         ask for this itself — without it the board renders perfectly and
+         stays silent, which is the one failure nobody sees coming. --}}
+    @vite('resources/js/app.js')
+
+
     @unless ($pinnedTheme)
         {{-- Applied before first paint, so a light-themed board does not flash
              black on every poll-driven reload. --}}
