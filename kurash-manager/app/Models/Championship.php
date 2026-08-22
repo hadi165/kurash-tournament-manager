@@ -69,6 +69,16 @@ class Championship extends Model
         return $genders === [] ? Gender::DEFAULT : $genders;
     }
 
+    /**
+     * The age groups a championship can be run for, in the order a federation
+     * lists them. Offered as the checkboxes on the championship form; a
+     * championship carrying something else keeps it, so nothing an organizer
+     * already entered is quietly dropped.
+     *
+     * @var list<string>
+     */
+    public const AGE_GROUPS = ['Senior', 'Junior', 'Cadet', 'Veteran'];
+
     /** @return list<string> */
     public function configuredAgeGroups(): array
     {
@@ -83,6 +93,22 @@ class Championship extends Model
         }
 
         return $groups === [] ? ['Senior'] : $groups;
+    }
+
+    /**
+     * Where a division sits in reading order: by competition first, then by
+     * age group, both in the order this championship declared them.
+     *
+     * Derived rather than typed, so the first age group offered as a default
+     * anywhere is the first one the organizer ticked.
+     */
+    public function divisionSortOrder(string $gender, string $ageGroup): int
+    {
+        $competition = array_search($gender, $this->configuredGenders(), true);
+        $group = array_search($ageGroup, $this->configuredAgeGroups(), true);
+
+        return ($competition === false ? 99 : $competition) * 100
+            + ($group === false ? 99 : $group);
     }
 
     /** Every division this championship is allowed to have, in reading order. */

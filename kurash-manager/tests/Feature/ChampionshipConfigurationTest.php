@@ -25,6 +25,20 @@ beforeEach(function () {
     $this->actingAs($this->admin);
 });
 
+/**
+ * A division built the way the categories screen builds one, so its place in
+ * reading order comes from the championship rather than from the order rows
+ * happened to be inserted.
+ */
+function divisionFor(Championship $championship, string $gender, string $ageGroup): AgeCategory
+{
+    return AgeCategory::factory()->for($championship)->create([
+        'gender' => $gender,
+        'age_group' => $ageGroup,
+        'sort_order' => $championship->divisionSortOrder($gender, $ageGroup),
+    ]);
+}
+
 /** A championship running one competition and one age group. */
 function seniorMenOnly(): Championship
 {
@@ -40,7 +54,7 @@ describe('creating a championship', function () {
         Livewire::test(Championships::class)
             ->set('title', 'Asian Kurash 2026')
             ->set('genders', ['M', 'F'])
-            ->set('ageGroups', 'Senior, Junior, Cadet')
+            ->set('ageGroups', ['Senior', 'Junior', 'Cadet'])
             ->call('save')
             ->assertHasNoErrors();
 
@@ -63,19 +77,45 @@ describe('creating a championship', function () {
     it('refuses one that names no age group', function () {
         Livewire::test(Championships::class)
             ->set('title', 'Ageless Open')
-            ->set('ageGroups', ' , , ')
+            ->set('ageGroups', [])
             ->call('save')
             ->assertHasErrors('ageGroups');
     });
 
-    it('keeps the list tidy rather than storing what was typed', function () {
+    /**
+     * Stored in the federation's order, not in the order the boxes happened to
+     * be ticked — the first one is what every screen offers as its default.
+     */
+    it('keeps the groups in reading order however they were ticked', function () {
         Livewire::test(Championships::class)
             ->set('title', 'Tidy Open')
-            ->set('ageGroups', ' Senior ,, Junior , Senior ')
+            ->set('ageGroups', ['Junior', 'Senior'])
             ->call('save');
 
         expect(Championship::firstWhere('title', 'Tidy Open')->configuredAgeGroups())
             ->toBe(['Senior', 'Junior']);
+    });
+
+    it('offers senior and junior to tick, and takes both', function () {
+        Livewire::test(Championships::class)
+            ->assertSee('Senior')
+            ->assertSee('Junior')
+            ->set('title', 'Both Open')
+            ->set('ageGroups', ['Senior', 'Junior'])
+            ->call('save')
+            ->assertHasNoErrors();
+
+        expect(Championship::firstWhere('title', 'Both Open')->configuredAgeGroups())
+            ->toBe(['Senior', 'Junior']);
+    });
+
+    /** A group entered before the boxes existed is still on the form. */
+    it('keeps a group that is not one of the standard ones', function () {
+        $championship = Championship::factory()->create(['age_groups' => ['Senior', 'Masters 45']]);
+
+        Livewire::test(Championships::class)
+            ->call('edit', $championship->id)
+            ->assertSee('Masters 45');
     });
 
     /**
@@ -92,7 +132,7 @@ describe('creating a championship', function () {
 
         Livewire::test(Championships::class)
             ->call('edit', $championship->id)
-            ->set('ageGroups', 'Senior')
+            ->set('ageGroups', ['Senior'])
             ->call('save')
             ->assertHasErrors('ageGroups');
 
@@ -258,10 +298,8 @@ describe('one competition, several age groups', function () {
             'age_groups' => ['Senior', 'Junior'],
         ]);
 
-        $this->senior = AgeCategory::factory()->for($this->championship)
-            ->create(['gender' => 'M', 'age_group' => 'Senior', 'sort_order' => 0]);
-        $this->junior = AgeCategory::factory()->for($this->championship)
-            ->create(['gender' => 'M', 'age_group' => 'Junior', 'sort_order' => 1]);
+        $this->senior = divisionFor($this->championship, 'M', 'Senior');
+        $this->junior = divisionFor($this->championship, 'M', 'Junior');
 
         $this->seniorClass = WeightCategory::factory()->create([
             'age_category_id' => $this->senior->id, 'label' => '-66', 'gender' => 'M',
@@ -269,6 +307,28 @@ describe('one competition, several age groups', function () {
         $this->juniorClass = WeightCategory::factory()->create([
             'age_category_id' => $this->junior->id, 'label' => '-60', 'gender' => 'M',
         ]);
+    });
+
+    /**
+     * The default follows the championship, not the database's idea of order:
+     * if the organizer ticked Senior first, the form opens on Senior.
+     */
+    it('opens on the championship\'s first age group', function () {
+        Livewire::test(Registration::class, ['championship' => $this->championship, 'competition' => 'M'])
+            ->assertSet('age_category_id', $this->senior->id);
+    });
+
+    it('opens on junior when that is the group the championship leads with', function () {
+        $championship = Championship::factory()->create([
+            'genders' => ['M'],
+            'age_groups' => ['Junior', 'Senior'],
+        ]);
+
+        $junior = divisionFor($championship, 'M', 'Junior');
+        divisionFor($championship, 'M', 'Senior');
+
+        Livewire::test(Registration::class, ['championship' => $championship, 'competition' => 'M'])
+            ->assertSet('age_category_id', $junior->id);
     });
 
     it('registers into whichever age group was chosen', function () {

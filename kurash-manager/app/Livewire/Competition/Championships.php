@@ -31,7 +31,7 @@ class Championships extends Component
      | list of age groups anywhere else for one to come from.
      */
 
-    /** @var list<string> */
+    /** @var array<int, mixed> */
     #[Validate([
         'genders' => 'required|array|min:1',
         'genders.*' => 'required|string|in:M,F,X',
@@ -42,22 +42,59 @@ class Championships extends Component
     public array $genders = [Gender::MEN, Gender::WOMEN];
 
     /**
-     * Typed as a comma-separated list, the way weight classes already are on
-     * the categories screen — "Senior, Junior, Cadet".
+     * Ticked, not typed. The groups are a fixed vocabulary a federation
+     * already agrees on, and a free text box invites "Seniors" and "senior"
+     * to become two different competitions.
+     *
+     * Typed loosely because it is a public Livewire property: what arrives is
+     * whatever the request carried, not what the form was rendered with.
+     *
+     * @var array<int, mixed>
      */
-    #[Validate('required|string|max:255')]
-    public string $ageGroups = 'Senior';
+    #[Validate([
+        'ageGroups' => 'required|array|min:1',
+        'ageGroups.*' => 'required|string|max:100',
+    ], message: [
+        'ageGroups.required' => 'Choose at least one age group.',
+        'ageGroups.min' => 'Choose at least one age group.',
+    ])]
+    public array $ageGroups = ['Senior'];
 
     public ?int $editingId = null;
 
-    /** @return list<string> */
+    /**
+     * The boxes to offer: the standard groups, plus anything this
+     * championship already carries that is not among them.
+     *
+     * @return list<string>
+     */
+    public function ageGroupChoices(): array
+    {
+        $existing = $this->editingId === null
+            ? []
+            : (Championship::find($this->editingId)?->configuredAgeGroups() ?? []);
+
+        return array_values(array_unique([...Championship::AGE_GROUPS, ...$existing]));
+    }
+
+    /**
+     * Kept in the federation's own order rather than in the order the boxes
+     * happened to be ticked, so "Senior" stays the first one everywhere it is
+     * offered as a default.
+     *
+     * @return list<string>
+     */
     private function parsedAgeGroups(): array
     {
+        $chosen = collect($this->ageGroups)
+            ->filter(fn ($group) => is_string($group) && trim($group) !== '')
+            ->map(fn (string $group) => trim($group))
+            ->unique();
+
+        $ordered = collect($this->ageGroupChoices())->filter(fn (string $g) => $chosen->contains($g));
+
         return array_values(
-            collect(explode(',', $this->ageGroups))
-                ->map(fn (string $group) => trim($group))
-                ->filter()
-                ->unique()
+            $ordered->concat($chosen->reject(fn (string $g) => $ordered->contains($g)))
                 ->values()
                 ->all()
         );
@@ -74,7 +111,7 @@ class Championships extends Component
         $this->location = $championship->location ?? '';
         $this->starts_on = $championship->starts_on?->toDateString();
         $this->genders = $championship->configuredGenders();
-        $this->ageGroups = implode(', ', $championship->configuredAgeGroups());
+        $this->ageGroups = $championship->configuredAgeGroups();
     }
 
     public function cancelEdit(): void

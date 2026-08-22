@@ -58,10 +58,17 @@
                             </div>
 
                             <div class="flex flex-col gap-[7px]">
-                                <label for="champ-age-groups" class="text-[12.5px] font-semibold text-muted">{{ __('Age groups') }}</label>
-                                <flux:input id="champ-age-groups" wire:model="ageGroups" placeholder="{{ __('Senior, Junior, Cadet') }}" required />
+                                <span class="text-[12.5px] font-semibold text-muted">{{ __('Age groups') }}</span>
+                                <div class="flex flex-wrap items-center gap-4 pt-1.5">
+                                    @foreach ($this->ageGroupChoices() as $group)
+                                        <flux:checkbox wire:model="ageGroups" value="{{ $group }}" :label="__($group)" />
+                                    @endforeach
+                                </div>
+                                @error('ageGroups')
+                                    <span class="text-[12.5px] text-danger">{{ $message }}</span>
+                                @enderror
                                 <span class="text-[12.5px] text-muted">
-                                    {{ __('Comma separated. Every division is one competition paired with one of these.') }}
+                                    {{ __('Every division is one competition paired with one of these.') }}
                                 </span>
                             </div>
                         </div>

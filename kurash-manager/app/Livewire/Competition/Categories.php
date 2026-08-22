@@ -131,6 +131,9 @@ class Categories extends Component
         $ageCategory->fill([
             'gender' => $this->gender,
             'age_group' => $this->ageGroup,
+            // Follows the championship's own order, so the first age group an
+            // organizer ticked is the one every screen opens on.
+            'sort_order' => $this->championship->divisionSortOrder($this->gender, $this->ageGroup),
             // Rounded to the second on the way in, so a clock never counts down
             // from a fraction it cannot show.
             'bout_seconds' => $this->boutMinutes === ''
