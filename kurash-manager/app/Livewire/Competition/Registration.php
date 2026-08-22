@@ -8,6 +8,7 @@ use App\Models\Championship;
 use App\Services\AthleteImporter;
 use App\Support\Gender;
 use App\Support\Import\AthleteImportPreview;
+use App\Support\Noc;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Gate;
@@ -41,6 +42,10 @@ class Registration extends Component
     #[Validate('required|string|max:8')]
     public string $noc_code = '';
 
+    /**
+     * The country beside the code. Filled by choosing a suggestion, but left
+     * writable: a delegation occasionally enters under a name of its own.
+     */
     #[Validate('nullable|string|max:255')]
     public string $noc_name = '';
 
@@ -166,6 +171,17 @@ class Registration extends Component
     {
         Gate::authorize('manage-competition');
         $this->validate();
+
+        // Checked against the list the suggestions come from, so what is
+        // stored is a code the rest of the system can find a flag and a
+        // country for. Case-insensitively: "uzb" is not a different nation.
+        if (! Noc::exists($this->noc_code)) {
+            $this->addError('noc_code', __('":code" is not a recognised NOC code.', [
+                'code' => strtoupper(trim($this->noc_code)),
+            ]));
+
+            return;
+        }
 
         // A competition is the page you are on, so an athlete entered here is
         // entered into it. Anything else arrived from outside the form.
@@ -426,6 +442,9 @@ class Registration extends Component
         return view('livewire.competition.registration', [
             'athletes' => $athletes,
             'divisions' => $this->divisions(),
+            // Two hundred entries, handed over once. A round trip per
+            // keystroke would be slower than the answer.
+            'nations' => Noc::all(),
             'weightCategories' => $this->chosenDivision()?->weightCategories()->get() ?? collect(),
         ]);
     }

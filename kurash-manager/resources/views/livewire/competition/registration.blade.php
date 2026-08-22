@@ -25,21 +25,81 @@
         <x-ui.card :title="$editingId ? __('Edit athlete') : __('Register athlete')">
             <form wire:submit="save">
                 <div class="grid gap-[18px] md:grid-cols-3">
-                    @foreach ([
-                        ['id' => 'reg-name', 'model' => 'fullname', 'label' => __('Full name'), 'placeholder' => null, 'required' => true],
-                        ['id' => 'reg-noc', 'model' => 'noc_code', 'label' => __('NOC code'), 'placeholder' => 'UZB', 'required' => true],
-                        ['id' => 'reg-country', 'model' => 'noc_name', 'label' => __('Country'), 'placeholder' => __('Uzbekistan'), 'required' => false],
-                    ] as $field)
-                        <div class="flex flex-col gap-[7px]">
-                            <label for="{{ $field['id'] }}" class="text-[12.5px] font-semibold text-muted">{{ $field['label'] }}</label>
-                            <flux:input
-                                id="{{ $field['id'] }}"
-                                wire:model="{{ $field['model'] }}"
-                                :placeholder="$field['placeholder']"
-                                :required="$field['required']"
-                            />
-                        </div>
-                    @endforeach
+                    <div class="flex flex-col gap-[7px]">
+                        <label for="reg-name" class="text-[12.5px] font-semibold text-muted">{{ __('Full name') }}</label>
+                        <flux:input id="reg-name" wire:model="fullname" required />
+                        @error('fullname')
+                            <span class="text-[12.5px] text-danger">{{ $message }}</span>
+                        @enderror
+                    </div>
+
+                    {{-- Two hundred codes, and getting one wrong puts another
+                         country's flag beside an athlete's name on a screen in
+                         front of their delegation. So the field suggests as it
+                         is typed rather than waiting to complain at the end. --}}
+                    <div
+                        class="relative flex flex-col gap-[7px]"
+                        x-data="nocSuggest({ nations: @js($nations), country: 'reg-country' })"
+                        x-on:focusout="leave($event)"
+                    >
+                        <label for="reg-noc" class="text-[12.5px] font-semibold text-muted">{{ __('NOC code') }}</label>
+
+                        <flux:input
+                            id="reg-noc"
+                            wire:model="noc_code"
+                            placeholder="UZB"
+                            required
+                            autocomplete="off"
+                            maxlength="3"
+                            x-ref="code"
+                            role="combobox"
+                            aria-autocomplete="list"
+                            aria-controls="reg-noc-list"
+                            x-bind:aria-expanded="open ? 'true' : 'false'"
+                            x-bind:aria-activedescendant="active >= 0 ? 'reg-noc-option-' + active : null"
+                            x-on:input="search($event.target.value)"
+                            x-on:keydown.arrow-down.prevent="open ? move(1) : search($refs.code.value)"
+                            x-on:keydown.arrow-up.prevent="move(-1)"
+                            x-on:keydown.enter="if (open) { $event.preventDefault(); choose(); }"
+                            x-on:keydown.escape.stop="close()"
+                        />
+
+                        <ul
+                            id="reg-noc-list"
+                            role="listbox"
+                            x-show="open"
+                            x-cloak
+                            class="absolute inset-x-0 top-full z-20 mt-1 max-h-64 list-none overflow-y-auto rounded-md
+                                   border border-line bg-surface p-1 shadow-chip"
+                        >
+                            <template x-for="(match, index) in matches" :key="match[0]">
+                                <li
+                                    role="option"
+                                    x-bind:id="'reg-noc-option-' + index"
+                                    x-bind:aria-selected="index === active ? 'true' : 'false'"
+                                    x-on:mouseenter="active = index"
+                                    {{-- mousedown, not click: the field would
+                                         lose focus first and take the list
+                                         with it before a click ever landed. --}}
+                                    x-on:mousedown.prevent="choose(index)"
+                                    class="cursor-pointer rounded px-3 py-1.5 text-[13.5px]"
+                                    x-bind:class="index === active ? 'bg-brand-soft text-brand-deep' : 'text-ink'"
+                                >
+                                    <span class="font-mono font-semibold" x-text="match[0]"></span>
+                                    <span class="text-muted" x-text="' — ' + match[1]"></span>
+                                </li>
+                            </template>
+                        </ul>
+
+                        @error('noc_code')
+                            <span class="text-[12.5px] text-danger">{{ $message }}</span>
+                        @enderror
+                    </div>
+
+                    <div class="flex flex-col gap-[7px]">
+                        <label for="reg-country" class="text-[12.5px] font-semibold text-muted">{{ __('Country') }}</label>
+                        <flux:input id="reg-country" wire:model="noc_name" :placeholder="__('Uzbekistan')" />
+                    </div>
 
                     {{-- The competition is the page, so there is nothing here
                          to get wrong. Only a competition declared open leaves
