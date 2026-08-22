@@ -96,3 +96,91 @@ document.addEventListener('alpine:init', () => {
         },
     }))
 })
+
+/**
+ * The buzzer a contest ends on.
+ *
+ * Sounded on the transition into a decided contest, not on the state itself: a
+ * board opened while a result is already showing has not just seen a contest
+ * end, and blaring at whoever opened it would be wrong. So the bout on screen
+ * at load is marked as already sounded, and only a change after that rings.
+ *
+ * Once per contest. A board polls every two seconds and re-renders on each,
+ * and a buzzer that sounded on every render of a decided contest would sound
+ * for as long as the result stayed up.
+ */
+document.addEventListener('alpine:init', () => {
+    window.Alpine.data('finishBell', ({ src = '', bout = null, decided = false }) => ({
+        // Browsers refuse to play audio on a page nobody has touched. A board
+        // on a projector may never be touched, so this is surfaced rather than
+        // failing quietly — the operator gets something to press.
+        armed: false,
+        sounded: decided ? bout : null,
+
+        init() {
+            if (!src) {
+                return
+            }
+
+            this.audio = new Audio(src)
+            this.audio.preload = 'auto'
+
+            // Any interaction anywhere on the page counts, including the ones
+            // the operator was going to make anyway.
+            const unlock = () => this.arm()
+
+            document.addEventListener('pointerdown', unlock, { once: true })
+            document.addEventListener('keydown', unlock, { once: true })
+        },
+
+        /** Play once, silently, which is what a browser accepts as consent. */
+        arm() {
+            if (!this.audio || this.armed) {
+                return
+            }
+
+            const wasMuted = this.audio.muted
+            this.audio.muted = true
+
+            this.audio.play().then(() => {
+                this.audio.pause()
+                this.audio.currentTime = 0
+                this.audio.muted = wasMuted
+                this.armed = true
+            }).catch(() => {
+                this.audio.muted = wasMuted
+            })
+        },
+
+        /**
+         * Called on every render with what is on screen. Everything about not
+         * repeating lives here rather than at the call sites, so a second
+         * screen cannot get it subtly different.
+         */
+        watch(boutId, isDecided) {
+            if (!isDecided) {
+                // Back to an undecided contest — the next end is a new one,
+                // including the same bout reopened and decided again.
+                this.sounded = null
+
+                return
+            }
+
+            if (boutId === null || this.sounded === boutId) {
+                return
+            }
+
+            this.sounded = boutId
+            this.ring()
+        },
+
+        ring() {
+            if (!this.audio) {
+                return
+            }
+
+            this.audio.currentTime = 0
+            this.audio.play().catch(() => { this.armed = false })
+        },
+    }))
+})

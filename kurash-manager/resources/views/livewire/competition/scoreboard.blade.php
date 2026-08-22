@@ -75,6 +75,8 @@
         $hasBrandLogo = $brandLogo && is_file(public_path($brandLogo));
     @endphp
 
+    <x-competition.finish-bell :bout="$bout" :decided="$winnerSide !== null" />
+
     <header class="head">
         <div class="head__id">
             {{-- The logo always sits on a white chip and is never recoloured:

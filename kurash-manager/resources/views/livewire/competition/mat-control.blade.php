@@ -81,6 +81,11 @@
             <span class="mx-1.5 h-5 w-0.5 bg-line"></span>
         </x-slot:actions>
 
+        {{-- The operator hears the same buzzer the hall does, at the same
+             moment, because it is the same component reading the same
+             state. --}}
+        <x-competition.finish-bell :bout="$bout" :decided="(bool) $bout?->isDecided()" />
+
         <x-competition.flash />
 
         @if ($bout === null)
