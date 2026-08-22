@@ -626,3 +626,38 @@ describe('the pool sidebar', function () {
         expect(poolOf($this->category, $this->operator)->first()['iso'])->toBeNull();
     });
 });
+
+/**
+ * A draw is run class after class, so the screen that runs one has to be the
+ * screen you leave to reach the next.
+ */
+describe('finding the next class', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+    });
+
+    /**
+     * Entries and Draw, which is the list of classes with their state — the
+     * one screen that says which is drawn and which is still waiting.
+     */
+    it('sends whoever is running it back to entries and draw', function () {
+        $championship = $this->category->ageCategory->championship;
+
+        foreach ([User::factory()->official()->create(), User::factory()->create(['role' => 'admin'])] as $user) {
+            Livewire::actingAs($user)
+                ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+                ->assertSee('All classes')
+                ->assertSee(route('entries.index', $championship), false);
+        }
+    });
+
+    /** A board on a wall has nowhere to navigate to and nobody to press it. */
+    it('offers nothing of the kind on the venue board', function () {
+        Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category])
+            ->assertDontSee('All classes');
+    });
+});

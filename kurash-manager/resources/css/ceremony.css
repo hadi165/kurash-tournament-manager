@@ -288,6 +288,26 @@
    application bundle — so every rule it needs lives here, including the plain
    layout ones. Self-contained is the point: the venue screen cannot drift when
    the admin theme changes because it never reads it. */
+/* The operator's way out. Quiet enough that it is not competing with the
+   draw, present enough that nobody has to reach for the browser's back
+   button between weight classes. */
+.dc-home {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+    padding: 8px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--dc-line);
+    color: var(--dc-muted);
+    font-size: 13px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.dc-home:hover { color: #fff; border-color: var(--dc-muted); }
+
 .dc-logo {
     background: #fff;
     padding: 6px;

@@ -60,6 +60,19 @@
 >
     <header class="dc-head">
         <div class="dc-head-id">
+            {{-- The way back to the list of classes waiting to be drawn.
+                 Only on the operator's copy: a board on a wall has nowhere to
+                 navigate to and nobody standing at it to press this. --}}
+            @if ($ceremony)
+                <a class="dc-home"
+                   href="{{ route('entries.index', $championship) }}"
+                   title="{{ __('Back to the classes waiting to be drawn') }}"
+                   wire:navigate>
+                    <span aria-hidden="true">←</span>
+                    {{ __('All classes') }}
+                </a>
+            @endif
+
             @if ($hasBrandLogo)
                 <span class="dc-logo">
                     <img src="{{ asset($brandLogo) }}" alt="{{ config('branding.short_name') }}">

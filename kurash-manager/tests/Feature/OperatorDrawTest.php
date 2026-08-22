@@ -403,3 +403,56 @@ describe('links an operator can actually follow', function () {
         expect($steps->pluck('route'))->not->toContain('bracket.show');
     });
 });
+
+/**
+ * The lock says "do not draw this class again". It has to be possible to stop
+ * saying that.
+ */
+describe('a locked draw is not a dead end', function () {
+    beforeEach(fn () => $this->actingAs($this->admin));
+
+    /**
+     * The trap: deleting a bracket cleared everything that described it except
+     * the lock, and the unlock control was only drawn when a bracket existed.
+     * So the class refused to be redrawn over a bracket that was not there,
+     * and the one control that would have allowed it was off the screen.
+     */
+    it('does not leave a class locked against a bracket that is gone', function () {
+        [$category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($category);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->call('toggleDrawLock')
+            ->call('deleteBracket', true);
+
+        expect($category->refresh()->isDrawLocked())->toBeFalse()
+            ->and($category->bouts()->count())->toBe(0);
+
+        // And the point of all that: it can be drawn again.
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->call('generate');
+
+        expect($category->refresh()->bouts()->count())->toBeGreaterThan(0);
+    });
+
+    /** A class already stuck that way has the way out on its own screen. */
+    it('offers the unlock on a locked class with no bracket', function () {
+        [$category] = categoryWithAthletes(8);
+        $category->forceFill(['draw_locked_at' => now()])->save();
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category->refresh()])
+            ->assertSee('Unlock draw');
+    });
+
+    /** Locking still does what it is for while the draw exists. */
+    it('still refuses to redraw a locked class', function () {
+        [$category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($category);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->call('toggleDrawLock')
+            ->call('generate', true);
+
+        expect($category->refresh()->isDrawLocked())->toBeTrue();
+    });
+});
