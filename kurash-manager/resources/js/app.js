@@ -139,6 +139,15 @@ document.addEventListener('alpine:init', () => {
                 audio = new Audio(src)
                 audio.preload = 'auto'
 
+                // Fetched now rather than at the whistle. A buzzer that starts
+                // downloading a megabyte when the contest ends is a buzzer
+                // that sounds late, and its absence from the network log is
+                // the first thing anybody looks for when it does not sound at
+                // all.
+                audio.load()
+
+                console.info('[kurash] end-of-contest sound loaded:', src)
+
                 // Any interaction anywhere on the page counts, including the
                 // ones the operator was going to make anyway.
                 const unlock = () => this.arm()
@@ -166,6 +175,31 @@ document.addEventListener('alpine:init', () => {
                     id === '' || id === undefined ? null : Number(id),
                     this.$el.dataset.decided === '1',
                 )
+            },
+
+            /**
+             * Pressed deliberately, so it answers audibly. Clipped short: the
+             * question being asked is whether this machine makes a noise, and
+             * the whole buzzer is a long way to go to say yes.
+             */
+            test() {
+                if (!audio) {
+                    return
+                }
+
+                this.armed = true
+                audio.muted = false
+                audio.currentTime = 0
+
+                audio.play().then(() => {
+                    setTimeout(() => {
+                        audio.pause()
+                        audio.currentTime = 0
+                    }, 900)
+                }).catch((error) => {
+                    this.armed = false
+                    console.warn('[kurash] could not play the end-of-contest sound:', error)
+                })
             },
 
             /** Play once, silently, which is what a browser accepts as consent. */

@@ -41,7 +41,7 @@
         <button
             type="button"
             x-show="! armed"
-            x-on:click="arm()"
+            x-on:click.stop="test()"
             style="position: fixed; inset-inline-end: 1rem; inset-block-end: 1rem; z-index: 60;
                    display: inline-flex; align-items: center; gap: .5rem;
                    padding: .55rem 1rem; border: 0; border-radius: 999px;
@@ -50,7 +50,7 @@
                    box-shadow: 0 2px 10px rgba(0, 0, 0, .35);"
         >
             <span aria-hidden="true">🔔</span>
-            {{ __('Tap anywhere to enable the end-of-contest sound') }}
+            {{ __('Tap to test the end-of-contest sound') }}
         </button>
     </div>
 @endif
