@@ -9,6 +9,7 @@ use App\Services\BoutAdvancer;
 use App\Services\BoutScorer;
 use App\Services\KurashScore;
 use App\Support\ScoreTally;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -40,6 +41,15 @@ class MatControl extends Component
 
     /** Set when time expired level all the way down and a decision is owed. */
     public bool $awaitingDecision = false;
+
+    /**
+     * How much of the mat's list is shown at once.
+     *
+     * A cap rather than the lot, because a championship's whole running order
+     * is hundreds of contests and this is a control surface, not a schedule.
+     * What is left over is counted underneath rather than silently dropped.
+     */
+    private const UP_NEXT = 20;
 
     /**
      * Which buzzer this mat ends a contest on.
@@ -723,6 +733,11 @@ class MatControl extends Component
         $bout = $this->bout();
         $scorer = app(KurashScore::class);
 
+        // What this screen is showing the record of: the contest being scored,
+        // or — once it is over — the one it just finished.
+        $reviewing = $bout ?? $this->justDecided();
+        $upNext = $this->upNext();
+
         $tally = $bout !== null
             ? $scorer->tally($bout, $bout->events)
             : ['a' => new ScoreTally, 'b' => new ScoreTally];
@@ -730,14 +745,18 @@ class MatControl extends Component
         return view('livewire.competition.mat-control', [
             'bout' => $bout,
             'tally' => $tally,
-            'calls' => $bout !== null ? array_reverse($scorer->liveCalls($bout->events, $bout)) : [],
-            'log' => $bout?->events->whereIn('action', [
+            // The log outlives the contest. A referee reviewing a result is
+            // asking about a bout that is no longer on the mat, and that is
+            // the moment the record matters most.
+            'calls' => $reviewing !== null ? array_reverse($scorer->liveCalls($reviewing->events, $reviewing)) : [],
+            'log' => $reviewing?->events->whereIn('action', [
                 KurashScore::ACTION_SCORED,
                 KurashScore::ACTION_VOIDED,
                 KurashScore::ACTION_STOPPAGE,
                 KurashScore::ACTION_JAZZO,
                 KurashScore::ACTION_RESUMED,
             ])->sortByDesc('sequence_number')->values() ?? collect(),
+            'reviewing' => $reviewing,
             'boutSeconds' => $bout !== null ? $scorer->boutSeconds($bout) : 240,
             // The reading at which the browser should offer jazzo. Checked again
             // on the server when it does.
@@ -749,7 +768,10 @@ class MatControl extends Component
             'totalRounds' => $bout === null
                 ? 0
                 : (int) ($bout->weightCategory->bouts()->max('round') ?? $bout->round),
-            'upNext' => $this->upNext(),
+            'upNext' => $upNext,
+            // Stated rather than swallowed: a list that stops at twenty and
+            // says nothing reads as the end of the queue.
+            'stillWaiting' => max(0, $this->waiting()->count() - $upNext->count()),
             // Offered here rather than in the mat's settings: whoever picks
             // this wants to hear both first, and they are sitting at the mat.
             'finishSounds' => config('scoreboard.finish_sounds'),
@@ -769,14 +791,26 @@ class MatControl extends Component
      */
     private function upNext(): Collection
     {
+        return $this->waiting()
+            ->with(['athleteA', 'athleteB', 'weightCategory.ageCategory', 'court'])
+            ->orderByRaw('fight_number is null')
+            ->orderBy('fight_number')
+            ->limit(self::UP_NEXT)
+            ->get();
+    }
+
+    /**
+     * Everything this mat could bring on: assigned here, or not yet assigned
+     * anywhere. A contest standing on another mat belongs to whoever is
+     * running it.
+     *
+     * @return Builder<Bout>
+     */
+    private function waiting(): Builder
+    {
         return Bout::where('championship_id', $this->court->championship_id)
             ->readyToFight()
             ->where(fn ($q) => $q->where('court_id', $this->court->id)->orWhereNull('court_id'))
-            ->where('status', '!=', Bout::STATUS_ON_COURT)
-            ->with(['athleteA', 'athleteB', 'weightCategory'])
-            ->orderByRaw('fight_number is null')
-            ->orderBy('fight_number')
-            ->limit(6)
-            ->get();
+            ->where('status', '!=', Bout::STATUS_ON_COURT);
     }
 }

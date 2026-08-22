@@ -408,86 +408,89 @@
                     </div>
                 @endif
             </x-ui.card>
+        @endif
 
-            @if ($log->isNotEmpty())
-                <x-ui.card
-                    flush
-                    :title="__('Call log')"
-                    :subtitle="__('Every call, what caused it, and who entered it. This is the record a protest is settled from.')"
-                >
-                    <div class="rule-2"></div>
+        {{-- Outside the branch above on purpose: the record outlives the
+             contest. A referee validating a result is asking about a bout that
+             has already left the mat, and that is the moment it matters most. --}}
+        @if ($log->isNotEmpty())
+            <x-ui.card
+                flush
+                :title="__('Call log')"
+                :subtitle="__('Every call, what caused it, and who entered it. This is the record a protest is settled from.')"
+            >
+                <div class="rule-2"></div>
 
-                    @php
-                        $voided = $log->where('action', 'score_voided')->pluck('after.voids_event_id')->filter()->map(fn ($id) => (int) $id)->all();
+                @php
+                    $voided = $log->where('action', 'score_voided')->pluck('after.voids_event_id')->filter()->map(fn ($id) => (int) $id)->all();
 
-                        // A row whose cause was withdrawn is struck through
-                        // with its cause, so the log reads the way the board
-                        // does rather than showing a chala that no longer
-                        // counts as though it still did.
-                        $liveIds = collect($calls)->pluck('id')->all();
-                    @endphp
+                    // A row whose cause was withdrawn is struck through
+                    // with its cause, so the log reads the way the board
+                    // does rather than showing a chala that no longer
+                    // counts as though it still did.
+                    $liveIds = collect($calls)->pluck('id')->all();
+                @endphp
 
-                    <div class="overflow-x-auto">
-                        <table class="t">
-                            <thead>
-                                <tr>
-                                    <th>{{ __('#') }}</th>
-                                    <th>{{ __('Clock') }}</th>
-                                    <th>{{ __('Call') }}</th>
-                                    <th>{{ __('Yakhtak') }}</th>
-                                    <th>{{ __('Origin') }}</th>
-                                    <th>{{ __('Entered by') }}</th>
+                <div class="overflow-x-auto">
+                    <table class="t">
+                        <thead>
+                            <tr>
+                                <th>{{ __('#') }}</th>
+                                <th>{{ __('Clock') }}</th>
+                                <th>{{ __('Call') }}</th>
+                                <th>{{ __('Yakhtak') }}</th>
+                                <th>{{ __('Origin') }}</th>
+                                <th>{{ __('Entered by') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($log as $entry)
+                                @php
+                                    $clock = $entry->after['clock'] ?? null;
+                                    $isVoid = $entry->action === 'score_voided';
+                                    $isScore = $entry->action === 'scored';
+                                    $struck = in_array($entry->id, $voided, true)
+                                        || ($isScore && ! in_array((int) $entry->id, $liveIds, true));
+                                    $colour = $entry->competitor_side;
+                                @endphp
+
+                                <tr @class(['text-ink/40 line-through' => $struck]) wire:key="log-{{ $entry->id }}">
+                                    <td class="font-mono text-xs tabular-nums text-ink/40">{{ $entry->sequence_number }}</td>
+                                    <td class="font-mono text-xs tabular-nums">
+                                        {{ $clock === null ? '—' : sprintf('%d:%02d', intdiv($clock, 60), $clock % 60) }}
+                                    </td>
+                                    <td>
+                                        @if ($entry->action === 'stoppage')
+                                            <span class="italic text-ink/55">{{ __('Tuxta') }}</span>
+                                        @elseif ($entry->action === 'jazzo')
+                                            <span class="font-bold text-warn-700 dark:text-warn-400">{{ __('Jazzo') }}</span>
+                                        @elseif ($entry->action === 'resumed')
+                                            <span class="italic text-ink/55">{{ __('Resumed') }}</span>
+                                        @elseif ($isVoid)
+                                            <span class="italic text-ink/55">{{ __('Taken back: :call', ['call' => $entry->event_type ?? ($entry->after['call'] ?? '')]) }}</span>
+                                        @else
+                                            <span class="font-bold capitalize">{{ $entry->event_type ?? ($entry->after['call'] ?? '') }}</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if ($colour === 'blue')
+                                            <x-ui.tag variant="info">{{ __('Blue') }}</x-ui.tag>
+                                        @elseif ($colour === 'green')
+                                            <x-ui.tag variant="brand">{{ __('Green') }}</x-ui.tag>
+                                        @else
+                                            —
+                                        @endif
+                                    </td>
+                                    <td class="text-[11px] uppercase tracking-wider text-ink/55">
+                                        {{ $entry->origin ? str_replace('_', ' ', $entry->origin) : '—' }}
+                                    </td>
+                                    <td class="text-ink/55">{{ $entry->user?->name ?? __('System') }}</td>
                                 </tr>
-                            </thead>
-                            <tbody>
-                                @foreach ($log as $entry)
-                                    @php
-                                        $clock = $entry->after['clock'] ?? null;
-                                        $isVoid = $entry->action === 'score_voided';
-                                        $isScore = $entry->action === 'scored';
-                                        $struck = in_array($entry->id, $voided, true)
-                                            || ($isScore && ! in_array((int) $entry->id, $liveIds, true));
-                                        $colour = $entry->competitor_side;
-                                    @endphp
-
-                                    <tr @class(['text-ink/40 line-through' => $struck]) wire:key="log-{{ $entry->id }}">
-                                        <td class="font-mono text-xs tabular-nums text-ink/40">{{ $entry->sequence_number }}</td>
-                                        <td class="font-mono text-xs tabular-nums">
-                                            {{ $clock === null ? '—' : sprintf('%d:%02d', intdiv($clock, 60), $clock % 60) }}
-                                        </td>
-                                        <td>
-                                            @if ($entry->action === 'stoppage')
-                                                <span class="italic text-ink/55">{{ __('Tuxta') }}</span>
-                                            @elseif ($entry->action === 'jazzo')
-                                                <span class="font-bold text-warn-700 dark:text-warn-400">{{ __('Jazzo') }}</span>
-                                            @elseif ($entry->action === 'resumed')
-                                                <span class="italic text-ink/55">{{ __('Resumed') }}</span>
-                                            @elseif ($isVoid)
-                                                <span class="italic text-ink/55">{{ __('Taken back: :call', ['call' => $entry->event_type ?? ($entry->after['call'] ?? '')]) }}</span>
-                                            @else
-                                                <span class="font-bold capitalize">{{ $entry->event_type ?? ($entry->after['call'] ?? '') }}</span>
-                                            @endif
-                                        </td>
-                                        <td>
-                                            @if ($colour === 'blue')
-                                                <x-ui.tag variant="info">{{ __('Blue') }}</x-ui.tag>
-                                            @elseif ($colour === 'green')
-                                                <x-ui.tag variant="brand">{{ __('Green') }}</x-ui.tag>
-                                            @else
-                                                —
-                                            @endif
-                                        </td>
-                                        <td class="text-[11px] uppercase tracking-wider text-ink/55">
-                                            {{ $entry->origin ? str_replace('_', ' ', $entry->origin) : '—' }}
-                                        </td>
-                                        <td class="text-ink/55">{{ $entry->user?->name ?? __('System') }}</td>
-                                    </tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                    </div>
-                </x-ui.card>
-            @endif
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </x-ui.card>
         @endif
 
         @if ($upNext->isNotEmpty())
@@ -505,10 +508,26 @@
                             <span class="font-mono text-xs text-ink/55">
                                 {{ $next->fight_number ? __('Fight :n', ['n' => $next->fight_number]) : __('unscheduled') }}
                             </span>
-                            <span class="text-ink/55">{{ $next->weightCategory?->exportName() }}</span>
+                            {{-- Division and class both: the same weight label
+                                 runs in more than one of them, and a mat can be
+                                 given contests from several. --}}
+                            <span class="text-ink/55">
+                                {{ $next->weightCategory?->ageCategory?->name }}
+                                {{ $next->weightCategory?->label }}
+                            </span>
+
                             <x-athlete :athlete="$next->athleteA" />
                             <span class="text-ink/40">{{ __('v') }}</span>
                             <x-athlete :athlete="$next->athleteB" />
+
+                            {{-- Whether it is already this mat's or still loose
+                                 in the running order. Both can be brought on;
+                                 only one of them is already spoken for. --}}
+                            @if ($next->court_id === null)
+                                <x-ui.tag variant="muted">{{ __('Unassigned') }}</x-ui.tag>
+                            @else
+                                <x-ui.tag variant="brand">{{ __('This mat') }}</x-ui.tag>
+                            @endif
 
                             @can('score-bout')
                                 <flux:button size="xs" class="ms-auto" wire:click="bringOn({{ $next->id }})">
@@ -518,6 +537,19 @@
                         </div>
                     @endforeach
                 </div>
+
+                @if ($stillWaiting > 0)
+                    <div class="border-t border-ink/12 px-6 py-3 text-[12.5px] text-ink/55">
+                        {{ trans_choice(
+                            '{1}One more contest is waiting for this mat.|[2,*]:count more contests are waiting for this mat.',
+                            $stillWaiting,
+                            ['count' => $stillWaiting],
+                        ) }}
+                        <a href="{{ route('fight-order.index', $court->championship) }}" class="underline" wire:navigate>
+                            {{ __('Open the running order') }}
+                        </a>
+                    </div>
+                @endif
             </x-ui.card>
         @endif
     </x-page>
