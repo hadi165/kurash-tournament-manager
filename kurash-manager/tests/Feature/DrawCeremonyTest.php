@@ -572,6 +572,53 @@ describe('the pool sidebar', function () {
         expect(poolOf($this->category, $this->operator)->first()['iso'])->toBe('bh');
     });
 
+    /** The board carries the flag beside the code, seat by seat. */
+    it('flies a flag on every seat that has been filled', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['revealed' => 8],
+            now()->addHour(),
+        );
+
+        $seats = Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->viewData('seats');
+
+        $filled = collect($seats)->filter(fn (array $seat) => $seat['athlete'] !== null);
+
+        expect($filled)->not->toBeEmpty()
+            ->and($filled->every(fn (array $seat) => $seat['iso'] !== null))->toBeTrue();
+    });
+
+    /** An empty seat has no nation to fly. */
+    it('leaves an undrawn seat without one', function () {
+        $seats = Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->viewData('seats');
+
+        expect(collect($seats)->every(fn (array $seat) => $seat['iso'] === null))->toBeTrue();
+    });
+
+    /**
+     * The whole name. It is not shortened anywhere on the way to the board —
+     * what limits it is the width of the column, which is the stylesheet's
+     * business and not this one's.
+     */
+    it('puts the athlete\'s full name on the board', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['revealed' => 8],
+            now()->addHour(),
+        );
+
+        $athlete = $this->category->drawnAthletes()->first();
+        $athlete->update(['fullname' => 'Bekzod Yuldashev Rakhmatovich']);
+
+        Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category->refresh(), 'ceremony' => true])
+            ->assertSee('Bekzod Yuldashev Rakhmatovich');
+    });
+
     /** A code with no artwork keeps its row rather than collapsing it. */
     it('leaves a nation with no flag a box of its own', function () {
         $this->category->athletes()->update(['noc_code' => 'ZZZ']);

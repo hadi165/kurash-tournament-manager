@@ -466,9 +466,44 @@
     min-width: 26px;
 }
 
-.dc-seat-name { font-size: 17.5px; font-weight: 600; flex: 1; min-width: 0; }
+/* The whole name, not as much of it as fits.
+
+   Rows are a fixed height because the bracket's connectors are drawn from
+   them, so a name that needs two lines gets two lines and no more — which at
+   this width is every name a federation has ever entered. Long ones wrap
+   rather than running out under the tree beside them. */
+.dc-seat-name {
+    flex: 1;
+    min-width: 0;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.12;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
+/* A draw of thirty-two runs on 30px rows. One line is all there is room for,
+   so it is set smaller to fit more of the name on it. */
+.dc-board-32 .dc-seat-name { font-size: 13.5px; -webkit-line-clamp: 1; }
+
 .dc-seat-empty { color: var(--dc-dim); }
 .dc-seat-noc { font-size: 13px; font-weight: 700; color: var(--dc-muted); }
+
+/* Beside the code, the nation's own artwork — never recoloured, never
+   distorted. Smaller than the pool's, because it sits on a contest row. */
+.dc-seat-flag {
+    flex: none;
+    width: 24px;
+    height: 16px;
+    object-fit: cover;
+    border-radius: 2px;
+    box-shadow: 0 0 0 1px var(--dc-line);
+}
+
+.dc-board-32 .dc-seat-flag { width: 20px; height: 13px; }
 
 .dc-match {
     border-left: 1px solid var(--dc-conn);

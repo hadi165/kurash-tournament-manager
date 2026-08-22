@@ -167,13 +167,20 @@ class DrawCeremony extends Component
         $drawing = $revealed < $total ? $drawn->get($revealed + 1) : null;
 
         $seats = $size > 0
-            ? collect(BracketSeeding::order($size))->map(fn (int $seed) => [
-                'seed' => $seed,
-                'athlete' => $seed <= $revealed ? $drawn->get($seed) : null,
-                // The newest information on the board, and the only thing that
-                // animates.
-                'justFilled' => $seed === $revealed && $revealed > 0,
-            ])->all()
+            ? collect(BracketSeeding::order($size))->map(function (int $seed) use ($drawn, $revealed) {
+                $athlete = $seed <= $revealed ? $drawn->get($seed) : null;
+
+                return [
+                    'seed' => $seed,
+                    'athlete' => $athlete,
+                    // Resolved here, like the pool's: which flag a code belongs
+                    // to is a question about the nation, not about the markup.
+                    'iso' => $athlete === null ? null : Noc::iso($athlete->noc_code),
+                    // The newest information on the board, and the only thing
+                    // that animates.
+                    'justFilled' => $seed === $revealed && $revealed > 0,
+                ];
+            })->all()
             : [];
 
         // The pool is the same figure read the other way round: everyone after

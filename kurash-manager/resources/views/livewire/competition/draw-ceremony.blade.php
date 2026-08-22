@@ -14,7 +14,9 @@
 
     // Column widths are fixed: this is 1920×1080 furniture read from the back
     // of a hall, not a responsive page.
-    $columns = '300px repeat('.max(1, $rounds).', 150px) 210px';
+    // The draw column carries a full name, a flag and a code. It was 300,
+    // which fitted the flag in by pushing the end of the name off the board.
+    $columns = '390px repeat('.max(1, $rounds).', 150px) 210px';
 @endphp
 
 <div
@@ -213,6 +215,15 @@
 
                             @if ($seat['athlete'])
                                 <span class="dc-seat-name">{{ $seat['athlete']->fullname }}</span>
+
+                                @if ($seat['iso'])
+                                    <img class="dc-seat-flag"
+                                         src="{{ asset('flags/'.$seat['iso'].'.svg') }}"
+                                         alt="{{ \App\Support\Noc::normalise($seat['athlete']->noc_code) }}">
+                                @else
+                                    <span class="dc-seat-flag dc-pool-flag--none" aria-hidden="true"></span>
+                                @endif
+
                                 <span class="dc-seat-noc">{{ \App\Support\Noc::normalise($seat['athlete']->noc_code) }}</span>
                             @else
                                 <span class="dc-seat-name dc-seat-empty">—</span>
