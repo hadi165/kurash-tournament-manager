@@ -15,20 +15,29 @@
     <div
         x-data="finishBell({ src: @js(asset($source)), bout: @js($bout?->getKey()), decided: @js((bool) $decided) })"
         x-effect="watch(@js($bout?->getKey()), @js((bool) $decided))"
-        class="contents"
+        style="display: contents"
     >
-        {{-- A board on a projector may never be touched, and a browser will not
-             play a sound on a page nobody has touched. Rather than fail
-             quietly, it asks — once, small, and out of the way once pressed. --}}
+        {{-- A board on a projector may never be touched, and a browser will
+             not play a sound on a page nobody has touched. Rather than fail
+             quietly, it asks.
+
+             Styled inline rather than with utility classes: this sits on the
+             wall board too, and that shell carries the board's own stylesheet
+             rather than the application's, so a class here would render as
+             nothing at all. --}}
         <button
             type="button"
             x-show="! armed"
-            x-cloak
             x-on:click="arm()"
-            class="fixed bottom-4 end-4 z-50 rounded-full border border-line bg-surface px-3.5 py-2
-                   text-[12.5px] font-semibold text-ink shadow-chip"
+            style="position: fixed; inset-inline-end: 1rem; inset-block-end: 1rem; z-index: 60;
+                   display: inline-flex; align-items: center; gap: .5rem;
+                   padding: .55rem 1rem; border: 0; border-radius: 999px;
+                   background: rgba(17, 24, 39, .88); color: #fff;
+                   font: 600 13px/1.2 system-ui, sans-serif; cursor: pointer;
+                   box-shadow: 0 2px 10px rgba(0, 0, 0, .35);"
         >
-            {{ __('Tap to enable the end-of-contest sound') }}
+            <span aria-hidden="true">🔔</span>
+            {{ __('Tap anywhere to enable the end-of-contest sound') }}
         </button>
     </div>
 @endif
