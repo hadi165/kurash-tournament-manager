@@ -18,8 +18,9 @@ final class PrintLogo
     /** Absolute filesystem path, or null if there is nothing renderable. */
     public static function path(): ?string
     {
-        // Print artwork first: the config carries a PNG for the renderer and an
-        // SVG for the screens, and only the first is meant for paper.
+        // Print artwork first, then whatever the screens fly: the two are
+        // usually the same file, and the setting exists for the case where
+        // paper wants its own.
         foreach ([config('branding.logo_print'), config('branding.logo')] as $relative) {
             if (! is_string($relative) || $relative === '') {
                 continue;

@@ -3,58 +3,41 @@
 namespace App\Support;
 
 /**
- * A flag that can be trusted to stay inside its own box on paper.
+ * The flag as paper wants it.
  *
- * Dompdf draws SVG without establishing a viewport for it: nothing in the
- * artwork is bounded to the box the page asked for, and there is no way to
- * impose one. `overflow: hidden` is ignored, a background image needs GD, and
- * a clip path inside the file is ignored as well — all three were tried.
+ * The screens fly the SVGs; paper cannot. Dompdf draws an SVG without
+ * establishing a viewport for it, so artwork that reaches outside its own
+ * viewBox is drawn on the page anyway — Kazakhstan across a whole running
+ * order, over the names underneath, which is what one came back looking like.
+ * Nothing bounds it: `overflow: hidden`, a background image and a clip path
+ * inside the file were each tried and each ignored.
  *
- * Sixteen of the two hundred flags have an element that reaches outside their
- * own viewBox. Most overshoot by a few points; Kazakhstan, Grenada and
- * Honduras draw across the whole page, over the names underneath, which is
- * what a running order came back looking like.
+ * A raster image cannot do that, because it is drawn into the box it is given.
+ * So the print set is PNG, cut from the same vectors by `flags:rasterise` and
+ * committed alongside them, and every nation flies one again.
  *
- * So those sixteen print without a flag, and their code prints alone. A gap in
- * a column is a small fault; a flag drawn over the results is a large one.
- *
- * ── Measuring this again ──────────────────────────────────────────────────
- *
- * Render each flag alone at 18×12 inside generous padding, then walk the
- * content stream applying the transform stack and take the extent of the
- * drawn points. A flag that behaves stays inside its box; these do not. The
- * list is data, not a guess, and it should be re-measured whenever the flag
- * artwork is replaced.
- *
- * ── Fixing it properly ────────────────────────────────────────────────────
- *
- * Raster artwork cannot spill: a PNG is drawn into the box it is given. That
- * needs the GD extension, which this system does not have — with it, and a
- * set of PNG flags, every nation could fly one and this list could go.
+ * Dompdf reads PNG through GD. Without that extension it throws mid-render
+ * rather than skipping the image, which would turn a missing server extension
+ * into a 500 at the moment somebody needs a start list — so the check is here,
+ * and the sheet prints with codes and no flags instead.
  */
 final class PrintFlag
 {
-    /**
-     * Flags whose artwork Dompdf draws outside the box it was given.
-     *
-     * ISO 3166-1 alpha-2, the same codes the files are named by.
-     *
-     * @var list<string>
-     */
-    public const UNBOUNDED = [
-        'af', 'bi', 'bj', 'dm', 'et', 'fm', 'gd', 'hn',
-        'ir', 'ki', 'kp', 'kz', 'ly', 'nr', 'pw', 'zm',
-    ];
-
     /** Absolute path to a flag safe to print, or null where there is none. */
     public static function path(?string $noc): ?string
     {
-        $iso = Noc::iso($noc);
-
-        if ($iso === null || in_array($iso, self::UNBOUNDED, true)) {
+        if (! extension_loaded('gd')) {
             return null;
         }
 
-        return Noc::flagPath($noc);
+        $iso = Noc::iso($noc);
+
+        if ($iso === null) {
+            return null;
+        }
+
+        $path = public_path("flags/print/{$iso}.png");
+
+        return is_file($path) ? $path : null;
     }
 }

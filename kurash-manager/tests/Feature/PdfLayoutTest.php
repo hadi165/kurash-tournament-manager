@@ -7,6 +7,7 @@ use App\Exports\MedalStandingReport;
 use App\Exports\ResultDocument;
 use App\Exports\ResultsReport;
 use App\Exports\WeighInFormReport;
+use App\Support\Noc;
 use App\Support\PrintFlag;
 use App\Support\PrintLogo;
 
@@ -91,8 +92,8 @@ describe('the furniture on every sheet', function () {
 
     /** Where the artwork cannot be drawn, the header keeps its shape. */
     it('falls back to a typographic mark rather than a hole', function () {
-        // This machine has no GD, so a PNG logo is refused by PrintLogo and
-        // the chip carries the short name instead.
+        // Where PrintLogo can draw nothing — a PNG mark on a server without
+        // GD — the chip carries the short name instead.
         if (PrintLogo::path() === null) {
             expect(sheet())->toContain(config('branding.short_name'));
         }
@@ -104,7 +105,7 @@ describe('the furniture on every sheet', function () {
 describe('the nations on a sheet', function () {
     /** A column headed NOC holds the code on its own. */
     it('flies a flag beside a code in an NOC column', function () {
-        expect(sheet())->toContain('flags/tr.svg')->toContain('flags/in.svg');
+        expect(sheet())->toContain('flags/print/tr.png')->toContain('flags/print/in.png');
     });
 
     /**
@@ -112,7 +113,16 @@ describe('the nations on a sheet', function () {
      * way the screen sets it — so the flag goes there too.
      */
     it('flies a flag beside a name that names its nation', function () {
-        expect(sheet())->toContain('flags/uz.svg')->toContain('flags/tj.svg');
+        expect(sheet())->toContain('flags/print/uz.png')->toContain('flags/print/tj.png');
+    });
+
+    /**
+     * Paper gets the raster set. Dompdf draws an SVG without establishing a
+     * viewport, so the vectors the screens fly are not safe on a page — see
+     * App\Support\PrintFlag.
+     */
+    it('prints the raster copy rather than the one the screens fly', function () {
+        expect(sheet())->not->toContain('flags/uz.svg');
     });
 
     /** Checked against the code table, so a word that is not a nation is a word. */
@@ -135,26 +145,42 @@ describe('the nations on a sheet', function () {
     });
 
     /**
-     * Sixteen flags draw outside the box Dompdf gives them — Kazakhstan across
-     * a whole running order, over the names underneath. Nothing bounds them:
-     * overflow, background images and clip paths were all tried. So their code
-     * prints alone, because a gap in a column is a smaller fault than a flag
-     * drawn over the results.
+     * Sixteen flags used to be left off the page: as vectors their artwork
+     * reached outside the box Dompdf gave them, Kazakhstan across a whole
+     * running order. Rasterised, they cannot — and these three are Kurash
+     * nations, so the regression would be felt at every event.
      */
-    it('prints no flag for artwork that will not stay in its box', function () {
+    it('flies the flags that once drew across the page', function () {
         $html = sheet([
             'headings' => ['NOC'],
             'rows' => [['KAZ'], ['IRI'], ['AFG']],
         ]);
 
-        expect($html)->not->toContain('class="flag"')
-            // The code is still there; only the artwork is missing.
-            ->and($html)->toContain('KAZ');
+        expect($html)->toContain('flags/print/kz.png')
+            ->toContain('flags/print/ir.png')
+            ->toContain('flags/print/af.png');
     });
 
-    it('names those flags as data rather than deciding case by case', function () {
-        expect(PrintFlag::UNBOUNDED)->toContain('kz', 'ir', 'af', 'gd', 'hn')
-            ->and(PrintFlag::path('KAZ'))->toBeNull()
-            ->and(PrintFlag::path('UZB'))->toEndWith('flags/uz.svg');
+    /** Every nation the application knows has a print copy on disk. */
+    it('leaves no nation without one', function () {
+        $missing = array_values(array_filter(
+            Noc::codes(),
+            fn (string $code) => Noc::flagPath($code) !== null && PrintFlag::path($code) === null
+        ));
+
+        expect($missing)->toBe([]);
+    });
+
+    /**
+     * Dompdf reads PNG through GD and throws mid-render without it, so
+     * PrintFlag holds nothing back rather than let a missing server extension
+     * become a 500 at the moment somebody needs a start list. Which means a
+     * machine without GD prints codes alone — including this one, if it ever
+     * loses the extension, and this is where that would be said out loud.
+     */
+    it('wants GD, because that is what draws a raster onto a page', function () {
+        expect(extension_loaded('gd'))->toBeTrue(
+            'Print flags need the GD extension: install php-gd.'
+        );
     });
 });

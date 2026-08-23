@@ -31,10 +31,13 @@ return [
     /*
      | The mark for paper.
      |
-     | SVG rather than the PNG beside it: Dompdf rasterises PNG through the GD
-     | extension and throws mid-render without it, so on a server with no GD
-     | the PNG is skipped and every sheet prints unmarked. SVG goes through
-     | Dompdf's own parser and needs nothing.
+     | The colour artwork, the same file the screens carry. Dompdf rasterises
+     | PNG through the GD extension — which the print flags need too — and
+     | without it PrintLogo skips the mark rather than let the whole document
+     | fail, so a server missing the extension prints a typographic chip.
+     |
+     | The traced logo.svg beside it is monochrome, which is what a header
+     | printed from it looked like.
      */
-    'logo_print' => env('BRANDING_LOGO_PRINT', 'images/logo.svg'),
+    'logo_print' => env('BRANDING_LOGO_PRINT', 'images/logo.png'),
 ];

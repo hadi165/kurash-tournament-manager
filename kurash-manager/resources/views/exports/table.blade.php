@@ -53,7 +53,7 @@
         }
 
         .band table { width: 100%; border-collapse: collapse; }
-        .band td { padding: 20px 40px; vertical-align: middle; border: 0; }
+        .band td { padding: 15px 40px; vertical-align: middle; border: 0; }
 
         /* The logo always sits on a white chip and is never recoloured: the
            artwork is the federation's. */
@@ -62,6 +62,11 @@
             padding: 5px;
             border-radius: 3px;
         }
+
+        /* Block, so the chip is the height of the artwork and not of the line
+           box around it: inline leading was adding a third again and pushing
+           the mark out through the bottom of the band. */
+        .chip img { display: block; }
 
         .chip-text {
             display: inline-block;
@@ -164,16 +169,18 @@
 
         .data tbody tr:nth-child(even) td { background: #f7f9f8; }
 
-        /* Status reads as a chip in the fixed vocabulary the specification
-           sets: a value, not a sentence. */
+        /* Four by three, the shape the artwork is drawn on, so nothing is
+           stretched. The hairline that keeps a white-edged flag readable is in
+           the artwork itself — see App\Support\PrintFlag. */
         .flag {
-            width: 18px;
+            width: 16px;
             height: 12px;
             vertical-align: middle;
             margin-right: 5px;
-            border: 0.5px solid #cfd8d4;
         }
 
+        /* Status reads as a chip in the fixed vocabulary the specification
+           sets: a value, not a sentence. */
         .chip-status {
             display: inline-block;
             padding: 2px 9px;
@@ -307,9 +314,8 @@
                 ? $value
                 : (preg_match('/\(([A-Za-z]{3})\)\s*$/', $value, $found) ? $found[1] : null);
 
-            // The print-safe copy, not the original: Dompdf establishes no
-            // viewport for an SVG, so a flag whose artwork reaches outside its
-            // own box prints across the page and over the names underneath.
+            // The print copy, not the one the screens fly: Dompdf establishes
+            // no viewport for an SVG, so the raster set is what paper gets.
             return $code !== null ? \App\Support\PrintFlag::path($code) : null;
         };
 
@@ -334,14 +340,17 @@
                         <tr>
                             <td style="padding: 0;">
                                 {{-- Height only: the artwork is the federation's and a
-                                     forced square would squash a wordmark.
+                                     forced square would squash a wordmark. Set to fill
+                                     the band — 70px of artwork, 5px of chip either side
+                                     and the 15px the row is padded by comes to the 112px
+                                     the page reserves for the header.
 
                                      Where it cannot be drawn — a PNG on a server with no
                                      GD — the chip carries the short name instead, so the
                                      header holds its shape either way rather than
                                      collapsing to a bare line of text. --}}
                                 @if ($printLogo)
-                                    <span class="chip"><img src="{{ $printLogo }}" alt="" style="height: 52px;"></span>
+                                    <span class="chip"><img src="{{ $printLogo }}" alt="" style="height: 70px;"></span>
                                 @else
                                     <span class="chip chip-text">{{ config('branding.short_name') }}</span>
                                 @endif

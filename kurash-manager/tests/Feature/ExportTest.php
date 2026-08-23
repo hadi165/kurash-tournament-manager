@@ -22,6 +22,7 @@ use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
 use App\Services\MedalTable;
 use App\Support\BracketSeeding;
+use App\Support\PrintFlag;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 beforeEach(function () {
@@ -595,6 +596,26 @@ describe('the bracket sheet', function () {
 
         expect(collect($seats)->where('bye', true))->toHaveCount(3)
             ->and(collect($seats)->firstWhere('bye', true)['name'])->toBe('BYE');
+    });
+
+    /**
+     * A draw sheet is read across a hall, and a nation is quicker to find by
+     * its flag than by three letters — the same as on every other document.
+     */
+    it('flies a flag beside the nation on every seat', function () {
+        $category = weighedClass(8);
+        app(BracketGenerator::class)->generate($category);
+
+        $sheet = new BracketSheet($category->refresh());
+        $html = view('exports.bracket', ['sheet' => $sheet])->render();
+
+        $seated = collect($sheet->seats())->where('bye', false);
+
+        expect($seated)->not->toBeEmpty();
+
+        foreach ($seated as $seat) {
+            expect($html)->toContain((string) PrintFlag::path($seat['noc']));
+        }
     });
 
     /**
