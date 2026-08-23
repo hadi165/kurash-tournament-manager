@@ -643,11 +643,12 @@ describe('fight numbers on a bracket', function () {
             ->weightCategories()->first()->refresh();
     });
 
-    it('prints the number on every numbered match of the management bracket', function () {
+    it('offers the saved number in the box on every numbered match', function () {
         $html = Livewire::test(Bracket::class, ['weightCategory' => $this->numbered])->html();
 
-        foreach (range(1, 7) as $number) {
-            expect($html)->toContain("No. {$number}");
+        foreach ($this->numbered->bouts()->whereNotNull('fight_number')->get() as $bout) {
+            expect($html)->toContain('value="'.$bout->fight_number.'"')
+                ->and($html)->toContain('wire:model="fightNumbers.'.$bout->id.'"');
         }
     });
 
@@ -659,18 +660,19 @@ describe('fight numbers on a bracket', function () {
         }
     });
 
-    /** A schedule nobody has made yet has no numbers to show. */
-    it('shows nothing where the running order has not reached', function () {
+    /** A schedule nobody has made yet has an empty box, not a number in it. */
+    it('shows an empty box where the running order has not reached', function () {
         [$unscheduled] = categoryWithAthletes(4, '-unscheduled');
         app(BracketGenerator::class)->generate($unscheduled);
 
-        $html = Livewire::test(Bracket::class, ['weightCategory' => $unscheduled->refresh()])->html();
+        $board = Livewire::test(Bracket::class, ['weightCategory' => $unscheduled->refresh()]);
 
-        expect($html)->not->toContain('No. ');
+        expect(collect($board->get('fightNumbers'))->filter())->toBeEmpty()
+            ->and($board->html())->toContain('wire:model="fightNumbers.');
     });
 
-    /** A walkover is not a contest, so it is not numbered. */
-    it('shows nothing on a bye', function () {
+    /** A walkover is not a contest, so it is not numbered and has no box. */
+    it('gives a bye no box to type in', function () {
         [$byes] = categoryWithAthletes(5, '-byenumbers');
         app(BracketGenerator::class)->generate($byes);
         app(FightOrderScheduler::class)->schedule($byes->ageCategory->championship);
@@ -680,10 +682,11 @@ describe('fight numbers on a bracket', function () {
         expect($byeBout->fight_number)->toBeNull();
 
         $html = Livewire::test(Bracket::class, ['weightCategory' => $byes->refresh()])->html();
-        $rendered = substr_count($html, 'No. ');
 
-        // One per real contest and not one more.
-        expect($rendered)->toBe($byes->bouts()->whereNotNull('fight_number')->count());
+        expect($html)->not->toContain('wire:model="fightNumbers.'.$byeBout->id.'"')
+            // And every real contest does have one.
+            ->and(substr_count($html, 'wire:model="fightNumbers.'))
+            ->toBe($byes->bouts()->where('is_bye', false)->count());
     });
 
     /**
@@ -697,7 +700,9 @@ describe('fight numbers on a bracket', function () {
             ->test(Bracket::class, ['weightCategory' => $this->numbered])
             ->html();
 
+        // Read as text, with nothing to type into and nothing to press.
         expect($html)->toContain('No. 1')
+            ->and($html)->not->toContain('wire:model="fightNumbers.')
             ->and($html)->not->toContain('>Win<');
     });
 });

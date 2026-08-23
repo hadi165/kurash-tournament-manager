@@ -30,31 +30,6 @@ beforeEach(function () {
     $this->viewer = User::factory()->create(['role' => 'viewer']);
 });
 
-/** A weight class with athletes who all made the scale. */
-function weighedClass(int $count, string $gender = 'M', string $label = '-91'): WeightCategory
-{
-    $ageCategory = AgeCategory::factory()->create();
-
-    $category = WeightCategory::factory()->create([
-        'age_category_id' => $ageCategory->id,
-        'label' => $label,
-        'gender' => $gender,
-    ]);
-
-    foreach (range(1, $count) as $draw) {
-        Athlete::factory()->drawn($draw)->create([
-            'championship_id' => $ageCategory->championship_id,
-            'age_category_id' => $ageCategory->id,
-            'weight_category_id' => $category->id,
-            'fullname' => "Athlete {$draw}",
-            'noc_code' => 'UZB',
-            'weighin_status' => 'pass',
-        ]);
-    }
-
-    return $category->refresh();
-}
-
 describe('the weigh-in form', function () {
     /**
      * The specification fixes this filename because the federation files the
@@ -490,16 +465,21 @@ describe('the printed sheet', function () {
 describe('the draw numbers', function () {
     beforeEach(fn () => $this->actingAs($this->admin));
 
-    it('lists everybody holding a number, in draw order', function () {
+    /**
+     * A register, read down the accreditation numbers. The draw numbers on it
+     * come out in whatever order the draw put them, which is the point of
+     * sorting by anything else.
+     */
+    it('lists everybody in the class, by accreditation number', function () {
         $category = weighedClass(6);
         app(BracketGenerator::class)->generate($category);
 
-        $report = new DrawNumbersReport($category->refresh());
-        $rows = $report->rows();
+        $rows = (new DrawNumbersReport($category->refresh()))->rows();
+
+        $ika = array_column($rows, 0);
 
         expect($rows)->toHaveCount(6)
-            ->and(array_column($rows, 0))->toBe([1, 2, 3, 4, 5, 6])
-            ->and($rows[0][1])->toBe('Athlete 1');
+            ->and($ika)->toBe(collect($ika)->sort()->values()->all());
     });
 
     /**
@@ -513,7 +493,8 @@ describe('the draw numbers', function () {
         $numbers = (new DrawNumbersReport($category))->rows();
 
         expect(array_column($weighIn, 5))->each->toBe('')
-            ->and(array_filter(array_column($numbers, 0)))->toHaveCount(4);
+            // Column five is the draw number here, and every one of them is filled.
+            ->and(array_filter(array_column($numbers, 4), fn ($n) => $n !== '—'))->toHaveCount(4);
     });
 
     /**
@@ -526,16 +507,24 @@ describe('the draw numbers', function () {
 
         $report = new DrawNumbersReport($category->refresh());
 
-        expect($report->headings())->toBe(['Draw No.', "Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Country'])
+        expect($report->headings())->toBe(["Athlete's ID (IKA)", "Athlete's Name", 'NOC', 'Country', 'Draw No.'])
             ->and($report->rows()[0])->toHaveCount(5)
             ->and(collect($report->rows())->flatten()->contains('Random draw'))->toBeFalse();
     });
 
-    it('leaves out anybody who was never drawn', function () {
+    /**
+     * Everybody appears, drawn or not. A register that quietly omits whoever
+     * has no number yet is a register nobody can count heads against — and the
+     * blank is the thing an official is looking for.
+     */
+    it('keeps anybody who was never drawn, with a dash for a number', function () {
         $category = weighedClass(5);
         $category->athletes()->orderByDesc('draw_number')->first()->update(['draw_number' => null]);
 
-        expect((new DrawNumbersReport($category->refresh()))->rows())->toHaveCount(4);
+        $rows = (new DrawNumbersReport($category->refresh()))->rows();
+
+        expect($rows)->toHaveCount(5)
+            ->and(collect($rows)->pluck(4)->filter(fn ($n) => $n === '—'))->toHaveCount(1);
     });
 
     it('downloads in both formats', function () {

@@ -140,9 +140,21 @@
                     </div>
                 </div>
             @else
+                @php $spotlightIso = $spotlight ? \App\Support\Noc::iso($spotlight->noc_code) : null; @endphp
+
                 <div class="dc-panel dc-now" wire:key="now-{{ $revealed }}">
                     <div class="dc-now-noc">
-                        <span x-show="! anticipating">{{ $spotlight ? \App\Support\Noc::normalise($spotlight->noc_code) : '—' }}</span>
+                        <span x-show="! anticipating">
+                            {{-- The nation the hall is about to hear, beside the
+                                 code. A delegation with no artwork keeps the
+                                 code and shows no broken image. --}}
+                            @if ($spotlightIso)
+                                <img class="dc-now-flag"
+                                     src="{{ asset('flags/'.$spotlightIso.'.svg') }}"
+                                     alt="{{ $spotlight->noc_name ?? \App\Support\Noc::normalise($spotlight->noc_code) }}">
+                            @endif
+                            {{ $spotlight ? \App\Support\Noc::normalise($spotlight->noc_code) : '—' }}
+                        </span>
                         <span x-show="anticipating" x-cloak>{{ __('Drawing') }}</span>
                     </div>
 

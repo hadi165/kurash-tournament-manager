@@ -54,6 +54,36 @@ expect()->extend('toBeOne', function () {
 */
 
 /**
+ * A weight class with athletes who all made the scale.
+ *
+ * Shared, because more than one suite needs a class that is past the scale and
+ * ready to draw.
+ */
+function weighedClass(int $count, string $gender = 'M', string $label = '-91'): WeightCategory
+{
+    $ageCategory = AgeCategory::factory()->create();
+
+    $category = WeightCategory::factory()->create([
+        'age_category_id' => $ageCategory->id,
+        'label' => $label,
+        'gender' => $gender,
+    ]);
+
+    foreach (range(1, $count) as $draw) {
+        Athlete::factory()->drawn($draw)->create([
+            'championship_id' => $ageCategory->championship_id,
+            'age_category_id' => $ageCategory->id,
+            'weight_category_id' => $category->id,
+            'fullname' => "Athlete {$draw}",
+            'noc_code' => 'UZB',
+            'weighin_status' => 'pass',
+        ]);
+    }
+
+    return $category->refresh();
+}
+
+/**
  * Build a weight category seated with `$count` athletes, drawn 1..N.
  *
  * Draw numbers are the seeds: athlete with draw 1 is the top seed. Tests use

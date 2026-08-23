@@ -9,15 +9,24 @@ use App\Support\Noc;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
- * The draw numbers, as they were drawn.
+ * The entry list, carrying the draw number each athlete holds.
  *
  * The confirmed weigh-in list is the sheet the numbers are written *onto*, and
  * leaves the column blank on purpose. This is the other half: what came back
- * off it, in draw order, so the number an athlete holds can be checked against
- * the paper without reading a bracket.
+ * off it.
  *
- * Ordered by draw number rather than by name, because that is the order it is
- * read aloud in and the order the bracket seats them in.
+ * Read down the accreditation numbers, not the draw numbers. This is a
+ * register — somebody looking for one athlete on it knows the number on their
+ * card, not where the draw put them — so the draw numbers on it come out in no
+ * order at all, which is the point. The order is Athlete::entryOrder(), the
+ * same comparator the screen sorts by, so the list and its export cannot
+ * disagree.
+ *
+ * Everybody registered in the class appears, drawn or not: a register that
+ * silently omits whoever has no number yet is a register nobody can count
+ * heads against. An athlete without one shows a dash.
+ *
+ * Read-only in the strongest sense — nothing here draws, numbers or writes.
  */
 class DrawNumbersReport implements HasTotal, Report
 {
@@ -48,33 +57,52 @@ class DrawNumbersReport implements HasTotal, Report
             'Bracket' => $this->category->draw_bucket_size
                 ? 'Bracket of '.$this->category->draw_bucket_size
                 : BracketSeeding::phaseName($drawn->count()),
+            'Draw numbers given' => $drawn->count().' of '.$this->category->athletes()->count(),
             'Drawn on' => $this->category->draw_generated_at?->format('j M Y H:i'),
         ]);
     }
 
     public function headings(): array
     {
-        return ['Draw No.', "Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Country'];
+        // The accreditation number leads, because that is what the list is read
+        // down. "Draw No." is the athlete's position in the bracket and is
+        // named that everywhere it appears.
+        return ["Athlete's ID (IKA)", "Athlete's Name", 'NOC', 'Country', 'Draw No.'];
     }
 
     public function rows(): array
     {
-        return array_values($this->drawn()->map(fn (Athlete $a) => [
-            $a->draw_number,
-            $a->fullname,
+        return array_values($this->entrants()->map(fn (Athlete $a) => [
             $a->ika_id,
+            $a->fullname,
             Noc::normalise($a->noc_code),
             $a->noc_name,
+            // The saved number and nothing else: this sheet reports the draw,
+            // it does not make one.
+            $a->draw_number ?? '—',
         ])->all());
     }
 
     public function total(): array
     {
-        return ['label' => 'Athletes drawn', 'value' => $this->drawn()->count()];
+        return ['label' => 'Athletes', 'value' => $this->entrants()->count()];
     }
 
     /**
-     * Everybody holding a number, in the order they hold them.
+     * Everybody in the class, in the order a register is read.
+     *
+     * @return Collection<int, Athlete>
+     */
+    private function entrants(): Collection
+    {
+        return $this->category->athletes()
+            ->get()
+            ->sortBy(fn (Athlete $athlete) => $athlete->entryOrder())
+            ->values();
+    }
+
+    /**
+     * Everybody holding a number.
      *
      * @return Collection<int, Athlete>
      */

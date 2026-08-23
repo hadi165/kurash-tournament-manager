@@ -713,6 +713,11 @@ describe('the board fits the screen it is on', function () {
  */
 describe('the ceremony that runs itself', function () {
     beforeEach(function () {
+        // Everything here is derived from a stamp and a clock. Without a frozen
+        // second, a test that stamps "five seconds ago" and then renders can
+        // cross a second boundary in between and read six.
+        $this->freezeSecond();
+
         [$this->category] = categoryWithAthletes(12);
         app(BracketGenerator::class)->generate($this->category);
         $this->category->forceFill(['draw_published_at' => now()])->save();

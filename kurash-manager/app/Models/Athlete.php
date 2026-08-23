@@ -113,4 +113,34 @@ class Athlete extends Model
     {
         return "{$this->fullname} ({$this->noc_code})";
     }
+
+    /**
+     * Where this athlete sits when an entry list is read.
+     *
+     * By accreditation number, which is the number on the card at the door and
+     * the one an official reads down a list looking for somebody. Never by draw
+     * number: a draw number says where an athlete stands in the bracket, and
+     * sorting the list by it turns a register into a running order.
+     *
+     * IKA001 through IKA999 sort correctly as text; a thousandth athlete would
+     * not, so the digits are compared as a number. Somebody with no number yet
+     * goes to the foot, then by name and then by id, so the same list read
+     * twice comes back in the same order.
+     *
+     * One comparator for the screen, the PDF and the workbook — a list that
+     * disagrees with its own export is worse than either.
+     *
+     * @return array{int, int, string, int}
+     */
+    public function entryOrder(): array
+    {
+        $number = preg_replace('/\D+/', '', (string) $this->ika_id);
+
+        return [
+            $number === '' ? 1 : 0,
+            $number === '' ? 0 : (int) $number,
+            mb_strtolower((string) $this->fullname),
+            (int) $this->id,
+        ];
+    }
 }

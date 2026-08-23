@@ -5,6 +5,7 @@ namespace App\Livewire\Competition;
 use App\Jobs\PushBoutToScoreboard;
 use App\Models\Athlete;
 use App\Models\Bout;
+use App\Models\BoutEvent;
 use App\Models\Court;
 use App\Models\WeightCategory;
 use App\Services\BoutAdvancer;
@@ -19,6 +20,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Livewire\Component;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -47,10 +49,38 @@ class Bracket extends Component
     /** Set when a draw that somebody may already be presenting would be replaced. */
     public bool $confirmingReplacePublished = false;
 
+    /**
+     * Bout id => the running-order number typed into its box.
+     *
+     * Strings, because that is what a text input hydrates back as, and an
+     * emptied one comes back as null — both are handled where they are saved.
+     *
+     * @var array<int, string|null>
+     */
+    public array $fightNumbers = [];
+
+    /**
+     * The largest number the column will hold.
+     *
+     * `fight_number` is an unsigned smallint. A championship never approaches
+     * this — a thousand-bout weekend is a very large one — but the box has to
+     * refuse what the column cannot store rather than truncate it.
+     */
+    public const MAX_FIGHT_NUMBER = 65535;
+
     public function mount(WeightCategory $weightCategory): void
     {
         $this->weightCategory = $weightCategory->load('ageCategory.championship');
         $this->syncDraws();
+        $this->syncFightNumbers();
+    }
+
+    private function syncFightNumbers(): void
+    {
+        $this->fightNumbers = $this->weightCategory->bouts()
+            ->get()
+            ->mapWithKeys(fn (Bout $bout) => [$bout->id => (string) ($bout->fight_number ?? '')])
+            ->all();
     }
 
     private function syncDraws(): void
@@ -60,10 +90,22 @@ class Bracket extends Component
             ->all();
     }
 
-    /** @return Collection<int, Athlete> */
+    /**
+     * The class, in the order a register is read.
+     *
+     * By accreditation number rather than by name or by draw number: this is
+     * the list somebody works down with a card in their hand, and it is the
+     * same order the printed list comes out in — Athlete::entryOrder() is the
+     * only comparator either uses.
+     *
+     * @return Collection<int, Athlete>
+     */
     private function athletes(): Collection
     {
-        return $this->weightCategory->athletes()->orderBy('fullname')->get();
+        return $this->weightCategory->athletes()
+            ->get()
+            ->sortBy(fn (Athlete $athlete) => $athlete->entryOrder())
+            ->values();
     }
 
     public function saveDraws(): void
@@ -415,6 +457,117 @@ class Bracket extends Component
         }
 
         session()->flash('status', __('Result recorded.'));
+    }
+
+    /**
+     * Give a contest its place in the running order, by hand.
+     *
+     * The other way of numbering a championship is FightOrderScheduler, which
+     * clears every number and lays a whole running order out at once. This is
+     * the other trade: one contest, one number, and nothing else on the sheet
+     * moves. Neither calls the other, and nothing on this screen — opening it,
+     * recording a result, advancing a winner — numbers anything by itself.
+     *
+     * Numbers are unique within the championship, which is the scope the
+     * schedule is read in: "bout 14" is called across a whole session, not
+     * within one weight class. The column carries no unique index, because the
+     * scheduler renumbers wholesale and a partial write would trip it, so the
+     * guarantee is this check taken under a row lock inside a transaction.
+     */
+    public function setFightNumber(int $boutId): void
+    {
+        Gate::authorize('manage-competition');
+
+        $championship = $this->weightCategory->ageCategory->championship;
+
+        // A finished championship is a record, not a schedule.
+        abort_if($championship->isArchived(), 403);
+
+        $bout = $this->weightCategory->bouts()->findOrFail($boutId);
+
+        // A walkover is not a contest, so there is nothing to call.
+        if ($bout->is_bye) {
+            session()->flash('error', __('A bye has no contest to number.'));
+            $this->syncFightNumbers();
+
+            return;
+        }
+
+        $typed = trim((string) ($this->fightNumbers[$boutId] ?? ''));
+
+        // Cleared on purpose, which is a decision somebody is allowed to make.
+        if ($typed === '') {
+            $this->writeFightNumber($bout, null);
+
+            return;
+        }
+
+        // ctype_digit and not is_numeric: "3.5", "1e3" and "-2" are all
+        // numeric, and none of them is a place in a running order.
+        if (! ctype_digit($typed) || (int) $typed < 1 || (int) $typed > self::MAX_FIGHT_NUMBER) {
+            session()->flash('error', __('A fight number is a whole number from 1 to :max.', ['max' => self::MAX_FIGHT_NUMBER]));
+            $this->syncFightNumbers();
+
+            return;
+        }
+
+        $number = (int) $typed;
+
+        if ($number === $bout->fight_number) {
+            return;
+        }
+
+        try {
+            DB::transaction(function () use ($bout, $championship, $number) {
+                $taken = Bout::where('championship_id', $championship->id)
+                    ->where('fight_number', $number)
+                    ->whereKeyNot($bout->id)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($taken !== null) {
+                    throw new RuntimeException(__('Fight number :n is already given to another contest.', ['n' => $number]));
+                }
+
+                $this->writeFightNumber($bout, $number);
+            });
+        } catch (RuntimeException $e) {
+            session()->flash('error', $e->getMessage());
+            $this->syncFightNumbers();
+
+            return;
+        }
+
+        session()->flash('status', __('Fight number saved.'));
+    }
+
+    /**
+     * Write the number and leave a row saying who changed it.
+     *
+     * The bout's own history is where an administrative change belongs: the
+     * same place a result correction is recorded, so one reading of a contest
+     * shows everything that was done to it.
+     */
+    private function writeFightNumber(Bout $bout, ?int $number): void
+    {
+        $before = $bout->fight_number;
+
+        if ($before === $number) {
+            return;
+        }
+
+        $bout->update(['fight_number' => $number]);
+
+        BoutEvent::createInSequence([
+            'bout_id' => $bout->id,
+            'user_id' => auth()->id(),
+            'action' => 'fight_number_set',
+            'source' => 'operator',
+            'before' => ['fight_number' => $before],
+            'after' => ['fight_number' => $number],
+        ]);
+
+        $this->syncFightNumbers();
     }
 
     public function render(): View

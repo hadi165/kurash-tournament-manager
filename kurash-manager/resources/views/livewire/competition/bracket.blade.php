@@ -295,9 +295,37 @@
                                          no contest to number, and an unscheduled
                                          one has no number yet — neither leaves a
                                          bar behind. --}}
-                                    @if (! $bout->is_bye && $bout->fight_number)
-                                        <div class="border-b border-ink/12 px-3 py-0.5 text-[11px] font-bold tracking-wide text-ink/55">
-                                            {{ __('No. :n', ['n' => $bout->fight_number]) }}
+                                    @if (! $bout->is_bye)
+                                        <div class="flex items-center gap-2 border-b border-ink/12 px-3 py-0.5 text-[11px] font-bold tracking-wide text-ink/55">
+                                            @can('manage-competition')
+                                                {{-- Typed by hand, one contest at a time.
+                                                     The whole-championship scheduler is a
+                                                     separate workflow and neither calls the
+                                                     other: nothing on this screen numbers
+                                                     anything by itself. --}}
+                                                <label for="fight-{{ $bout->id }}">{{ __('No.') }}</label>
+
+                                                <input
+                                                    id="fight-{{ $bout->id }}"
+                                                    type="number"
+                                                    min="1"
+                                                    max="{{ \App\Livewire\Competition\Bracket::MAX_FIGHT_NUMBER }}"
+                                                    step="1"
+                                                    inputmode="numeric"
+                                                    class="w-14 rounded border border-line bg-ground px-1.5 py-0 text-[11px] font-bold tabular-nums text-ink"
+                                                    {{-- Written out as well as bound: the
+                                                         server's render has to say what the
+                                                         saved number is, not wait for the
+                                                         browser to fill it in. --}}
+                                                    value="{{ $fightNumbers[$bout->id] ?? '' }}"
+                                                    wire:model="fightNumbers.{{ $bout->id }}"
+                                                    wire:blur="setFightNumber({{ $bout->id }})"
+                                                    wire:keydown.enter="setFightNumber({{ $bout->id }})"
+                                                    aria-label="{{ __('Fight number') }}"
+                                                >
+                                            @elseif ($bout->fight_number)
+                                                <span>{{ __('No. :n', ['n' => $bout->fight_number]) }}</span>
+                                            @endcan
                                         </div>
                                     @endif
 
