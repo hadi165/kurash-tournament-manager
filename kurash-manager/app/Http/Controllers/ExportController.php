@@ -7,7 +7,6 @@ use App\Exports\AthleteListReport;
 use App\Exports\BracketSheet;
 use App\Exports\BracketSheetWriter;
 use App\Exports\CertificateSheet;
-use App\Exports\ConfirmedWeighInReport;
 use App\Exports\CsvWriter;
 use App\Exports\DrawNumbersReport;
 use App\Exports\DrawSheetReport;
@@ -19,6 +18,7 @@ use App\Exports\PdfDocument;
 use App\Exports\PdfWriter;
 use App\Exports\Report;
 use App\Exports\ResultsReport;
+use App\Exports\WeighInFormReport;
 use App\Exports\XlsxWriter;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
@@ -96,7 +96,7 @@ class ExportController extends Controller
 
     public function confirmedWeighIn(WeightCategory $weightCategory, string $format): Response|StreamedResponse
     {
-        return $this->render(new ConfirmedWeighInReport($weightCategory->load('ageCategory.championship')), $format);
+        return $this->render(new WeighInFormReport($weightCategory->load('ageCategory.championship')), $format);
     }
 
     /** What the draw produced: one line per athlete, in draw order. */

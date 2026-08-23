@@ -19,14 +19,20 @@ use Illuminate\Support\Collection;
  *
  * The rule the federation actually runs:
  *
- *   upper bound   the category's own ceiling, inclusive
- *   lower bound   the ceiling of the category below it, less a 500-gram
- *                 tolerance
+ *   upper bound   the category's own limit plus a 500-gram tolerance
+ *   lower bound   the limit of the category below it, less the same tolerance
  *
- * So in a division of -56, -60, -66, the -60 class runs from 55.5 to 60.0.
- * 56.100, 56.200 and 56.500 all pass, which they must — an athlete who cannot
- * make -56 belongs in -60, and the tolerance is what stops a few grams of
- * breakfast from putting them in neither.
+ * So in a division of -56, -60, -66, the -60 class runs from 55.5 to 60.5. An
+ * athlete on the scale at 60.4 has made -60; at 60.6 they have not.
+ *
+ * The tolerance is on both ends, and for the same reason at each: a few grams
+ * of breakfast should not put somebody in no class at all. An athlete who
+ * cannot make -56 belongs in -60, and one who is barely over -60 has still
+ * made the weight the federation lets them make.
+ *
+ * An open class — "+90" — has no limit, so there is nothing for a tolerance to
+ * be added to. The rule is about minus categories because only they have a
+ * ceiling.
  *
  * The lower bound is derived from the division rather than stored, so adding a
  * class to a division moves the bounds of the class above it automatically and
@@ -34,7 +40,7 @@ use Illuminate\Support\Collection;
  */
 class WeightValidator
 {
-    /** Grams of grace below the nominal lower bound, expressed in kilograms. */
+    /** Grams of grace either side of the nominal bounds, in kilograms. */
     public const TOLERANCE_KG = 0.5;
 
     /**
@@ -55,9 +61,12 @@ class WeightValidator
 
         return new WeightRange(
             min: $nominalMin === null ? null : round($nominalMin - $tolerance, 3),
-            max: $max,
+            // The limit plus the tolerance: -60 accepts up to 60.5. An open
+            // class has no limit and so nothing to add to.
+            max: $max === null ? null : round($max + $tolerance, 3),
             tolerance: $tolerance,
             nominalMin: $nominalMin,
+            nominalMax: $max,
         );
     }
 
@@ -88,7 +97,13 @@ class WeightValidator
             range: $range,
             reason: $range->isUnder($kg)
                 ? __('Under :label — :kg kg is below the class.', ['label' => $category->label, 'kg' => $kg])
-                : __('Over :label — :kg kg is above the class.', ['label' => $category->label, 'kg' => $kg]),
+                // Names the tolerated ceiling rather than the class label, so
+                // an official at the scale is told the number that was missed.
+                : __('Over :label — :kg kg is above the :limit kg allowed.', [
+                    'label' => $category->label,
+                    'kg' => $kg,
+                    'limit' => rtrim(rtrim(number_format((float) $range->max, 3, '.', ''), '0'), '.'),
+                ]),
         );
     }
 

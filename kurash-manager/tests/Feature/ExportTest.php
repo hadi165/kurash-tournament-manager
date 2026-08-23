@@ -2,7 +2,6 @@
 
 use App\Exports\BracketSheet;
 use App\Exports\BracketSheetWriter;
-use App\Exports\ConfirmedWeighInReport;
 use App\Exports\DocumentReference;
 use App\Exports\DrawNumbersReport;
 use App\Exports\DrawSheetReport;
@@ -12,6 +11,7 @@ use App\Exports\HasTotal;
 use App\Exports\MedalStandingReport;
 use App\Exports\Report;
 use App\Exports\ResultsReport;
+use App\Exports\WeighInFormReport;
 use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Championship;
@@ -54,7 +54,7 @@ function weighedClass(int $count, string $gender = 'M', string $label = '-91'): 
     return $category->refresh();
 }
 
-describe('the confirmed weigh-in list', function () {
+describe('the weigh-in form', function () {
     /**
      * The specification fixes this filename because the federation files the
      * printouts by it.
@@ -62,42 +62,82 @@ describe('the confirmed weigh-in list', function () {
     it('is named by gender and weight class', function () {
         $category = weighedClass(4, 'M', '-91');
 
-        expect((new ConfirmedWeighInReport($category))->filename())->toBe('Male -91');
+        expect((new WeighInFormReport($category))->filename())->toBe('Male -91');
     });
 
     it('names a women\'s class by its own gender', function () {
         $category = weighedClass(4, 'F', '-63');
 
-        expect((new ConfirmedWeighInReport($category))->filename())->toBe('Female -63');
+        expect((new WeighInFormReport($category))->filename())->toBe('Female -63');
     });
 
     /**
-     * The whole point of this sheet: the executive team writes the draw numbers
-     * on by hand, so the column must be blank even for athletes who already
-     * hold one in the database.
+     * The sheet the referee writes on. It is printed before the scale opens,
+     * so it has to list the class when nobody has been weighed at all — which
+     * is exactly when it used to come out blank.
      */
-    it('leaves the draw number blank even when one is already assigned', function () {
+    it('lists everyone entered before a single weight is recorded', function () {
         $category = weighedClass(4);
+        // "pending" is what an athlete who has not been weighed is — the
+        // column is not nullable, and the sheet has to read it as blank.
+        $category->athletes()->update(['weighin_kg' => null, 'weighin_status' => 'pending']);
 
-        expect($category->athletes()->whereNotNull('draw_number')->count())->toBe(4);
+        $rows = (new WeighInFormReport($category->refresh()))->rows();
 
-        $rows = (new ConfirmedWeighInReport($category))->rows();
-        $drawColumn = array_column($rows, 5);
-
-        expect($drawColumn)->toBe(['', '', '', '']);
+        expect($rows)->toHaveCount(4)
+            // The space the referee writes the reading into.
+            ->and(array_column($rows, 5))->toBe(['', '', '', ''])
+            ->and(array_column($rows, 6))->toBe(['', '', '', '']);
     });
 
-    it('leaves out anyone who failed the scale', function () {
+    it('carries the weight once it has been recorded', function () {
         $category = weighedClass(4);
+        $athlete = $category->athletes()->first();
+        $athlete->update(['weighin_kg' => 59.4, 'weighin_status' => 'pass']);
+
+        $row = collect((new WeighInFormReport($category))->rows())
+            ->firstWhere(1, $athlete->ika_id);
+
+        expect($row[5])->toBe('59.4')
+            ->and($row[6])->toBe('Passed');
+    });
+
+    /**
+     * Kept on the sheet rather than dropped from it. This is what the draw
+     * numbers get written onto, and an athlete who missed the weight must not
+     * be drafted onto a draw because the paper stayed silent about them.
+     */
+    it('keeps anyone who failed the scale, and says so', function () {
+        $category = weighedClass(4);
+        $failed = $category->athletes()->first();
+        $failed->update(['weighin_status' => 'fail']);
+
+        $rows = (new WeighInFormReport($category->refresh()))->rows();
+
+        expect($rows)->toHaveCount(4)
+            ->and(collect($rows)->firstWhere(1, $failed->ika_id)[6])->toBe('Failed');
+    });
+
+    /** Weight where the draw number used to be. */
+    it('asks for a weight rather than a draw number', function () {
+        expect((new WeighInFormReport(weighedClass(2)))->headings())
+            ->toBe(["Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Country', 'Bracket Title', 'Weight', 'Result']);
+    });
+
+    /** The bracket the class will actually be drawn into. */
+    it('counts the bracket without the athletes who missed the weight', function () {
+        $category = weighedClass(5);
         $category->athletes()->limit(1)->update(['weighin_status' => 'fail']);
 
-        expect((new ConfirmedWeighInReport($category))->rows())->toHaveCount(3);
+        // Five entered is a bracket of eight; four is a bracket of four.
+        expect((new WeighInFormReport($category->refresh()))->meta()['Bracket Title'])
+            ->toBe('Semi Final');
     });
 
     it('states the bracket the field will be drawn into', function () {
-        expect((new ConfirmedWeighInReport(weighedClass(5)))->meta()['Bracket Title'])->toBe('1/4 Final')
-            ->and((new ConfirmedWeighInReport(weighedClass(12)))->meta()['Bracket Title'])->toBe('1/8 Final')
-            ->and((new ConfirmedWeighInReport(weighedClass(2)))->meta()['Bracket Title'])->toBe('Final');
+        expect((new WeighInFormReport(weighedClass(5)))->meta()['Bracket Title'])->toBe('1/4 Final')
+            ->and((new WeighInFormReport(weighedClass(12)))->meta()['Bracket Title'])->toBe('1/8 Final')
+            ->and((new WeighInFormReport(weighedClass(2)))->meta()['Bracket Title'])->toBe('Final');
     });
 });
 
@@ -468,7 +508,7 @@ describe('the draw numbers', function () {
     it('is the answer sheet, where the weigh-in list is the blank one', function () {
         $category = weighedClass(4);
 
-        $weighIn = (new ConfirmedWeighInReport($category))->rows();
+        $weighIn = (new WeighInFormReport($category))->rows();
         $numbers = (new DrawNumbersReport($category))->rows();
 
         expect(array_column($weighIn, 5))->each->toBe('')

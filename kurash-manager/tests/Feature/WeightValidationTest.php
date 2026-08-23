@@ -45,13 +45,26 @@ beforeEach(function () {
 });
 
 describe('the accepted band', function () {
-    it('runs from the class below, less the tolerance, up to its own ceiling', function () {
+    it('runs from the class below to its own limit, with the tolerance on both', function () {
         $range = $this->validator->rangeFor($this->classes['-60']);
 
         expect($range->min)->toBe(55.5)
-            ->and($range->max)->toBe(60.0)
-            ->and($range->nominalMin)->toBe(56.0);
+            // The limit plus 500 grams: -60 accepts up to 60.5.
+            ->and($range->max)->toBe(60.5)
+            ->and($range->nominalMin)->toBe(56.0)
+            ->and($range->nominalMax)->toBe(60.0);
     });
+
+    /** The tolerance the federation allows, on the scale where it is used. */
+    it('allows 500 grams over the limit of a minus class', function (string $kg, bool $accepted) {
+        expect($this->validator->check($this->classes['-60'], (float) $kg)->accepted)->toBe($accepted);
+    })->with([
+        ['60.000', true],
+        ['60.400', true],
+        ['60.500', true],
+        ['60.501', false],
+        ['60.600', false],
+    ]);
 
     /** The three readings §18 names. All three failed under the old rule. */
     it('accepts the readings the rules name for -60', function (string $kg) {
@@ -62,14 +75,16 @@ describe('the accepted band', function () {
         $category = $this->classes['-60'];
 
         expect($this->validator->check($category, 55.5)->accepted)->toBeTrue()
-            ->and($this->validator->check($category, 60.0)->accepted)->toBeTrue();
+            ->and($this->validator->check($category, 60.5)->accepted)->toBeTrue();
     });
 
-    it('rejects a weight over the ceiling', function () {
-        $verdict = $this->validator->check($this->classes['-60'], 60.001);
+    it('rejects a weight over even the tolerance', function () {
+        $verdict = $this->validator->check($this->classes['-60'], 60.501);
 
         expect($verdict->accepted)->toBeFalse()
-            ->and($verdict->reason)->toContain('above');
+            ->and($verdict->reason)->toContain('above')
+            // The number that was missed, not the class label alone.
+            ->and($verdict->reason)->toContain('60.5');
     });
 
     it('rejects a weight below even the tolerance', function () {
@@ -77,7 +92,7 @@ describe('the accepted band', function () {
 
         expect($verdict->accepted)->toBeFalse()
             ->and($verdict->reason)->toContain('below')
-            ->and($verdict->range->label())->toBe('55.5 – 60 kg');
+            ->and($verdict->range->label())->toBe('55.5 – 60.5 kg');
     });
 
     it('gives the lightest class in a division no floor at all', function () {
@@ -85,14 +100,16 @@ describe('the accepted band', function () {
 
         // The lightest athletes have to land somewhere.
         expect($range->min)->toBeNull()
-            ->and($range->max)->toBe(56.0)
+            ->and($range->max)->toBe(56.5)
             ->and($this->validator->check($this->classes['-56'], 41.2)->accepted)->toBeTrue();
     });
 
+    /** Nothing to add a tolerance to, because there is no limit. */
     it('gives an open class a floor and no ceiling', function () {
         $range = $this->validator->rangeFor($this->open);
 
         expect($range->min)->toBe(72.5)
+            ->and($range->nominalMax)->toBeNull()
             ->and($range->max)->toBeNull()
             ->and($this->validator->check($this->open, 140.0)->accepted)->toBeTrue()
             ->and($this->validator->check($this->open, 72.4)->accepted)->toBeFalse();
@@ -178,7 +195,7 @@ describe('at the scale', function () {
 
         // The band on screen, not just the refusal: an official at the scale
         // needs to be able to say what the athlete needed.
-        $component->assertSee('55.5 – 60 kg')
+        $component->assertSee('55.5 – 60.5 kg')
             ->assertSee('above');
     });
 });
