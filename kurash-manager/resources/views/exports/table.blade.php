@@ -307,7 +307,10 @@
                 ? $value
                 : (preg_match('/\(([A-Za-z]{3})\)\s*$/', $value, $found) ? $found[1] : null);
 
-            return $code !== null ? \App\Support\Noc::flagPath($code) : null;
+            // The print-safe copy, not the original: Dompdf establishes no
+            // viewport for an SVG, so a flag whose artwork reaches outside its
+            // own box prints across the page and over the names underneath.
+            return $code !== null ? \App\Support\PrintFlag::path($code) : null;
         };
 
         // The specification fixes this vocabulary, so the template can read it.
@@ -338,7 +341,7 @@
                                      header holds its shape either way rather than
                                      collapsing to a bare line of text. --}}
                                 @if ($printLogo)
-                                    <span class="chip"><img src="{{ $printLogo }}" alt="" style="height: 38px;"></span>
+                                    <span class="chip"><img src="{{ $printLogo }}" alt="" style="height: 52px;"></span>
                                 @else
                                     <span class="chip chip-text">{{ config('branding.short_name') }}</span>
                                 @endif

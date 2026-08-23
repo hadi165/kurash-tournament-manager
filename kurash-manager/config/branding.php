@@ -11,11 +11,8 @@ return [
     /*
      | Printed at the foot of every PDF, in the same place on every sheet: a
      | page that leaves the venue should say who produced it.
-     |
-     | Defaults to the federation's own name so nothing prints an empty line
-     | before anybody has configured it.
      */
-    'company' => env('BRANDING_COMPANY', env('BRANDING_ORGANISATION', 'International Kurash Association')),
+    'company' => env('BRANDING_COMPANY', 'Arvangroup'),
 
     /*
      | Path to the official logo, relative to public/.
@@ -31,5 +28,13 @@ return [
      */
     'logo' => env('BRANDING_LOGO', 'images/logo.png'),
 
-    'logo_print' => env('BRANDING_LOGO_PRINT', 'images/logo.png'),
+    /*
+     | The mark for paper.
+     |
+     | SVG rather than the PNG beside it: Dompdf rasterises PNG through the GD
+     | extension and throws mid-render without it, so on a server with no GD
+     | the PNG is skipped and every sheet prints unmarked. SVG goes through
+     | Dompdf's own parser and needs nothing.
+     */
+    'logo_print' => env('BRANDING_LOGO_PRINT', 'images/logo.svg'),
 ];

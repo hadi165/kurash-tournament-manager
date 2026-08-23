@@ -7,6 +7,7 @@ use App\Exports\MedalStandingReport;
 use App\Exports\ResultDocument;
 use App\Exports\ResultsReport;
 use App\Exports\WeighInFormReport;
+use App\Support\PrintFlag;
 use App\Support\PrintLogo;
 
 /**
@@ -23,8 +24,8 @@ function sheet(array $overrides = []): string
         'meta' => ['Competition' => 'Asian Kurash 2026'],
         'headings' => ['No.', 'Blue', 'NOC', 'Winner'],
         'rows' => [
-            [1, 'Rustam Kamolov (UZB)', 'KAZ', 'Rustam Kamolov'],
-            [2, 'Aziz Turaev (TJK)', 'IRI', 'Aziz Turaev'],
+            [1, 'Rustam Kamolov (UZB)', 'TUR', 'Rustam Kamolov'],
+            [2, 'Aziz Turaev (TJK)', 'IND', 'Aziz Turaev'],
         ],
         'documentTag' => 'Running order',
         'documentReference' => 'FO-1',
@@ -103,7 +104,7 @@ describe('the furniture on every sheet', function () {
 describe('the nations on a sheet', function () {
     /** A column headed NOC holds the code on its own. */
     it('flies a flag beside a code in an NOC column', function () {
-        expect(sheet())->toContain('flags/kz.svg')->toContain('flags/ir.svg');
+        expect(sheet())->toContain('flags/tr.svg')->toContain('flags/in.svg');
     });
 
     /**
@@ -131,5 +132,29 @@ describe('the nations on a sheet', function () {
         ]);
 
         expect($html)->not->toContain('class="flag"');
+    });
+
+    /**
+     * Sixteen flags draw outside the box Dompdf gives them — Kazakhstan across
+     * a whole running order, over the names underneath. Nothing bounds them:
+     * overflow, background images and clip paths were all tried. So their code
+     * prints alone, because a gap in a column is a smaller fault than a flag
+     * drawn over the results.
+     */
+    it('prints no flag for artwork that will not stay in its box', function () {
+        $html = sheet([
+            'headings' => ['NOC'],
+            'rows' => [['KAZ'], ['IRI'], ['AFG']],
+        ]);
+
+        expect($html)->not->toContain('class="flag"')
+            // The code is still there; only the artwork is missing.
+            ->and($html)->toContain('KAZ');
+    });
+
+    it('names those flags as data rather than deciding case by case', function () {
+        expect(PrintFlag::UNBOUNDED)->toContain('kz', 'ir', 'af', 'gd', 'hn')
+            ->and(PrintFlag::path('KAZ'))->toBeNull()
+            ->and(PrintFlag::path('UZB'))->toEndWith('flags/uz.svg');
     });
 });
