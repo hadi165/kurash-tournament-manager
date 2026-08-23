@@ -202,6 +202,10 @@ Route::middleware(['auth', 'verified', 'can:access-admin'])->group(function () {
         Route::get('weight-classes/{weightCategory}/draw-numbers.{format}', [ExportController::class, 'drawNumbers'])->name('draw-numbers');
 
         Route::get('championships/{championship}/fight-order.{format}', [ExportController::class, 'fightOrder'])->name('fight-order');
+        // The list the hotel and the organising team work from, whole or for
+        // one delegation: ?noc=UZB.
+        Route::get('championships/{championship}/athletes.{format}', [ExportController::class, 'athletes'])->name('athletes');
+
         Route::get('championships/{championship}/entries-by-noc.{format}', [ExportController::class, 'entriesByNoc'])->name('entries-noc');
         Route::get('championships/{championship}/entries-by-weight.{format}', [ExportController::class, 'entriesByWeight'])->name('entries-weight');
         Route::get('championships/{championship}/results.{format}', [ExportController::class, 'results'])->name('results');

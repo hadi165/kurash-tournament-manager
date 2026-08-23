@@ -14,12 +14,19 @@
 
     // Column widths are fixed: this is 1920×1080 furniture read from the back
     // of a hall, not a responsive page.
-    $columns = '300px repeat('.max(1, $rounds).', 150px) 210px';
+    // The draw column carries a full name, a flag and a code. It was 300,
+    // which fitted the flag in by pushing the end of the name off the board.
+    $columns = '390px repeat('.max(1, $rounds).', 150px) 210px';
 @endphp
 
 <div
     wire:poll.2s
-    class="dc dc-board-page {{ $size >= 32 ? 'dc-board-32' : '' }} {{ $complete ? 'dc-complete' : '' }}"
+    class="dc dc-board-page {{ $complete ? 'dc-complete' : '' }}"
+    {{-- How many seats there are to fit. The stylesheet divides what is left
+         of the viewport by this rather than guessing from the bracket size,
+         which is how a draw of sixteen came to have five of its rows below
+         the bottom of a laptop screen. --}}
+    style="--dc-seats: {{ max(1, $size) }}"
     x-data="{
         seen: Date.now(),
         stale: false,
@@ -58,6 +65,19 @@
 >
     <header class="dc-head">
         <div class="dc-head-id">
+            {{-- The way back to the list of classes waiting to be drawn.
+                 Only on the operator's copy: a board on a wall has nowhere to
+                 navigate to and nobody standing at it to press this. --}}
+            @if ($ceremony)
+                <a class="dc-home"
+                   href="{{ route('entries.index', $championship) }}"
+                   title="{{ __('Back to the classes waiting to be drawn') }}"
+                   wire:navigate>
+                    <span aria-hidden="true">←</span>
+                    {{ __('All classes') }}
+                </a>
+            @endif
+
             @if ($hasBrandLogo)
                 <span class="dc-logo">
                     <img src="{{ asset($brandLogo) }}" alt="{{ config('branding.short_name') }}">
@@ -162,7 +182,25 @@
                     <div class="dc-pool-row" wire:key="pool-{{ $entry['noc'] }}">
                         <span class="dc-pool-noc">{{ $entry['noc'] }}</span>
                         <span class="dc-pool-name">{{ $entry['name'] }}</span>
-                        <span class="dc-pool-count">{{ $entry['count'] }}</span>
+
+                        {{-- A plain img with a ceremony class, not the shared
+                             flag component: this screen loads the ceremony
+                             stylesheet and none of the application's, so a
+                             utility class here would name a rule that is not
+                             there and the flag would come out unsized. --}}
+                        @if ($entry['iso'])
+                            <img class="dc-pool-flag"
+                                 src="{{ asset('flags/'.$entry['iso'].'.svg') }}"
+                                 alt="{{ $entry['name'] ?? $entry['noc'] }}"
+                                 title="{{ $entry['name'] ?? $entry['noc'] }}">
+                        @else
+                            {{-- A delegation competing without one, or a code
+                                 this system does not know. The box stays so the
+                                 column does not collapse around it. --}}
+                            <span class="dc-pool-flag dc-pool-flag--none"
+                                  title="{{ $entry['noc'] }}"
+                                  aria-hidden="true"></span>
+                        @endif
                     </div>
                 @empty
                     <div class="dc-pool-empty">{{ __('Every position has been drawn.') }}</div>
@@ -195,6 +233,15 @@
 
                             @if ($seat['athlete'])
                                 <span class="dc-seat-name">{{ $seat['athlete']->fullname }}</span>
+
+                                @if ($seat['iso'])
+                                    <img class="dc-seat-flag"
+                                         src="{{ asset('flags/'.$seat['iso'].'.svg') }}"
+                                         alt="{{ \App\Support\Noc::normalise($seat['athlete']->noc_code) }}">
+                                @else
+                                    <span class="dc-seat-flag dc-pool-flag--none" aria-hidden="true"></span>
+                                @endif
+
                                 <span class="dc-seat-noc">{{ \App\Support\Noc::normalise($seat['athlete']->noc_code) }}</span>
                             @else
                                 <span class="dc-seat-name dc-seat-empty">—</span>

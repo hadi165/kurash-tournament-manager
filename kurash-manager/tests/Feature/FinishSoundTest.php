@@ -203,6 +203,43 @@ it('marks a contest already decided as already sounded', function () {
         ->and($html)->toContain('bout: '.$bout->id);
 });
 
+/**
+ * The two attributes the buzzer actually watches. It reads them off the
+ * element on its own clock rather than through a reactive expression, so if
+ * they stop being rendered the sound stops with them and nothing else breaks
+ * to say so.
+ */
+it('states what is on screen where the buzzer can read it', function () {
+    [$court, $bout] = boutOnMat();
+
+    $html = Livewire::test(Scoreboard::class, ['court' => $court])->html();
+
+    expect($html)->toContain('data-bout="'.$bout->id.'"')
+        ->and($html)->toContain('data-decided="0"');
+
+    $bout->update([
+        'status' => Bout::STATUS_COMPLETED,
+        'winner_athlete_id' => $bout->athlete_a_id,
+        'win_type' => 'khalol',
+    ]);
+
+    expect(Livewire::test(Scoreboard::class, ['court' => $court->refresh()])->html())
+        ->toContain('data-decided="1"');
+});
+
+/**
+ * Fetched from whatever served the page. asset() builds from APP_URL, which is
+ * the address the server was started on: a board opened at 127.0.0.1 would be
+ * sent to the LAN address for its buzzer, across an origin, from a host that
+ * machine may not be able to reach at all.
+ */
+it('asks for the sound from the host the board came from', function () {
+    [$court] = boutOnMat();
+
+    expect(Livewire::test(Scoreboard::class, ['court' => $court])->html())
+        ->toContain("src: '\\/sounds\\/match-end01.wav'");
+});
+
 it('leaves a live contest unsounded', function () {
     [$court, $bout] = boutOnMat();
 

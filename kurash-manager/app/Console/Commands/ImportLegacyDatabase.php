@@ -87,7 +87,7 @@ class ImportLegacyDatabase extends Command
             $this->error('Import failed and was rolled back — nothing was written.');
             $this->line('  '.$e->getMessage());
 
-            if (str_contains($e->getMessage(), 'athletes_ika_id_unique')) {
+            if (str_contains($e->getMessage(), 'athletes_championship_ika_unique')) {
                 $this->newLine();
                 $this->warn('That IKA ID is already in the target database. Re-run with --fresh to replace the existing import.');
             }
@@ -207,7 +207,9 @@ class ImportLegacyDatabase extends Command
             ]);
 
             if (! $row['ika_id']) {
-                Athlete::assignIkaId($athlete);
+                $athlete->forceFill([
+                    'ika_id' => Athlete::nextIkaId((int) $athlete->championship_id),
+                ])->save();
             }
 
             $counts['Athletes']++;

@@ -110,77 +110,178 @@ document.addEventListener('alpine:init', () => {
  * for as long as the result stayed up.
  */
 document.addEventListener('alpine:init', () => {
-    window.Alpine.data('finishBell', ({ src = '', bout = null, decided = false }) => ({
-        // Browsers refuse to play audio on a page nobody has touched. A board
-        // on a projector may never be touched, so this is surfaced rather than
-        // failing quietly — the operator gets something to press.
-        armed: false,
-        sounded: decided ? bout : null,
-
-        init() {
-            if (!src) {
-                return
-            }
-
-            this.audio = new Audio(src)
-            this.audio.preload = 'auto'
-
-            // Any interaction anywhere on the page counts, including the ones
-            // the operator was going to make anyway.
-            const unlock = () => this.arm()
-
-            document.addEventListener('pointerdown', unlock, { once: true })
-            document.addEventListener('keydown', unlock, { once: true })
-        },
-
-        /** Play once, silently, which is what a browser accepts as consent. */
-        arm() {
-            if (!this.audio || this.armed) {
-                return
-            }
-
-            const wasMuted = this.audio.muted
-            this.audio.muted = true
-
-            this.audio.play().then(() => {
-                this.audio.pause()
-                this.audio.currentTime = 0
-                this.audio.muted = wasMuted
-                this.armed = true
-            }).catch(() => {
-                this.audio.muted = wasMuted
-            })
-        },
-
-        /**
-         * Called on every render with what is on screen. Everything about not
-         * repeating lives here rather than at the call sites, so a second
-         * screen cannot get it subtly different.
+    window.Alpine.data('finishBell', ({ src = '', bout = null, decided = false }) => {
+        /*
+         * Held in the closure, deliberately not on the returned object.
+         *
+         * Alpine wraps its data in a reactive proxy, and an HTMLAudioElement
+         * put inside one is proxied with it — after which play() is being
+         * called on the proxy rather than on the element, and the browser
+         * refuses it as an illegal invocation. Which is exactly as silent as
+         * having no sound at all, and looks the same from the hall.
          */
-        watch(boutId, isDecided) {
-            if (!isDecided) {
-                // Back to an undecided contest — the next end is a new one,
-                // including the same bout reopened and decided again.
-                this.sounded = null
+        let audio = null
+        let poll = null
 
-                return
-            }
+        return {
+            // Browsers refuse to play audio on a page nobody has touched. A
+            // board on a projector may never be touched, so this is surfaced
+            // rather than failing quietly — the operator gets something to
+            // press.
+            armed: false,
+            sounded: decided ? bout : null,
 
-            if (boutId === null || this.sounded === boutId) {
-                return
-            }
+            init() {
+                if (!src) {
+                    return
+                }
 
-            this.sounded = boutId
-            this.ring()
-        },
+                audio = new Audio(src)
+                audio.preload = 'auto'
 
-        ring() {
-            if (!this.audio) {
-                return
-            }
+                // Fetched now rather than at the whistle. A buzzer that starts
+                // downloading a megabyte when the contest ends is a buzzer
+                // that sounds late, and its absence from the network log is
+                // the first thing anybody looks for when it does not sound at
+                // all.
+                audio.load()
 
-            this.audio.currentTime = 0
-            this.audio.play().catch(() => { this.armed = false })
-        },
-    }))
+                console.info('[kurash] end-of-contest sound loaded:', src)
+
+                // Any interaction anywhere on the page counts, including the
+                // ones the operator was going to make anyway.
+                const unlock = () => this.arm()
+
+                document.addEventListener('pointerdown', unlock)
+                document.addEventListener('keydown', unlock)
+
+                // Watched on its own clock rather than through a reactive
+                // expression. The board is re-rendered by Livewire every
+                // couple of seconds and the attributes below are rewritten
+                // with it; reading them four times a second is the one way of
+                // noticing that does not depend on how a morph is applied.
+                poll = setInterval(() => this.read(), 250)
+                this.read()
+            },
+
+            destroy() {
+                clearInterval(poll)
+            },
+
+            read() {
+                const id = this.$el.dataset.bout
+
+                this.watch(
+                    id === '' || id === undefined ? null : Number(id),
+                    this.$el.dataset.decided === '1',
+                )
+            },
+
+            /**
+             * Pressed deliberately, so it answers audibly. Clipped short: the
+             * question being asked is whether this machine makes a noise, and
+             * the whole buzzer is a long way to go to say yes.
+             */
+            test() {
+                if (!audio) {
+                    return
+                }
+
+                this.armed = true
+                audio.muted = false
+                audio.currentTime = 0
+
+                audio.play().then(() => {
+                    setTimeout(() => {
+                        audio.pause()
+                        audio.currentTime = 0
+                    }, 900)
+                }).catch((error) => {
+                    this.armed = false
+                    console.warn('[kurash] could not play the end-of-contest sound:', error)
+                })
+            },
+
+            /** Play once, silently, which is what a browser accepts as consent. */
+            arm() {
+                if (!audio || this.armed) {
+                    return
+                }
+
+                audio.muted = true
+
+                audio.play().then(() => {
+                    audio.pause()
+                    audio.currentTime = 0
+                    audio.muted = false
+                    this.armed = true
+                }).catch((error) => {
+                    audio.muted = false
+
+                    // Said out loud rather than swallowed. This failing is
+                    // indistinguishable from having no sound configured, and
+                    // the last time it failed it took a while to find.
+                    console.warn('[kurash] could not arm the end-of-contest sound:', error)
+                })
+            },
+
+            /**
+             * Called on every read with what is on screen. Everything about
+             * not repeating lives here rather than at the call sites, so a
+             * second screen cannot get it subtly different.
+             */
+            watch(boutId, isDecided) {
+                if (!isDecided) {
+                    // Back to an undecided contest — the next end is a new
+                    // one, including the same bout reopened and decided again.
+                    this.sounded = null
+
+                    return
+                }
+
+                if (boutId === null || this.sounded === boutId) {
+                    return
+                }
+
+                this.sounded = boutId
+                this.ring()
+            },
+
+            ring() {
+                if (!audio) {
+                    return
+                }
+
+                audio.currentTime = 0
+
+                audio.play().catch((error) => {
+                    this.armed = false
+                    console.warn('[kurash] could not sound the end of the contest:', error)
+                })
+            },
+        }
+    })
+
+    /**
+     * Auditioning a buzzer on the mat screen. Same reason the element is held
+     * in the closure: a proxied media element is one that will not play.
+     */
+    window.Alpine.data('soundPreview', () => {
+        let playing = null
+
+        return {
+            play(src) {
+                // Stopped before the next one starts, or holding the button
+                // lays them over each other.
+                if (playing) {
+                    playing.pause()
+                }
+
+                playing = new Audio(src)
+                playing.play().catch((error) => {
+                    console.warn('[kurash] could not play that sound:', error)
+                })
+            },
+        }
+    })
 })

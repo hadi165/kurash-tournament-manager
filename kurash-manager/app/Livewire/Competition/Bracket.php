@@ -325,12 +325,18 @@ class Bracket extends Component
 
                 // The metadata described rows that no longer exist, and a
                 // deleted draw is certainly not a published one.
+                //
+                // The lock goes with it. It says "do not draw this class
+                // again", and it outlived the draw it was protecting — which
+                // left the class refusing to be redrawn over a bracket that
+                // was no longer there.
                 $this->weightCategory->forceFill([
                     'draw_generated_at' => null,
                     'draw_athlete_count' => null,
                     'draw_bucket_size' => null,
                     'draw_bye_count' => null,
                     'draw_published_at' => null,
+                    'draw_locked_at' => null,
                 ])->save();
             });
         } catch (Throwable $e) {

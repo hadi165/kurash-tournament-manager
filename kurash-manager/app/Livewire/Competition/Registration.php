@@ -66,6 +66,16 @@ class Registration extends Component
 
     public string $search = '';
 
+    /**
+     * Which delegation the athlete list is exported for. Blank is everybody's,
+     * one nation after another.
+     *
+     * Separate from the search box: search narrows what is on screen while
+     * somebody looks for a name, and this decides what leaves the building on
+     * a sheet for the hotel.
+     */
+    public string $exportNoc = '';
+
     /*
      |--------------------------------------------------------------------------
      | Importing a delegation
@@ -417,6 +427,30 @@ class Registration extends Component
     }
 
     /**
+     * The nations entered in this championship, in code order.
+     *
+     * The whole championship rather than this competition: the hotel is
+     * housing a delegation, not a weight class, and the men and the women
+     * arrive on the same coach.
+     *
+     * @return array<string, string>
+     */
+    public function delegations(): array
+    {
+        return $this->championship->athletes()
+            ->whereNotNull('noc_code')
+            ->distinct()
+            ->orderBy('noc_code')
+            ->pluck('noc_code')
+            ->mapWithKeys(function (string $code) {
+                $code = Noc::normalise($code) ?? $code;
+
+                return [$code => $code.' — '.(Noc::name($code) ?? $code)];
+            })
+            ->all();
+    }
+
+    /**
      * Every athlete in this competition, across its age groups.
      *
      * @return HasMany<Athlete, Championship>
@@ -442,6 +476,9 @@ class Registration extends Component
         return view('livewire.competition.registration', [
             'athletes' => $athletes,
             'divisions' => $this->divisions(),
+            // The nations actually entered, so the chooser offers the ones
+            // there is a list to make rather than all two hundred.
+            'delegations' => $this->delegations(),
             // Two hundred entries, handed over once. A round trip per
             // keystroke would be slower than the answer.
             'nations' => Noc::all(),

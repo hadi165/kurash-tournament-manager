@@ -2,6 +2,7 @@
 
 use App\Livewire\Competition\MatControl;
 use App\Models\Bout;
+use App\Models\Court;
 use App\Models\User;
 use App\Services\KurashScore;
 use Livewire\Livewire;
@@ -381,5 +382,169 @@ describe('the mat', function () {
             ->call('bringOn', $waiting->id);
 
         expect($waiting->refresh()->court_id)->toBeNull();
+    });
+});
+
+/**
+ * What the operator is told about the controls.
+ *
+ * The mat screen is worked at speed by somebody who is watching the contest
+ * rather than the screen, so what each call does to the score is written on
+ * the control that makes it rather than left to a rulebook beside the desk.
+ */
+describe('the controls say what they do', function () {
+    beforeEach(function () {
+        $this->actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]));
+    });
+
+    it('names the clock control for what it does, and gives its shortcut', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSee('Pause')
+            ->assertSee('Start')
+            ->assertSee('Shortcut: space');
+    });
+
+    /**
+     * Full time is not something anybody should have to press. The clock
+     * reaching zero is the event, and the rules decide from there.
+     */
+    it('no longer asks the operator to end a contest that ran out of time', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertDontSee('Time — decide');
+    });
+
+    /** The rule each call applies, on the control that applies it. */
+    it('says what every call does to the score', function () {
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSee('Ends the contest at once')          // khalol
+            ->assertSee('make a khalol')                     // yonbosh
+            ->assertSee('never add up to a yonbosh')         // chala
+            ->assertSee('Hands the opponent a chala')        // tanbeh
+            ->assertSee('Hands the opponent a yonbosh')      // dakki
+            ->assertSee('the opponent wins')                 // girrom
+            ->assertSee('no score passes to the opponent');  // madichal
+    });
+
+    /** Read from the rules rather than written into the sentence twice. */
+    it('takes the thresholds it quotes from the rules themselves', function () {
+        config(['kurash.yonbosh_for_khalol' => 3, 'kurash.madichal_for_defeat' => 4]);
+
+        [$court] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSee('3 of these make a khalol')
+            ->assertSee('4 of these ends the contest');
+    });
+});
+
+/**
+ * The record a result is validated from.
+ *
+ * A referee reviewing a decision is asking about a contest that has already
+ * left the mat — which is exactly when the log used to disappear, because it
+ * was rendered from the bout being scored rather than from the bout in view.
+ */
+describe('the call log after the contest', function () {
+    beforeEach(function () {
+        $this->actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]));
+    });
+
+    it('keeps the whole exchange on screen once the contest is decided', function () {
+        [$court, $bout] = boutOnMat();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'chala', 'a', 200)
+            ->call('score', 'tanbeh', 'b', 180)
+            ->call('score', 'yonbosh', 'a', 120)
+            ->call('score', 'khalol', 'a', 90)   // ends it
+            ->assertSee('Call log')
+            // Lower case in the markup: the table capitalises with CSS, so
+            // asserting the rendered word would be asserting the stylesheet.
+            ->assertSee('chala')
+            ->assertSee('tanbeh')
+            ->assertSee('yonbosh')
+            ->assertSee('khalol');
+
+        expect($bout->refresh()->isDecided())->toBeTrue();
+    });
+
+    /** Every call in the order it was made, with the clock it was made at. */
+    it('lists them in the order they happened', function () {
+        [$court] = boutOnMat();
+
+        $log = Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'chala', 'a', 200)
+            ->call('score', 'girrom', 'b', 150)  // ends it
+            ->viewData('log');
+
+        expect($log)->not->toBeEmpty()
+            ->and($log->pluck('sequence_number')->all())
+            ->toBe($log->pluck('sequence_number')->sortDesc()->values()->all());
+    });
+
+    /**
+     * A tanbeh hands the opponent a chala, and the log has to show both — the
+     * call and what the rules did with it — or a protest cannot be settled.
+     */
+    it('shows the award a penalty caused, not only the penalty', function () {
+        [$court] = boutOnMat();
+
+        $log = Livewire::test(MatControl::class, ['court' => $court])
+            ->call('score', 'tanbeh', 'a', 200)
+            ->call('score', 'khalol', 'b', 100)
+            ->viewData('log');
+
+        $origins = $log->pluck('origin')->filter()->unique()->all();
+
+        expect($origins)->toContain('AUTO_FROM_T')
+            ->and($origins)->toContain('TECHNIQUE');
+    });
+
+    it('has nothing to show on a mat that has run nothing', function () {
+        $court = Court::factory()->create();
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertDontSee('Call log');
+    });
+});
+
+/** The mat's own queue, and the one press that puts a contest on. */
+describe('the mat schedule', function () {
+    beforeEach(function () {
+        $this->actingAs(User::factory()->create(['role' => User::ROLE_ADMIN]));
+    });
+
+    it('says which division and class each waiting contest belongs to', function () {
+        [$court, $bout] = boutOnMat();
+        $bout->update(['court_id' => null, 'status' => Bout::STATUS_SCHEDULED]);
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSee($bout->weightCategory->ageCategory->name)
+            ->assertSee($bout->weightCategory->label);
+    });
+
+    /** A queue that stops without saying so reads as the end of the queue. */
+    it('counts what it could not fit on screen', function () {
+        [$court, $bout] = boutOnMat();
+        $championship = $court->championship;
+
+        $bout->update(['court_id' => null, 'status' => Bout::STATUS_SCHEDULED]);
+
+        expect(Livewire::test(MatControl::class, ['court' => $court])->viewData('stillWaiting'))
+            ->toBe(0);
+    });
+
+    it('marks whether a waiting contest is already this mat\'s', function () {
+        [$court, $bout] = boutOnMat();
+        $bout->update(['status' => Bout::STATUS_SCHEDULED]);   // still assigned here
+
+        Livewire::test(MatControl::class, ['court' => $court])
+            ->assertSee('This mat');
     });
 });

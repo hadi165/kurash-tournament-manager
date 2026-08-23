@@ -1,6 +1,6 @@
 {
   "resources/css/app.css": {
-    "file": "assets/app-CiLPRnOn.css",
+    "file": "assets/app-U4Hv-GAa.css",
     "name": "app",
     "names": [
       "app.css"
@@ -9,7 +9,7 @@
     "isEntry": true
   },
   "resources/css/ceremony.css": {
-    "file": "assets/ceremony-9UAG6RLs.css",
+    "file": "assets/ceremony-CCK7BHdG.css",
     "name": "ceremony",
     "names": [
       "ceremony.css"
@@ -18,7 +18,7 @@
     "isEntry": true
   },
   "resources/js/app.js": {
-    "file": "assets/app-Cv-TT2jk.js",
+    "file": "assets/app-nEyxjLia.js",
     "name": "app",
     "src": "resources/js/app.js",
     "isEntry": true

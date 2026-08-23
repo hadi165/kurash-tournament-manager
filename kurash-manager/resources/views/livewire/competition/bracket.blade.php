@@ -188,8 +188,8 @@
                     >{{ __('Replace the published draw') }}</flux:button>
                 @endif
 
-                @if ($bouts->isNotEmpty())
-                    @can('draw.publish')
+                @can('draw.publish')
+                    @if ($bouts->isNotEmpty())
                         @if ($weightCategory->isDrawPublished())
                             <flux:button variant="ghost" wire:click="withdrawDraw"
                                          wire:confirm="{{ __('Withdraw this draw? Operators will no longer be able to present it.') }}">
@@ -198,12 +198,18 @@
                         @else
                             <flux:button wire:click="publishDraw">{{ __('Publish to operators') }}</flux:button>
                         @endif
+                    @endif
 
+                    {{-- Shown whenever the class is locked, bracket or no
+                         bracket. A lock is the one control that must never be
+                         out of reach: the screen that refuses to draw has to
+                         be the screen that lets you allow it. --}}
+                    @if ($bouts->isNotEmpty() || $weightCategory->isDrawLocked())
                         <flux:button variant="ghost" wire:click="toggleDrawLock">
                             {{ $weightCategory->isDrawLocked() ? __('Unlock draw') : __('Lock draw') }}
                         </flux:button>
-                    @endcan
-                @endif
+                    @endif
+                @endcan
 
                 {{-- The way out of "cannot remove: a bracket has already been
                      drawn". Delete, correct the entry list, draw again — the

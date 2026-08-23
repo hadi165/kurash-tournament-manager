@@ -5,6 +5,7 @@ use App\Livewire\Competition\DrawCeremony;
 use App\Models\User;
 use App\Services\BracketGenerator;
 use App\Support\BracketSeeding;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Livewire\Livewire;
@@ -520,5 +521,184 @@ describe('the component is bound to its markup', function () {
             ->map(fn ($file) => $file->getRelativePathname());
 
         expect($offenders)->toBeEmpty();
+    });
+});
+
+/**
+ * The pot, as the hall reads it.
+ *
+ * A three-letter code is not something a room full of delegations reads at a
+ * glance; a flag is. So the sidebar carries the nation's own artwork beside
+ * its code rather than a number only the operator has any use for.
+ */
+describe('the pool sidebar', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+
+        $this->operator = User::factory()->official()->create();
+
+        // Nothing revealed yet, so everybody is still in the pot.
+        Cache::forget(DrawCeremony::paceKey($this->category->id));
+    });
+
+    /** @return Collection<int, array<string, mixed>> */
+    function poolOf(mixed $category, mixed $operator)
+    {
+        return Livewire::actingAs($operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $category, 'ceremony' => true])
+            ->viewData('pool');
+    }
+
+    it('carries a flag for every nation still to be drawn', function () {
+        $pool = poolOf($this->category, $this->operator);
+
+        expect($pool)->not->toBeEmpty();
+
+        foreach ($pool as $entry) {
+            expect($entry)->toHaveKeys(['noc', 'name', 'iso']);
+        }
+    });
+
+    /**
+     * Resolved from the code rather than derived from it. BRN is Bahrain and
+     * BRU is Brunei, and no rule turns one into the other.
+     */
+    it('resolves the flag through the code table, not by guessing', function () {
+        $this->category->athletes()->update(['noc_code' => 'BRN']);
+
+        expect(poolOf($this->category, $this->operator)->first()['iso'])->toBe('bh');
+    });
+
+    /** The board carries the flag beside the code, seat by seat. */
+    it('flies a flag on every seat that has been filled', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['revealed' => 8],
+            now()->addHour(),
+        );
+
+        $seats = Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->viewData('seats');
+
+        $filled = collect($seats)->filter(fn (array $seat) => $seat['athlete'] !== null);
+
+        expect($filled)->not->toBeEmpty()
+            ->and($filled->every(fn (array $seat) => $seat['iso'] !== null))->toBeTrue();
+    });
+
+    /** An empty seat has no nation to fly. */
+    it('leaves an undrawn seat without one', function () {
+        $seats = Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+            ->viewData('seats');
+
+        expect(collect($seats)->every(fn (array $seat) => $seat['iso'] === null))->toBeTrue();
+    });
+
+    /**
+     * The whole name. It is not shortened anywhere on the way to the board —
+     * what limits it is the width of the column, which is the stylesheet's
+     * business and not this one's.
+     */
+    it('puts the athlete\'s full name on the board', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['revealed' => 8],
+            now()->addHour(),
+        );
+
+        $athlete = $this->category->drawnAthletes()->first();
+        $athlete->update(['fullname' => 'Bekzod Yuldashev Rakhmatovich']);
+
+        Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category->refresh(), 'ceremony' => true])
+            ->assertSee('Bekzod Yuldashev Rakhmatovich');
+    });
+
+    /** A code with no artwork keeps its row rather than collapsing it. */
+    it('leaves a nation with no flag a box of its own', function () {
+        $this->category->athletes()->update(['noc_code' => 'ZZZ']);
+
+        expect(poolOf($this->category, $this->operator)->first()['iso'])->toBeNull();
+    });
+});
+
+/**
+ * A draw is run class after class, so the screen that runs one has to be the
+ * screen you leave to reach the next.
+ */
+describe('finding the next class', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+    });
+
+    /**
+     * Entries and Draw, which is the list of classes with their state — the
+     * one screen that says which is drawn and which is still waiting.
+     */
+    it('sends whoever is running it back to entries and draw', function () {
+        $championship = $this->category->ageCategory->championship;
+
+        foreach ([User::factory()->official()->create(), User::factory()->create(['role' => 'admin'])] as $user) {
+            Livewire::actingAs($user)
+                ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
+                ->assertSee('All classes')
+                ->assertSee(route('entries.index', $championship), false);
+        }
+    });
+
+    /** A board on a wall has nowhere to navigate to and nobody to press it. */
+    it('offers nothing of the kind on the venue board', function () {
+        Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category])
+            ->assertDontSee('All classes');
+    });
+});
+
+/**
+ * The whole draw, on whatever screen it is opened on.
+ *
+ * The board used to pick a row height from the bracket size — 46px, or 30px
+ * once there were thirty-two seats. That fitted a 1080 projector and put the
+ * bottom of a sixteen-draw below the fold of a laptop, where nothing scrolled
+ * to reach it. The stylesheet divides the viewport by this instead.
+ */
+describe('the board fits the screen it is on', function () {
+    it('tells the stylesheet how many seats there are to fit', function () {
+        [$category] = categoryWithAthletes(12);
+        app(BracketGenerator::class)->generate($category);
+        $category->forceFill(['draw_published_at' => now()])->save();
+
+        // Twelve athletes are drawn into a bracket of sixteen, and it is the
+        // seats that have to fit, not the entries.
+        Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $category->refresh()])
+            ->assertViewHas('size', 16)
+            ->assertSee('--dc-seats: 16', false);
+    });
+
+    it('counts a smaller bracket down rather than up', function () {
+        [$category] = categoryWithAthletes(5);
+        app(BracketGenerator::class)->generate($category);
+
+        Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $category->refresh()])
+            ->assertSee('--dc-seats: 8', false);
+    });
+
+    /** A class with nothing drawn still has to render something sane. */
+    it('never divides by nothing', function () {
+        [$category] = categoryWithAthletes(0);
+
+        Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $category])
+            ->assertSee('--dc-seats: 1', false);
     });
 });

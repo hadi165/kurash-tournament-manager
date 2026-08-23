@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Exports\AccreditationCards;
+use App\Exports\AthleteListReport;
 use App\Exports\BracketSheet;
 use App\Exports\BracketSheetWriter;
 use App\Exports\CertificateSheet;
@@ -24,6 +25,7 @@ use App\Models\Athlete;
 use App\Models\Championship;
 use App\Models\WeightCategory;
 use App\Services\MedalTable;
+use App\Support\Noc;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -145,6 +147,20 @@ class ExportController extends Controller
             : null;
 
         return $this->render(new FightOrderReport($championship, $competition), $format, orientation: 'landscape');
+    }
+
+    /**
+     * Everyone entered, by nation — the list the hotel and the organising team
+     * work from, either whole or for one delegation.
+     */
+    public function athletes(Championship $championship, string $format, Request $request): Response|StreamedResponse
+    {
+        // Checked against the codes the system knows, so anything else prints
+        // the whole list rather than an empty sheet.
+        $requested = $request->query('noc');
+        $noc = is_string($requested) && Noc::exists($requested) ? $requested : null;
+
+        return $this->render(new AthleteListReport($championship, $noc), $format, orientation: 'landscape');
     }
 
     public function entriesByNoc(Championship $championship, string $format): Response|StreamedResponse

@@ -142,8 +142,19 @@
                             <td class="text-muted">{{ $bout->court?->label() ?? '—' }}</td>
                             <td class="font-semibold"><x-athlete :athlete="$bout->winner" /></td>
                             <td class="print:hidden">
-                                @can('manage-competition')
-                                    <div class="flex justify-end gap-1.5">
+                                <div class="flex justify-end gap-1.5">
+                                    {{-- A decided contest is a question about
+                                         the record: what was called, and was it
+                                         right. That is answered on the mat it
+                                         was fought on, which is where the log
+                                         and the way back both live. --}}
+                                    @if ($bout->isDecided() && $bout->court_id)
+                                        <x-ui.chip :href="route('mats.live', ['court' => $bout->court_id, 'review' => $bout->id])" wire:navigate>
+                                            {{ __('Review') }}
+                                        </x-ui.chip>
+                                    @endif
+
+                                    @can('manage-competition')
                                         @if (! $bout->isDecided())
                                             <flux:button size="xs" variant="ghost" wire:click="move({{ $bout->id }}, 'up')" icon="chevron-up" />
                                             <flux:button size="xs" variant="ghost" wire:click="move({{ $bout->id }}, 'down')" icon="chevron-down" />
@@ -157,8 +168,8 @@
                                                 @endforeach
                                             @endif
                                         @endif
-                                    </div>
-                                @endcan
+                                    @endcan
+                                </div>
                             </td>
                         </tr>
                     @empty

@@ -21,6 +21,41 @@
 
     <x-competition.flash />
 
+    {{-- The list the hotel and the organising team work from. Not a
+         competition document: everyone entered, by nation, whole or for one
+         delegation — which is what somebody asks for when a coach arrives. --}}
+    @can('manage-competition')
+        @php
+            $exportScope = ['championship' => $championship]
+                + ($exportNoc === '' ? [] : ['noc' => $exportNoc]);
+        @endphp
+
+        <x-ui.card class="mb-[18px]">
+            <div class="flex flex-wrap items-center gap-3">
+                <div>
+                    <div class="text-[13.5px] font-semibold">{{ __('Athlete list') }}</div>
+                    <div class="text-[12.5px] text-muted">
+                        {{ __('Everyone entered, ordered by country — for the hotel and the organising team.') }}
+                    </div>
+                </div>
+
+                <div class="ms-auto flex flex-wrap items-center gap-2">
+                    <label for="reg-export-noc" class="text-[12.5px] font-semibold text-muted">{{ __('Country') }}</label>
+
+                    <flux:select id="reg-export-noc" wire:model.live="exportNoc" size="sm" class="w-[210px]">
+                        <flux:select.option value="">{{ __('All countries') }}</flux:select.option>
+                        @foreach ($delegations as $code => $label)
+                            <flux:select.option value="{{ $code }}" :selected="$exportNoc === $code">{{ $label }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+
+                    <x-ui.chip :href="route('exports.athletes', $exportScope + ['format' => 'pdf'])">{{ __('PDF') }}</x-ui.chip>
+                    <x-ui.chip :href="route('exports.athletes', $exportScope + ['format' => 'xlsx'])">{{ __('Excel') }}</x-ui.chip>
+                </div>
+            </div>
+        </x-ui.card>
+    @endcan
+
     @can('manage-competition')
         <x-ui.card :title="$editingId ? __('Edit athlete') : __('Register athlete')">
             <form wire:submit="save">
@@ -336,7 +371,6 @@
                         <th>{{ __('NOC') }}</th>
                         <th>{{ __('Weight') }}</th>
                         <th>{{ __('Weigh-in') }}</th>
-                        <th class="num">{{ __('Draw') }}</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -366,7 +400,6 @@
                                     <x-ui.tag variant="danger">{{ $athlete->weighin_kg }} {{ __('kg') }}</x-ui.tag>
                                 @endif
                             </td>
-                            <td class="num">{{ $athlete->draw_number ?? '—' }}</td>
                             <td>
                                 @can('manage-competition')
                                     <div class="flex justify-end gap-1.5">
@@ -382,7 +415,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="py-8 text-center text-muted">
+                            <td colspan="6" class="py-8 text-center text-muted">
                                 {{ $search !== '' ? __('No athletes match that search.') : __('No athletes registered yet.') }}
                             </td>
                         </tr>

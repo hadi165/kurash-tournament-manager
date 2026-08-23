@@ -31,6 +31,11 @@ class Championship extends Model
 
     protected $fillable = ['title', 'location', 'starts_on', 'ends_on', 'genders', 'age_groups', 'archived_at', 'archived_by'];
 
+    /**
+     * Deliberately not fillable: athletes_numbered is how many accreditation
+     * numbers this championship has issued, and it is written by the counter
+     * that issues them and by nothing else.
+     */
     protected function casts(): array
     {
         return [
