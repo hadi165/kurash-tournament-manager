@@ -262,10 +262,20 @@
                  slot, one vertical joining each pair, a stub left into the slot
                  they feed — which is why they stay correct at every bracket
                  size from x/2 to x/32 rather than needing a case each. --}}
+            @php
+                // The tree does not stop at the final: the last bout feeds a
+                // node of its own, which is what the champion column is.
+                $finalBout = $rounds->last()?->first();
+                $champion = $finalBout?->winner;
+            @endphp
+
+            {{-- Scrolls rather than squeezing: a bracket of thirty-two is
+                 wider than a laptop, and a column dropped off the right is a
+                 round nobody can see. The width counts the champion. --}}
             <div class="overflow-x-auto px-6 py-5">
-                <div class="bkt" style="min-width: {{ max(1, $totalRounds) * 17 }}rem;">
+                <div class="bkt" style="--bkt-line: var(--color-line); min-width: {{ (max(1, $totalRounds) + 1) * 17 }}rem;">
                     @foreach ($rounds as $round => $roundBouts)
-                        <div @class(['bkt__round', 'bkt__round--last' => $loop->last]) wire:key="round-{{ $round }}">
+                        <div class="bkt__round" wire:key="round-{{ $round }}">
                             <div class="kicker mb-3 text-ink/55">{{ $roundBouts->first()->phase($totalRounds) }}</div>
 
                             <div class="bkt__slots">
@@ -275,6 +285,22 @@
                                     @class(['bkt__match border border-n-300 bg-surface text-sm', 'opacity-60' => $bout->is_bye])
                                     wire:key="bout-{{ $bout->id }}"
                                 >
+                                    {{-- The number the running order gave this
+                                         contest, so the bracket and the sheet a
+                                         mat is working from say the same thing.
+
+                                         Outside every permission check: a
+                                         number is a fact about the schedule,
+                                         not an action anybody takes. A bye has
+                                         no contest to number, and an unscheduled
+                                         one has no number yet — neither leaves a
+                                         bar behind. --}}
+                                    @if (! $bout->is_bye && $bout->fight_number)
+                                        <div class="border-b border-ink/12 px-3 py-0.5 text-[11px] font-bold tracking-wide text-ink/55">
+                                            {{ __('No. :n', ['n' => $bout->fight_number]) }}
+                                        </div>
+                                    @endif
+
                                     @foreach (['a', 'b'] as $side)
                                         @php
                                             $athlete = $side === 'a' ? $bout->athleteA : $bout->athleteB;
@@ -337,96 +363,41 @@
                             </div>
                         </div>
                     @endforeach
+
+                    {{-- The champion: a node the final connects to, drawn the
+                         same way every other node is, so the connector into it
+                         comes from the same three rules as the rest of the
+                         tree rather than from a case of its own. --}}
+                    <div class="bkt__round bkt__round--last bkt__round--champion">
+                        <div class="kicker mb-3 text-ink/55">{{ __('Champion') }}</div>
+
+                        <div class="bkt__slots">
+                            <div class="bkt__slot">
+                                <div @class([
+                                    'bkt__match border bg-surface px-3 py-2 text-sm',
+                                    'border-brand-500 bg-brand-500/10' => $champion !== null,
+                                    'border-n-300' => $champion === null,
+                                ])>
+                                    <div class="kicker text-ink/55">{{ __('Winner') }}</div>
+
+                                    <div class="mt-1 font-bold">
+                                        @if ($champion)
+                                            <x-athlete :athlete="$champion" />
+                                        @else
+                                            <span class="text-ink/45">{{ __('To be decided') }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </x-ui.card>
 
-        <style>
-            /* The bracket is drawn by alignment, not by arithmetic. Each round
-               is a column; each slot in it takes an equal share of the column's
-               height. Round two therefore has half as many slots at twice the
-               height, and each one's centre falls exactly on the midpoint of
-               the pair below it — which is the point every connector is hung
-               from. */
-            .bkt {
-                display: flex;
-                align-items: stretch;
-            }
-
-            .bkt__round {
-                display: flex;
-                flex: 1 1 0;
-                min-width: 15rem;
-                flex-direction: column;
-                /* The gutter the connectors are drawn in. The last round has
-                   no next round to reach, so it has no gutter. */
-                padding-right: 2.5rem;
-            }
-
-            .bkt__round--last { padding-right: 0; }
-
-            .bkt__slots {
-                display: flex;
-                flex: 1;
-                flex-direction: column;
-            }
-
-            .bkt__slot {
-                position: relative;
-                display: flex;
-                flex: 1 1 0;
-                align-items: center;
-                padding: 0.375rem 0;
-            }
-
-            .bkt__match { width: 100%; position: relative; }
-
-            /* Three connectors, three separate elements — a slot in the
-               middle of the tree is both a target and a source, and two
-               pseudo-elements cannot carry three lines.
-
-                 slot::after   out of this slot into the gutter
-                 slot::before  the vertical this pair hangs on
-                 match::before in from the gutter, for every round after the
-                               first
-            */
-            .bkt__slot::after,
-            .bkt__slot::before,
-            .bkt__match::before {
-                content: '';
-                position: absolute;
-                background: var(--color-line);
-            }
-
-            /* Out of every slot, half the gutter, stopping at the vertical. */
-            .bkt__round:not(.bkt__round--last) .bkt__slot::after {
-                left: 100%;
-                top: 50%;
-                width: 1.25rem;
-                height: 2px;
-            }
-
-            /* The vertical, hung on the top slot of each pair and reaching down
-               exactly one slot height — centre to centre, because the slots are
-               equal. */
-            .bkt__round:not(.bkt__round--last) .bkt__slot:nth-child(odd)::before {
-                left: calc(100% + 1.25rem);
-                top: 50%;
-                width: 2px;
-                height: 100%;
-            }
-
-            /* In from the gutter, for every round after the first. Hung on the
-               match rather than the slot so it cannot collide with the vertical
-               above. */
-            .bkt__round:not(:first-child) .bkt__match::before {
-                right: 100%;
-                top: 50%;
-                width: 1.25rem;
-                height: 2px;
-            }
-
-        </style>
+        {{-- The geometry is shared with the venue bracket rather than
+             written twice: see the partial for why. --}}
+        <style>@include('partials.bracket-geometry')</style>
     @endif
     <x-draw.ceremony :names="$ceremonyNames" :pairs="$ceremonyPairs" />
 </x-page>

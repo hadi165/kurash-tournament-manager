@@ -573,19 +573,19 @@ describe('the bracket sheet', function () {
             ->and(array_column($sheet->seats(), 'corner'))->toBe(['blue', 'green', 'blue', 'green', 'blue', 'green', 'blue', 'green']);
     });
 
-    it('puts a square on every match, with its fight number', function () {
+    it('puts a branch on every match, with its fight number', function () {
         $championship = championshipWithBrackets(['-66' => 8]);
         app(FightOrderScheduler::class)->schedule($championship);
 
         $category = $championship->ageCategories()->first()->weightCategories()->first();
-        $sheet = new BracketSheet($category->refresh());
+        $branches = collect((new BracketSheet($category->refresh()))->branches());
 
-        expect($sheet->matches(1))->toHaveCount(4)
-            ->and($sheet->matches(2))->toHaveCount(2)
-            ->and($sheet->matches(3))->toHaveCount(1)
-            // Each spans the rows it feeds from: 2, 4, 8.
-            ->and(array_column($sheet->matches(2), 'span'))->toBe([4, 4])
-            ->and($sheet->matches(1)[0]['fight'])->toStartWith('No. ');
+        expect($branches->where('round', 1))->toHaveCount(4)
+            ->and($branches->where('round', 2))->toHaveCount(2)
+            ->and($branches->where('round', 3))->toHaveCount(1)
+            // In half-seats, so a branch can start on a centre line: 2, 4, 8.
+            ->and($branches->where('round', 2)->pluck('span')->all())->toBe([4, 4])
+            ->and($branches->first()['fight'])->toStartWith('No. ');
     });
 
     it('marks the empty seats as byes rather than inventing people', function () {
@@ -607,7 +607,12 @@ describe('the bracket sheet', function () {
         app(BracketGenerator::class)->generate($category);
 
         $sheet = new BracketSheet($category->refresh());
-        $html = view('exports.bracket', ['sheet' => $sheet])->render();
+        $html = view('exports.bracket', [
+            'sheet' => $sheet,
+            // The same two the writer hands it: the sheet says what to draw and
+            // the scale says how big the page it is being drawn on is.
+            'scale' => app(BracketSheetWriter::class)->scale($sheet),
+        ])->render();
 
         $seated = collect($sheet->seats())->where('bye', false);
 
@@ -632,15 +637,15 @@ describe('the bracket sheet', function () {
         });
 
         it('numbers them when the bracket is asked for as it stands', function () {
-            $matches = (new BracketSheet($this->drawn))->matches(1);
+            $branches = (new BracketSheet($this->drawn))->branches();
 
-            expect(collect($matches)->pluck('fight')->filter())->not->toBeEmpty();
+            expect(collect($branches)->pluck('fight')->filter())->not->toBeEmpty();
         });
 
         it('leaves them blank when the bracket is asked for without one', function () {
-            $matches = (new BracketSheet($this->drawn, fightNumbers: false))->matches(1);
+            $branches = (new BracketSheet($this->drawn, fightNumbers: false))->branches();
 
-            expect(collect($matches)->pluck('fight')->filter())->toBeEmpty();
+            expect(collect($branches)->pluck('fight')->filter())->toBeEmpty();
         });
 
         it('is asked for by the download, in both formats', function () {
@@ -691,8 +696,10 @@ describe('the bracket sheet', function () {
         $book = IOFactory::load($path);
         $page = $book->getActiveSheet();
 
-        // Four first-round matches, two quarters, one final, plus the champion.
-        expect($page->getMergeCells())->toHaveCount(8);
+        // Eight seats, two rows each; seven branches; and the champion. The
+        // sheet is ruled in half-seats so a connector can start on a centre
+        // line — see BracketTreeTest.
+        expect($page->getMergeCells())->toHaveCount(8 * 2 + 7 + 1);
 
         $numbers = collect($page->getMergeCells())
             ->map(fn (string $range) => (string) $page->getCell(explode(':', $range)[0])->getValue())
