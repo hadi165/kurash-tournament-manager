@@ -14,6 +14,9 @@ class AthleteFactory extends Factory
     public function definition(): array
     {
         return [
+            // Unique within a championship, which is what the constraint asks
+            // for. Six digits here rather than three: a factory makes numbers
+            // by the thousand and they only have to not collide.
             'ika_id' => 'IKA'.str_pad((string) fake()->unique()->numberBetween(1, 999999), 6, '0', STR_PAD_LEFT),
             'championship_id' => Championship::factory(),
             'age_category_id' => AgeCategory::factory(),

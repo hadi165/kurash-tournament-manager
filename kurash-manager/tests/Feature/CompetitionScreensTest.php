@@ -232,7 +232,9 @@ describe('registration', function () {
 
         expect($athlete)->not->toBeNull()
             ->and($athlete->noc_code)->toBe('AFG')          // upper-cased
-            ->and($athlete->ika_id)->toMatch('/^IKA\d{6}$/');
+            // Three digits, counted within the championship: the first athlete
+            // of every event is IKA001.
+            ->and($athlete->ika_id)->toBe('IKA001');
     });
 
     /**

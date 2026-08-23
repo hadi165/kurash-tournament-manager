@@ -144,6 +144,14 @@
 
         /* Status reads as a chip in the fixed vocabulary the specification
            sets: a value, not a sentence. */
+        .flag {
+            width: 18px;
+            height: 12px;
+            vertical-align: middle;
+            margin-right: 5px;
+            border: 0.5px solid #cfd8d4;
+        }
+
         .chip-status {
             display: inline-block;
             padding: 2px 9px;
@@ -335,6 +343,14 @@
                                 @if ($kind)
                                     <span class="chip-status chip-{{ $kind }}">{{ $cell }}</span>
                                 @else
+                                    {{-- Read off disk rather than over a URL:
+                                         this renders on the server with no
+                                         browser and, at an event, often with
+                                         no route off the hall's network. --}}
+                                    @if (($flagColumn ?? null) === $column && ($flagPath = \App\Support\Noc::flagPath($cell)))
+                                        <img class="flag" src="{{ $flagPath }}" alt="">
+                                    @endif
+
                                     {{ $cell }}
                                 @endif
                             </td>
