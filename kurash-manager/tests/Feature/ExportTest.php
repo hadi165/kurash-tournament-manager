@@ -597,6 +597,42 @@ describe('the bracket sheet', function () {
             ->and(collect($seats)->firstWhere('bye', true)['name'])->toBe('BYE');
     });
 
+    /**
+     * A bracket saved at the end of a draw ceremony carries positions and not a
+     * running order: the draw is settled at that moment and the schedule is
+     * not, so numbering the squares would print figures nobody has agreed to.
+     */
+    describe('the running order on the squares', function () {
+        beforeEach(function () {
+            $championship = championshipWithBrackets(['-66' => 8]);
+            app(FightOrderScheduler::class)->schedule($championship);
+
+            $this->drawn = $championship->ageCategories()->first()->weightCategories()->first()->refresh();
+        });
+
+        it('numbers them when the bracket is asked for as it stands', function () {
+            $matches = (new BracketSheet($this->drawn))->matches(1);
+
+            expect(collect($matches)->pluck('fight')->filter())->not->toBeEmpty();
+        });
+
+        it('leaves them blank when the bracket is asked for without one', function () {
+            $matches = (new BracketSheet($this->drawn, fightNumbers: false))->matches(1);
+
+            expect(collect($matches)->pluck('fight')->filter())->toBeEmpty();
+        });
+
+        it('is asked for by the download, in both formats', function () {
+            foreach (['pdf', 'xlsx'] as $format) {
+                $this->get(route('exports.bracket-sheet', [
+                    'weightCategory' => $this->drawn,
+                    'format' => $format,
+                    'fights' => 0,
+                ]))->assertOk();
+            }
+        });
+    });
+
     it('downloads as a PDF and as a spreadsheet', function () {
         $category = weighedClass(8);
         app(BracketGenerator::class)->generate($category);

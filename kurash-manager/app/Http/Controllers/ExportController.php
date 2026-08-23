@@ -111,9 +111,15 @@ class ExportController extends Controller
      * Outside render(): a tree is not a table of rows, so it has its own
      * writer rather than being forced through the tabular one.
      */
-    public function bracketSheet(WeightCategory $weightCategory, string $format): Response|StreamedResponse
+    public function bracketSheet(WeightCategory $weightCategory, string $format, Request $request): Response|StreamedResponse
     {
-        $sheet = new BracketSheet($weightCategory->load('ageCategory.championship'));
+        // ?fights=0 for the bracket saved off a draw ceremony: positions, no
+        // running order. Numbers are the default, because everywhere else asks
+        // for the bracket after the schedule is made.
+        $sheet = new BracketSheet(
+            $weightCategory->load('ageCategory.championship'),
+            fightNumbers: ! in_array($request->query('fights'), ['0', 'false', 'no'], true),
+        );
 
         // Drawable is not drawn: a class whose athletes hold numbers but whose
         // bracket has never been generated has no tree to print.

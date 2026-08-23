@@ -2,6 +2,7 @@
 
 namespace App\Livewire\Operator;
 
+use App\Models\Championship;
 use App\Models\WeightCategory;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -19,8 +20,16 @@ use Livewire\Component;
  */
 class Draws extends Component
 {
+    /**
+     * The competition being presented.
+     *
+     * A choice rather than a search box: an operator standing at a draw knows
+     * which championship they are running and should not have to spell it, and
+     * a typed word that matches nothing looks exactly like a competition with
+     * no published draws.
+     */
     #[Url]
-    public string $search = '';
+    public string $championship = '';
 
     #[Url]
     public string $gender = '';
@@ -43,14 +52,10 @@ class Draws extends Component
             ->whereHas('ageCategory.championship', fn ($q) => $q->whereNull('archived_at'))
             ->when($this->gender !== '', fn ($q) => $q->where('gender', $this->gender))
             ->when($this->ageCategory !== '', fn ($q) => $q->where('age_category_id', $this->ageCategory))
-            ->when($this->search !== '', function ($q) {
-                $term = '%'.$this->search.'%';
-
-                $q->where(fn ($inner) => $inner
-                    ->where('label', 'like', $term)
-                    ->orWhereHas('ageCategory', fn ($age) => $age->where('name', 'like', $term))
-                    ->orWhereHas('ageCategory.championship', fn ($champ) => $champ->where('title', 'like', $term)));
-            })
+            ->when($this->championship !== '', fn ($q) => $q->whereHas(
+                'ageCategory',
+                fn ($age) => $age->where('championship_id', $this->championship)
+            ))
             ->when($this->status === 'published', fn ($q) => $q->whereNotNull('draw_published_at'))
             ->when($this->status === 'waiting', fn ($q) => $q->whereNull('draw_published_at'))
             ->with(['ageCategory.championship'])
@@ -62,6 +67,15 @@ class Draws extends Component
         return view('livewire.operator.draws', [
             'categories' => $categories,
             'ageCategories' => $categories->pluck('ageCategory')->unique('id')->sortBy('name')->values(),
+            // Every competition still running, whether or not it has a draw to
+            // present yet: a list that hid the ones with nothing published
+            // would answer "which competitions are there" with "the ones I
+            // already have something for".
+            'championships' => Championship::query()
+                ->whereNull('archived_at')
+                ->orderByDesc('starts_on')
+                ->orderBy('title')
+                ->get(['id', 'title', 'starts_on']),
         ]);
     }
 }

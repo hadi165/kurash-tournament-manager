@@ -124,6 +124,50 @@ describe('the operator list', function () {
             ->assertDontSee($athlete->fullname);
     });
 
+    /**
+     * Chosen from a list, not typed into a box: a misspelt competition and a
+     * competition with nothing published look identical to whoever is standing
+     * at the draw.
+     */
+    describe('choosing the competition', function () {
+        it('offers the competitions rather than a search box', function () {
+            $category = publishedClass(4);
+            $championship = $category->ageCategory->championship;
+
+            Livewire::test(Draws::class)
+                ->assertViewHas('championships', fn ($events) => $events->contains('id', $championship->id))
+                ->assertSee('All competitions')
+                ->assertSee($championship->title);
+        });
+
+        /**
+         * The classes narrow; the dropdown does not. It goes on offering every
+         * competition, because a filter that removes its own options cannot be
+         * changed once it has been used.
+         */
+        it('narrows the classes to the competition chosen', function () {
+            $mine = publishedClass(4);
+            $other = publishedClass(4);
+
+            $list = Livewire::test(Draws::class)
+                ->set('championship', (string) $mine->ageCategory->championship_id);
+
+            expect($list->viewData('categories')->pluck('id')->all())->toBe([$mine->id])
+                ->and($list->viewData('championships')->pluck('id'))
+                ->toContain($other->ageCategory->championship_id);
+        });
+
+        /** An archived competition is not one anybody is presenting. */
+        it('leaves an archived competition out of the list', function () {
+            $category = publishedClass(4);
+            $championship = $category->ageCategory->championship;
+            $championship->forceFill(['archived_at' => now()])->save();
+
+            Livewire::test(Draws::class)
+                ->assertViewHas('championships', fn ($events) => ! $events->contains('id', $championship->id));
+        });
+    });
+
     it('filters without widening what may be seen', function () {
         $published = publishedClass(4);
         [$other] = categoryWithAthletes(4);

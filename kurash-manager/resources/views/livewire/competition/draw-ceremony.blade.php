@@ -19,8 +19,12 @@
     $columns = '390px repeat('.max(1, $rounds).', 150px) 210px';
 @endphp
 
+{{-- A board that places a position a second cannot be refreshed every two:
+     each poll would land two names at once, which is not a draw being made in
+     front of a hall. An announced ceremony changes only when somebody presses,
+     and two seconds is plenty for that. --}}
 <div
-    wire:poll.2s
+    wire:poll.{{ $automatic ? '500ms' : '2s' }}
     class="dc dc-board-page {{ $complete ? 'dc-complete' : '' }}"
     {{-- How many seats there are to fit. The stylesheet divides what is left
          of the viewport by this rather than guessing from the bracket size,
@@ -156,18 +160,21 @@
                 </div>
             @endif
 
-            {{-- The only control on the screen, and it starts the telling
-                 rather than the draw: the bracket was decided before this page
-                 was opened. --}}
-            {{-- One control, and it moves the telling forward: begin, then the
-                 next position, then nothing once every position is placed. --}}
+            {{-- The controls start the telling, never the draw: the bracket
+                 was decided before this page was opened.
+
+                 An announced ceremony has one press per position. An automatic
+                 one has a single press at the beginning and then runs itself —
+                 kept rather than started on load so that the presenter opens
+                 the board, reaches the microphone, and begins when the hall is
+                 ready rather than while they are still walking. --}}
             @if ($ceremony && ! $complete)
                 <div class="dc-start">
                     @if ($waiting)
                         <button type="button" class="dc-button dc-button-primary" wire:click="startCeremony">
-                            {{ __('Begin draw') }}
+                            {{ $automatic ? __('Start presentation') : __('Begin draw') }}
                         </button>
-                    @else
+                    @elseif (! $automatic)
                         <button type="button" class="dc-button dc-button-primary" wire:click="nextDraw">
                             {{ __('Next draw') }}
                         </button>
@@ -175,14 +182,50 @@
                 </div>
             @endif
 
-            <div class="dc-kicker">{{ $complete ? __('Pool drawn') : __('Still to be drawn') }}</div>
+            {{-- The finished draw, as paperwork. The bracket is rendered from
+                 the database on request, so these are the positions on the
+                 board and not a copy of them made here. --}}
+            @if ($saveable)
+                <div class="dc-save">
+                    @if ($saved)
+                        <div class="dc-save-done">{{ __('Draw saved') }}</div>
 
+                        <div class="dc-save-links">
+                            <a class="dc-button"
+                               href="{{ route('exports.bracket-sheet', ['weightCategory' => $weightCategory, 'format' => 'pdf', 'fights' => 0]) }}">
+                                {{ __('Bracket PDF') }}
+                            </a>
+
+                            <a class="dc-button"
+                               href="{{ route('exports.bracket-sheet', ['weightCategory' => $weightCategory, 'format' => 'xlsx', 'fights' => 0]) }}">
+                                {{ __('Bracket Excel') }}
+                            </a>
+                        </div>
+                    @else
+                        <button type="button" class="dc-button dc-button-primary" wire:click="saveDraw">
+                            {{ __('Save draw') }}
+                        </button>
+                    @endif
+                </div>
+            @endif
+
+            <div class="dc-kicker">
+                {{ $complete ? __('Pool drawn') : __('Still to be drawn') }}
+
+                {{-- Said out loud, because the panel scrolls once a draw is
+                     large enough and the number of lines on screen stops being
+                     the number of athletes in the pot. --}}
+                @if ($remainingCount > 0)
+                    <span class="dc-kicker-count">{{ $remainingCount }}</span>
+                @endif
+            </div>
+
+            {{-- Every athlete still in the pot, one line each, whole name.
+                 Nothing is capped here or in the component: where the list is
+                 longer than the panel, the panel scrolls. --}}
             <div class="dc-pool-list">
                 @forelse ($pool as $entry)
-                    <div class="dc-pool-row" wire:key="pool-{{ $entry['noc'] }}">
-                        <span class="dc-pool-noc">{{ $entry['noc'] }}</span>
-                        <span class="dc-pool-name">{{ $entry['name'] }}</span>
-
+                    <div class="dc-pool-row" wire:key="pool-{{ $entry['id'] }}">
                         {{-- A plain img with a ceremony class, not the shared
                              flag component: this screen loads the ceremony
                              stylesheet and none of the application's, so a
@@ -191,8 +234,8 @@
                         @if ($entry['iso'])
                             <img class="dc-pool-flag"
                                  src="{{ asset('flags/'.$entry['iso'].'.svg') }}"
-                                 alt="{{ $entry['name'] ?? $entry['noc'] }}"
-                                 title="{{ $entry['name'] ?? $entry['noc'] }}">
+                                 alt="{{ $entry['country'] ?? $entry['noc'] }}"
+                                 title="{{ $entry['country'] ?? $entry['noc'] }}">
                         @else
                             {{-- A delegation competing without one, or a code
                                  this system does not know. The box stays so the
@@ -201,6 +244,9 @@
                                   title="{{ $entry['noc'] }}"
                                   aria-hidden="true"></span>
                         @endif
+
+                        <span class="dc-pool-name">{{ $entry['name'] }}</span>
+                        <span class="dc-pool-noc">{{ $entry['noc'] }}</span>
                     </div>
                 @empty
                     <div class="dc-pool-empty">{{ __('Every position has been drawn.') }}</div>

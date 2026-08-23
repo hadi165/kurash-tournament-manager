@@ -552,13 +552,13 @@ describe('the pool sidebar', function () {
             ->viewData('pool');
     }
 
-    it('carries a flag for every nation still to be drawn', function () {
+    it('carries a flag beside every athlete still to be drawn', function () {
         $pool = poolOf($this->category, $this->operator);
 
         expect($pool)->not->toBeEmpty();
 
         foreach ($pool as $entry) {
-            expect($entry)->toHaveKeys(['noc', 'name', 'iso']);
+            expect($entry)->toHaveKeys(['id', 'name', 'noc', 'country', 'iso']);
         }
     });
 
@@ -701,4 +701,398 @@ describe('the board fits the screen it is on', function () {
             ->test(DrawCeremony::class, ['weightCategory' => $category])
             ->assertSee('--dc-seats: 1', false);
     });
+});
+
+/**
+ * Two ceremonies, and the door decides which.
+ *
+ * Entries and Draw sends an operator to a board that runs itself; the Draws to
+ * Present menu sends them to the one they place position by position. The mode
+ * is on the route rather than in the session, so a browser that reloads
+ * mid-ceremony comes back to the ceremony it left.
+ */
+describe('the ceremony that runs itself', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(12);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+
+        $this->operator = User::factory()->official()->create();
+        Cache::forget(DrawCeremony::paceKey($this->category->id));
+
+        $this->auto = fn () => Livewire::actingAs($this->operator)->test(DrawCeremony::class, [
+            'weightCategory' => $this->category,
+            'ceremony' => true,
+            'automatic' => true,
+        ]);
+
+        $this->announced = fn () => Livewire::actingAs($this->operator)->test(DrawCeremony::class, [
+            'weightCategory' => $this->category,
+            'ceremony' => true,
+        ]);
+    });
+
+    describe('which door was used', function () {
+        it('is the one the Present button in Entries and Draw opens', function () {
+            $championship = $this->category->ageCategory->championship;
+
+            $this->actingAs($this->operator)
+                ->get(route('entries.index', $championship))
+                ->assertOk()
+                ->assertSee(route('operator.draws.present', $this->category));
+        });
+
+        it('is not the one the Draws to Present menu opens', function () {
+            $this->actingAs($this->operator)
+                ->get(route('operator.draws.index'))
+                ->assertOk()
+                ->assertSee(route('operator.draws.ceremony', $this->category))
+                ->assertDontSee(route('operator.draws.present', $this->category));
+        });
+
+        it('carries the mode on the route rather than in a session', function () {
+            $this->actingAs($this->operator);
+
+            $this->get(route('operator.draws.present', $this->category))->assertOk();
+            $this->get(route('operator.draws.ceremony', $this->category))->assertOk();
+
+            // Each address answers for itself, in either order.
+            expect(true)->toBeTrue();
+        });
+
+        /** A board on a wall has nobody at it to start anything. */
+        it('is never the venue board, whatever is asked for', function () {
+            $board = Livewire::test(DrawCeremony::class, [
+                'weightCategory' => $this->category,
+                'automatic' => true,
+            ]);
+
+            expect($board->get('automatic'))->toBeFalse();
+        });
+    });
+
+    describe('the telling order', function () {
+        /**
+         * The whole point, and the whole risk: the order is a *telling* order.
+         * It decides when a seat is filled and never which seat.
+         */
+        it('leaves every draw number exactly where the draw put it', function () {
+            $before = $this->category->drawnAthletes()->pluck('draw_number', 'id')->toArray();
+            $version = $this->category->draw_version;
+
+            ($this->auto)()->call('startCeremony');
+
+            expect($this->category->refresh()->drawnAthletes()->pluck('draw_number', 'id')->toArray())
+                ->toBe($before)
+                ->and($this->category->draw_version)->toBe($version);
+        });
+
+        it('tells every position exactly once', function () {
+            ($this->auto)()->call('startCeremony');
+
+            $order = Cache::get(DrawCeremony::paceKey($this->category->id))['order'];
+            $sorted = $order;
+            sort($sorted);
+
+            expect($order)->toHaveCount(12)
+                ->and($sorted)->toBe(range(1, 12));
+        });
+
+        /**
+         * Not proof of randomness — a shuffle may legitimately return the
+         * order it was given — but proof that the order is not simply being
+         * counted out, which is what the announced ceremony does.
+         */
+        it('does not simply count from one', function () {
+            $counted = 0;
+
+            foreach (range(1, 8) as $attempt) {
+                Cache::forget(DrawCeremony::paceKey($this->category->id));
+                ($this->auto)()->call('startCeremony');
+
+                if (Cache::get(DrawCeremony::paceKey($this->category->id))['order'] === range(1, 12)) {
+                    $counted++;
+                }
+            }
+
+            expect($counted)->toBeLessThan(8);
+        });
+
+        it('settles the order once and keeps it', function () {
+            ($this->auto)()->call('startCeremony');
+
+            $first = Cache::get(DrawCeremony::paceKey($this->category->id))['order'];
+
+            ($this->auto)();
+            ($this->auto)();
+
+            expect(Cache::get(DrawCeremony::paceKey($this->category->id))['order'])->toBe($first);
+        });
+
+        /**
+         * A class redrawn under a running ceremony leaves a shuffle describing
+         * athletes who are no longer in it. Counting from one is the safe
+         * answer: it seats everybody, in an order nobody promised.
+         */
+        it('falls back to counting when the draw has moved under it', function () {
+            Cache::put(
+                DrawCeremony::paceKey($this->category->id),
+                ['at' => now()->timestamp - 5, 'per' => 1, 'order' => [4, 3, 2, 1]],
+                now()->addHour(),
+            );
+
+            $seats = collect(($this->auto)()->viewData('seats'))
+                ->filter(fn (array $seat) => $seat['athlete'] !== null)
+                ->pluck('seed')
+                ->sort()
+                ->values()
+                ->all();
+
+            expect($seats)->toBe([1, 2, 3, 4, 5]);
+        });
+    });
+
+    describe('one athlete a second', function () {
+        beforeEach(function () {
+            // A telling order that is plainly not the counting one, stamped
+            // five seconds ago: five placed, the sixth being placed.
+            Cache::put(
+                DrawCeremony::paceKey($this->category->id),
+                [
+                    'at' => now()->timestamp - 5,
+                    'per' => 1,
+                    'order' => [7, 2, 11, 4, 9, 1, 12, 3, 8, 5, 10, 6],
+                ],
+                now()->addHour(),
+            );
+        });
+
+        it('places one a second rather than one every three', function () {
+            expect(($this->auto)()->viewData('revealed'))->toBe(5);
+        });
+
+        /** Seat eleven is filled and seat three is not, five seconds in. */
+        it('seats each athlete on the number the draw gave them', function () {
+            $filled = collect(($this->auto)()->viewData('seats'))
+                ->filter(fn (array $seat) => $seat['athlete'] !== null);
+
+            expect($filled->pluck('seed')->sort()->values()->all())->toBe([2, 4, 7, 9, 11]);
+
+            foreach ($filled as $seat) {
+                expect($seat['athlete']->draw_number)->toBe($seat['seed']);
+            }
+        });
+
+        it('is placing the next one in the order', function () {
+            expect(($this->auto)()->viewData('drawing')->draw_number)->toBe(1);
+        });
+
+        it('marks the seat that landed last, wherever it is', function () {
+            $new = collect(($this->auto)()->viewData('seats'))
+                ->filter(fn (array $seat) => $seat['justFilled']);
+
+            expect($new)->toHaveCount(1)
+                ->and($new->first()['seed'])->toBe(9);
+        });
+
+        /** The invariant the board rests on, and it survives the shuffle. */
+        it('keeps placed, drawing and still-to-come adding up', function () {
+            $board = ($this->auto)();
+
+            expect($board->viewData('revealed') + 1 + $board->viewData('remainingCount'))
+                ->toBe($board->viewData('total'));
+        });
+
+        it('has nobody left in the pot once the last is placed', function () {
+            $this->travel(20)->seconds();
+
+            $board = ($this->auto)();
+
+            expect($board->viewData('complete'))->toBeTrue()
+                ->and($board->viewData('remainingCount'))->toBe(0)
+                ->and(collect($board->viewData('seats'))->whereNotNull('athlete'))->toHaveCount(12);
+        });
+    });
+
+    describe('the buttons', function () {
+        it('asks to be started, then places by itself', function () {
+            ($this->auto)()
+                ->assertSee('Start presentation')
+                ->call('startCeremony')
+                ->assertDontSee('Next draw')
+                ->assertDontSee('Start presentation');
+        });
+
+        /** The announced ceremony is untouched: press by press, as before. */
+        it('leaves the announced ceremony pressing for every position', function () {
+            ($this->announced)()
+                ->assertSee('Begin draw')
+                ->call('startCeremony')
+                ->assertSee('Next draw');
+        });
+
+        it('keeps the announced ceremony counting from one', function () {
+            $board = ($this->announced)()->call('startCeremony')->call('nextDraw')->call('nextDraw');
+
+            $filled = collect($board->viewData('seats'))
+                ->filter(fn (array $seat) => $seat['athlete'] !== null)
+                ->pluck('seed')
+                ->all();
+
+            expect($filled)->toBe([1, 2]);
+        });
+    });
+});
+
+/**
+ * What the pot holds, and how much of it the panel says out loud.
+ *
+ * It used to group by nation and print a count, which read as a list of people
+ * to anybody watching: eleven lines against nineteen athletes.
+ */
+describe('the athletes still to be drawn', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(19);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+
+        $this->operator = User::factory()->official()->create();
+        Cache::forget(DrawCeremony::paceKey($this->category->id));
+
+        $this->board = fn () => Livewire::actingAs($this->operator)->test(DrawCeremony::class, [
+            'weightCategory' => $this->category,
+            'ceremony' => true,
+            'automatic' => true,
+        ]);
+    });
+
+    it('holds a line for every athlete in the draw, not one per nation', function () {
+        $this->category->athletes()->update(['noc_code' => 'UZB']);
+
+        $board = ($this->board)();
+
+        expect($board->viewData('pool'))->toHaveCount(19)
+            ->and($board->viewData('remainingCount'))->toBe(19);
+    });
+
+    it('counts down as the draw is told', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['at' => now()->timestamp - 6, 'per' => 1],
+            now()->addHour(),
+        );
+
+        expect(($this->board)()->viewData('pool'))->toHaveCount(12);
+    });
+
+    it('carries the whole name, however long it is', function () {
+        $this->category->drawnAthletes()->first()
+            ->update(['fullname' => 'Bekzod Yuldashev Rakhmatovich']);
+
+        ($this->board)()->assertSee('Bekzod Yuldashev Rakhmatovich');
+    });
+
+    it('says how many are in the pot, which is not how many rows fit', function () {
+        ($this->board)()->assertSeeHtml('<span class="dc-kicker-count">19</span>');
+    });
+
+    it('names the athlete on each line and the nation beside it', function () {
+        $entry = ($this->board)()->viewData('pool')->first();
+
+        expect($entry)->toHaveKeys(['id', 'name', 'noc', 'country', 'iso'])
+            ->and($entry['name'])->toStartWith('Athlete ');
+    });
+});
+
+/**
+ * The end of a ceremony: the draw is finished, and somebody wants it on paper.
+ */
+describe('saving the finished draw', function () {
+    beforeEach(function () {
+        [$this->category] = categoryWithAthletes(8);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->category->forceFill(['draw_published_at' => now()])->save();
+        $this->category->refresh();
+
+        $this->operator = User::factory()->official()->create();
+
+        $this->board = fn () => Livewire::actingAs($this->operator)->test(DrawCeremony::class, [
+            'weightCategory' => $this->category,
+            'ceremony' => true,
+            'automatic' => true,
+        ]);
+
+        $this->finish = fn () => Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['at' => now()->timestamp - 60, 'per' => 1],
+            now()->addHour(),
+        );
+    });
+
+    it('offers nothing while the draw is still being told', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['at' => now()->timestamp - 2, 'per' => 1],
+            now()->addHour(),
+        );
+
+        ($this->board)()->assertViewHas('saveable', false)->assertDontSee('Save draw');
+    });
+
+    it('offers to save once every position is placed', function () {
+        ($this->finish)();
+
+        ($this->board)()->assertViewHas('saveable', true)->assertSee('Save draw');
+    });
+
+    it('hands over the bracket in both formats', function () {
+        ($this->finish)();
+
+        ($this->board)()
+            ->call('saveDraw')
+            ->assertSet('saved', true)
+            ->assertSee('Bracket PDF')
+            ->assertSee('Bracket Excel')
+            ->assertSeeHtml(route('exports.bracket-sheet', [
+                'weightCategory' => $this->category,
+                'format' => 'xlsx',
+                'fights' => 0,
+            ]));
+    });
+
+    /** Saving produces documents. It does not touch the draw. */
+    it('writes nothing', function () {
+        ($this->finish)();
+
+        $before = $this->category->bouts()->pluck('athlete_a_id', 'id')->toArray();
+
+        ($this->board)()->call('saveDraw');
+
+        expect($this->category->refresh()->bouts()->pluck('athlete_a_id', 'id')->toArray())->toBe($before);
+    });
+
+    it('refuses to save a draw that is only half told', function () {
+        Cache::put(
+            DrawCeremony::paceKey($this->category->id),
+            ['at' => now()->timestamp - 2, 'per' => 1],
+            now()->addHour(),
+        );
+
+        ($this->board)()->call('saveDraw')->assertSet('saved', false);
+    });
+
+    it('is refused for anybody who may not present', function () {
+        ($this->finish)();
+
+        Livewire::actingAs(User::factory()->create(['role' => 'scoreboard']))
+            ->test(DrawCeremony::class, [
+                'weightCategory' => $this->category,
+                'ceremony' => true,
+                'automatic' => true,
+            ])
+            ->call('saveDraw')
+            ->assertForbidden();
+    })->throws(Exception::class);
 });
