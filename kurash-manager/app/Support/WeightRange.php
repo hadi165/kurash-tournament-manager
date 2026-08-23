@@ -14,12 +14,17 @@ final readonly class WeightRange
     public function __construct(
         /** Inclusive lower bound, tolerance already applied. Null means none. */
         public ?float $min,
-        /** Inclusive upper bound. Null means an open class with no ceiling. */
+        /**
+         * Inclusive upper bound, tolerance already added. Null means an open
+         * class with no ceiling.
+         */
         public ?float $max,
-        /** The grace allowed below the nominal lower bound, in kilograms. */
+        /** The grace allowed either side of the nominal bounds, in kilograms. */
         public float $tolerance = 0.5,
         /** The nominal lower bound, before the tolerance was subtracted. */
         public ?float $nominalMin = null,
+        /** The class's own limit, before the tolerance was added. */
+        public ?float $nominalMax = null,
     ) {}
 
     public function admits(float $kg): bool
@@ -37,11 +42,18 @@ final readonly class WeightRange
         return $this->min !== null && $kg < $this->min;
     }
 
+    /** Is this weight over the class rather than under it? */
+    public function isOver(float $kg): bool
+    {
+        return $this->max !== null && $kg > $this->max;
+    }
+
     /**
-     * "55.50 – 60.00 kg", or the half-open forms for the two ends of a
+     * "55.50 – 60.50 kg", or the half-open forms for the two ends of a
      * division. Printed on the weigh-in screen beside a rejection, so an
      * official can say what the athlete needed rather than only that they
-     * missed.
+     * missed — and it names what is actually accepted, tolerance included,
+     * because that is the number the athlete has to get under.
      */
     public function label(): string
     {

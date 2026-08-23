@@ -292,7 +292,7 @@ describe('weigh-in', function () {
      * themselves are covered in detail in WeightValidationTest.
      */
     it('passes a weight inside the class and fails one outside', function (float $kg, string $expected) {
-        [$category] = categoryWithAthletes(1);   // -66 class, floor 60, ceiling 66
+        [$category] = categoryWithAthletes(1);   // -66 class, floor 60, limit 66
         $athlete = $category->athletes()->first();
 
         Livewire::test(WeighIn::class, [
@@ -305,12 +305,15 @@ describe('weigh-in', function () {
         expect($athlete->refresh()->weighin_status)->toBe($expected)
             ->and((float) $athlete->weighin_kg)->toBe($kg);
     })->with([
-        'at the ceiling' => [66.0, 'pass'],
-        'just under the ceiling' => [65.6, 'pass'],
+        'at the limit' => [66.0, 'pass'],
+        'just under the limit' => [65.6, 'pass'],
         'well inside the class' => [64.9, 'pass'],
+        // The 500 grams the federation allows over a minus class.
+        'inside the tolerance above the limit' => [66.4, 'pass'],
+        'at the top of the tolerance' => [66.5, 'pass'],
+        'over the tolerance' => [66.6, 'fail'],
         'inside the tolerance below the floor' => [59.6, 'pass'],
         'below the tolerance' => [59.4, 'fail'],
-        'over the ceiling' => [66.4, 'fail'],
     ]);
 
     it('rejects a non-numeric entry without touching the record', function () {
