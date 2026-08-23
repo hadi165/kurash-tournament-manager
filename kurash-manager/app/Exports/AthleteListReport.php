@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Collection;
  * Narrowed to one nation when a delegation asks for their own, which is the
  * other half of the same job.
  */
-class AthleteListReport implements HasFlags, HasTotal, Report
+class AthleteListReport implements HasTotal, Report
 {
     /**
      * @param  string|null  $noc  One nation's list, or null for everybody's,
@@ -72,11 +72,6 @@ class AthleteListReport implements HasFlags, HasTotal, Report
         // handed to a hotel gets sorted and filtered on them, and a column
         // reading "UZB — Uzbekistan" cannot be either.
         return ['NOC', 'Country', 'IKA ID', 'Name', 'Gender', 'Division', 'Weight', 'Passport / ID', 'Club'];
-    }
-
-    public function flagColumn(): int
-    {
-        return 0;
     }
 
     public function total(): array

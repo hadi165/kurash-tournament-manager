@@ -14,7 +14,7 @@ use App\Support\Noc;
  * The medallists for every decided class in one table, which is what goes to
  * the medal ceremony and into the archive.
  */
-class ResultsReport implements Report
+class ResultsReport implements Report, ResultDocument
 {
     public function __construct(
         private readonly Championship $championship,

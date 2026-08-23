@@ -161,9 +161,13 @@ describe('the athlete list', function () {
         expect($report->rows()[0][1])->toBe('Kazakhstan');
     });
 
-    /** Which column the flag is drawn from — the PDF writer asks for this. */
-    it('flies its flag on the code', function () {
-        expect((new AthleteListReport($this->championship))->flagColumn())->toBe(0);
+    /**
+     * The flag comes from the column headed NOC. Detected by the template
+     * rather than declared here — every table with an NOC column gets one, and
+     * no report has to remember to ask.
+     */
+    it('heads its code column NOC, which is what earns it a flag', function () {
+        expect((new AthleteListReport($this->championship))->headings()[0])->toBe('NOC');
     });
 
     it('is served as a PDF and as a workbook', function () {

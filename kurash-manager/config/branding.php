@@ -9,6 +9,15 @@ return [
     'short_name' => env('BRANDING_SHORT_NAME', 'IKA'),
 
     /*
+     | Printed at the foot of every PDF, in the same place on every sheet: a
+     | page that leaves the venue should say who produced it.
+     |
+     | Defaults to the federation's own name so nothing prints an empty line
+     | before anybody has configured it.
+     */
+    'company' => env('BRANDING_COMPANY', env('BRANDING_ORGANISATION', 'International Kurash Association')),
+
+    /*
      | Path to the official logo, relative to public/.
      |
      | Drop the real artwork at public/images/logo.svg (or .png) and it appears
