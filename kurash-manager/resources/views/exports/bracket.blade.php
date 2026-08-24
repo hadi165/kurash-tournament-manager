@@ -177,13 +177,66 @@
 
         .champion-name { font-size: {{ $scale['name'] }}px; font-weight: bold; padding-bottom: 2px; }
 
+        /* The foot is two columns: the key on the left, the podium on the
+           right, sharing one rule. A `float` would be the obvious way to put
+           the medals in the corner and the wrong one — Dompdf floats a table
+           out of the flow and off the bottom of the page. */
         .foot {
+            width: 100%;
+            border-collapse: collapse;
             margin-top: 8px;
-            padding-top: 5px;
             border-top: 1px solid #e0e5e3;
+        }
+
+        .foot td {
+            border: 0;
+            padding: 5px 0 0;
+            vertical-align: bottom;
             font-size: 8px;
             color: #5d6d67;
         }
+
+        /* The medals, bottom right. Fixed width because a shrink-to-fit table
+           in Dompdf takes whatever width it likes. */
+        .medals {
+            border-collapse: collapse;
+            width: {{ $scale['medals'] }}px;
+        }
+
+        .medals td, .medals th {
+            border: 1px solid #d6ded9;
+            padding: 1.5px 5px;
+            font-size: {{ $scale['noc'] }}px;
+            color: #111a16;
+        }
+
+        .medals th {
+            background: #019a44;
+            color: #fff;
+            font-size: {{ $scale['head'] }}px;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            text-align: left;
+        }
+
+        /* The place is the medal: the column is coloured rather than captioned,
+           so 1, 2, 3, 3 reads as gold, silver and two bronzes at a glance. */
+        .medal-place {
+            width: 14px;
+            text-align: center;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .medal-1 { background: #c9a227; }
+        .medal-2 { background: #9aa5ab; }
+        .medal-3 { background: #a9713f; }
+
+        .medal-name { font-weight: bold; }
+        .medal-noc { width: 34px; font-weight: bold; color: #5d6d67; }
+        .medal-blank { color: #9fada7; font-weight: normal; }
+
+        .medal-flag { width: {{ $scale['flag'] }}px; height: {{ round($scale['flag'] * 0.75, 1) }}px; vertical-align: middle; margin-right: 3px; }
 
         .key { display: inline-block; width: 8px; height: 8px; border-radius: 2px; }
     </style>
@@ -323,14 +376,50 @@
         </tbody>
     </table>
 
-    <div class="foot">
-        <span class="key" style="background: #1a9fd8;"></span> {{ __('Yakhtak Blue') }}
-        &nbsp;&nbsp;
-        <span class="key" style="background: #019a44;"></span> {{ __('Yakhtak Green') }}
-        &nbsp;&nbsp;·&nbsp;&nbsp;
-        {{ __('Fight numbers follow the published running order.') }}
-        &nbsp;&nbsp;·&nbsp;&nbsp;
-        {{ __('Generated :when', ['when' => now()->format('j M Y H:i')]) }}
-    </div>
+    @php $podium = $sheet->podium(); @endphp
+
+    <table class="foot">
+        <tr>
+            <td>
+                <span class="key" style="background: #1a9fd8;"></span> {{ __('Yakhtak Blue') }}
+                &nbsp;&nbsp;
+                <span class="key" style="background: #019a44;"></span> {{ __('Yakhtak Green') }}
+                &nbsp;&nbsp;·&nbsp;&nbsp;
+                {{ __('Fight numbers follow the published running order.') }}
+                &nbsp;&nbsp;·&nbsp;&nbsp;
+                {{ __('Generated :when', ['when' => now()->format('j M Y H:i')]) }}
+            </td>
+
+            {{-- The podium, in the bottom right corner: two places and the two
+                 bronzes, the champion's beaten semi-finalist listed first. --}}
+            @if ($podium !== [])
+                <td style="width: {{ $scale['medals'] }}px; text-align: right;">
+                    <table class="medals">
+                        <tr><th colspan="3">{{ __('Medals') }}</th></tr>
+
+                        @foreach ($podium as $place)
+                            <tr>
+                                <td class="medal-place medal-{{ $place['place'] }}">{{ $place['place'] }}</td>
+
+                                <td class="medal-name">
+                                    @if ($place['name'] === '')
+                                        <span class="medal-blank">{{ __('not yet decided') }}</span>
+                                    @else
+                                        @php $medalFlag = \App\Support\PrintFlag::path($place['noc']); @endphp
+                                        @if ($medalFlag)
+                                            <img class="medal-flag" src="{{ $medalFlag }}" alt="{{ $place['noc'] }}">
+                                        @endif
+                                        {{ $place['name'] }}
+                                    @endif
+                                </td>
+
+                                <td class="medal-noc">{{ $place['noc'] }}</td>
+                            </tr>
+                        @endforeach
+                    </table>
+                </td>
+            @endif
+        </tr>
+    </table>
 </body>
 </html>

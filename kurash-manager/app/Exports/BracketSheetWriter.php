@@ -73,8 +73,12 @@ class BracketSheetWriter
         128 => ['a1', 1683.78],
     ];
 
-    /** The furniture the tree has to fit underneath: head, rule, headings, foot. */
-    private const CHROME = 210;
+    /**
+     * The furniture the tree has to fit underneath: head, rule, headings, and
+     * the foot — which is the key and the podium side by side, and taller than
+     * the key alone was. The tree gives the room up; the page does not grow.
+     */
+    private const CHROME = 275;
 
     /** Points to CSS pixels, which is what Dompdf lays out in. */
     private const PX_PER_PT = 96 / 72;
@@ -141,6 +145,9 @@ class BracketSheetWriter
             'badge' => $this->between($halfRow * 0.6, 12, 18),
             'flag' => $this->between($halfRow * 0.45, 8, 14),
             'fight' => $this->between($halfRow * 1.4, 26, 44),
+            // Off the paper rather than off the row: the podium holds four
+            // names whatever size the tree above it is.
+            'medals' => $this->between($heightPt * self::PX_PER_PT * 0.3, 200, 420),
             // Percentages, so the tree keeps its proportions on any paper.
             'seatColumn' => 26,
             'championColumn' => 14,
@@ -295,6 +302,62 @@ class BracketSheetWriter
             $style->getFont()->setBold(true);
             $style->getBorders()->getBottom()
                 ->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('019A44');
+        }
+
+        /*
+         | The podium, under the last columns of the tree — the bottom right
+         | corner of the sheet, the same corner the printed one files it in.
+         |
+         | Below the tree rather than beside it, because a block in the margin
+         | of a spreadsheet is a block that a sort or a filter walks over.
+         */
+        $podium = $sheet->podium();
+
+        if ($podium !== []) {
+            $placeColumn = $this->column($rounds + 1);
+            $head = $first + $sheet->halfRows() + 1;
+
+            $page->setCellValue($placeColumn.$head, 'Medals');
+            $page->mergeCells($placeColumn.$head.':'.$championColumn.$head);
+
+            $heading = $page->getStyle($placeColumn.$head.':'.$championColumn.$head);
+            $heading->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+            $heading->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('019A44');
+
+            // Gold, silver, bronze — the place is the medal, so the cell is
+            // coloured rather than captioned.
+            $medals = [1 => 'C9A227', 2 => '9AA5AB', 3 => 'A9713F'];
+
+            foreach ($podium as $index => $place) {
+                $line = $head + 1 + $index;
+
+                $page->setCellValue($placeColumn.$line, $place['place']);
+                $page->getStyle($placeColumn.$line)
+                    ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $page->getStyle($placeColumn.$line)
+                    ->getFont()->setBold(true)->getColor()->setRGB('FFFFFF');
+                $page->getStyle($placeColumn.$line)->getFill()
+                    ->setFillType(Fill::FILL_SOLID)
+                    ->getStartColor()->setRGB($medals[$place['place']] ?? '9AA5AB');
+
+                // Name and code in one cell, as the seats are written — see
+                // the note on flags at the head of this class.
+                $page->setCellValue(
+                    $championColumn.$line,
+                    $place['name'] === '' ? 'not yet decided' : trim($place['name'].' '.$place['noc'])
+                );
+
+                $name = $page->getStyle($championColumn.$line);
+                $name->getFont()->setBold($place['name'] !== '');
+
+                if ($place['name'] === '') {
+                    $name->getFont()->getColor()->setRGB('9FADA7');
+                }
+            }
+
+            $page->getStyle($placeColumn.$head.':'.$championColumn.($head + count($podium)))
+                ->getBorders()->getAllBorders()
+                ->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('D6DED9');
         }
 
         // Half the height of a line of text, so a seat still reads as one row

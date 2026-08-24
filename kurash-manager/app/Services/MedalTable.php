@@ -13,7 +13,8 @@ use Illuminate\Support\Collection;
  *
  * Gold   — winner of the final
  * Silver — loser of the final
- * Bronze — losers of the semi-finals (two, in a bracket that has semis)
+ * Bronze — losers of the semi-finals (two, in a bracket that has semis),
+ *          the champion's beaten semi-finalist first
  *
  * Same rule the original medal-helpers.php used, but reading forward links
  * instead of MAX(roundnumber) with a bare non-aggregated column in HAVING,
@@ -49,10 +50,18 @@ class MedalTable
             ->filter()
             ->firstWhere('id', $id);
 
+        // The two bronzes are not interchangeable on a results sheet: the
+        // first is whoever the champion put out, the second whoever the
+        // runner-up did. Left in the order the rows came back, the same
+        // podium printed twice could list them either way round.
         $bronze = array_values(
             $bouts
                 ->where('round', $totalRounds - 1)
                 ->filter(fn (Bout $b) => $b->isDecided() && $b->loserId() !== null)
+                ->sortBy(fn (Bout $b) => [
+                    $b->winner_athlete_id === $final->winner_athlete_id ? 0 : 1,
+                    (int) $b->position_in_round,
+                ])
                 ->map(fn (Bout $b) => $byId($b->loserId()))
                 ->filter()
                 ->all()

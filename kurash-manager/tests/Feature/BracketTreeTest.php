@@ -22,6 +22,7 @@ use App\Models\User;
 use App\Services\BoutAdvancer;
 use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
+use App\Services\MedalTable;
 use App\Support\Noc;
 use Livewire\Livewire;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -370,8 +371,9 @@ describe('the worksheet', function () {
     it('merges a cell for every seat, every branch and the champion', function () {
         [$page, $path] = workbookFor(drawnSheet(8));
 
-        // Eight seats, twice each; seven branches; one champion.
-        expect($page->getMergeCells())->toHaveCount(8 * 2 + 7 + 1);
+        // Eight seats, twice each; seven branches; one champion; and the
+        // heading over the podium in the corner.
+        expect($page->getMergeCells())->toHaveCount(8 * 2 + 7 + 1 + 1);
 
         unlink($path);
     });
@@ -863,5 +865,107 @@ describe('the older way of asking for the tree', function () {
         foreach (drawnSheet(4)->matches(1) as $match) {
             expect(array_keys($match))->toBe(['row', 'span', 'fight']);
         }
+    });
+});
+
+describe('the medals on a bracket', function () {
+    /**
+     * The two bronzes are not interchangeable. A results sheet naming third
+     * place has to name the same athlete every time it is printed, so the
+     * order is the rule — the champion's beaten semi-finalist first — and not
+     * whatever order the rows came back in.
+     */
+    it('lists the semi-finalist the champion beat as the first bronze', function () {
+        $sheet = drawnSheet(8);
+        decideEveryBout($sheet->category);
+
+        $podium = app(MedalTable::class)->forCategory($sheet->category->refresh());
+
+        $totalRounds = (int) $sheet->category->bouts()->max('round');
+
+        // Whoever the champion put out, read off the bracket rather than
+        // assumed from the seeding.
+        $beatenByGold = $sheet->category->bouts()
+            ->where('round', $totalRounds - 1)
+            ->where('winner_athlete_id', $podium['gold']->id)
+            ->first();
+
+        expect($podium['bronze'])->toHaveCount(2)
+            ->and($podium['bronze'][0]->id)->toBe($beatenByGold->loserId())
+            ->and($podium['bronze'][1]->id)->not->toBe($beatenByGold->loserId());
+    });
+
+    it('gives the sheet four places, the third awarded twice', function () {
+        $sheet = drawnSheet(8);
+        decideEveryBout($sheet->category);
+
+        $podium = (new BracketSheet($sheet->category->refresh()))->podium();
+
+        expect(array_column($podium, 'place'))->toBe([1, 2, 3, 3])
+            ->and(array_column($podium, 'name'))->each->not->toBe('')
+            ->and(array_column($podium, 'noc'))->each->not->toBe('');
+    });
+
+    /** The places exist before the results do: a sheet to write on. */
+    it('prints the places blank while the class is unfought', function () {
+        $podium = drawnSheet(8)->podium();
+
+        expect(array_column($podium, 'place'))->toBe([1, 2, 3, 3])
+            ->and(array_column($podium, 'name'))->each->toBe('');
+    });
+
+    /** No semi-final to lose is no third place to award. */
+    it('awards no bronze in a bracket of two', function () {
+        expect(array_column(drawnSheet(2)->podium(), 'place'))->toBe([1, 2]);
+    });
+
+    it('files the podium in the corner of the printed sheet', function () {
+        $sheet = drawnSheet(8);
+        decideEveryBout($sheet->category);
+
+        $sheet = new BracketSheet($sheet->category->refresh());
+
+        $html = view('exports.bracket', [
+            'sheet' => $sheet,
+            'scale' => app(BracketSheetWriter::class)->scale($sheet),
+        ])->render();
+
+        $podium = $sheet->podium();
+
+        expect($html)->toContain('class="medals"')
+            ->and($html)->toContain('>Medals<')
+            // The place is the medal: one gold, one silver, two bronzes.
+            ->and(substr_count($html, 'medal-place medal-1'))->toBe(1)
+            ->and(substr_count($html, 'medal-place medal-2'))->toBe(1)
+            ->and(substr_count($html, 'medal-place medal-3'))->toBe(2);
+
+        foreach ($podium as $place) {
+            expect($html)->toContain($place['name']);
+        }
+    });
+
+    it('files the podium in the corner of the worksheet', function () {
+        $sheet = drawnSheet(8);
+        decideEveryBout($sheet->category);
+
+        $sheet = new BracketSheet($sheet->category->refresh());
+        [$page, $path] = workbookFor($sheet);
+
+        // Column A is the seed and B the name, so a bracket of eight runs
+        // C, D, E for its rounds and F for the champion. The podium sits
+        // under the last two, below the tree.
+        $head = 6 + $sheet->halfRows() + 1;
+
+        expect($page->getCell('E'.$head)->getValue())->toBe('Medals');
+
+        foreach ($sheet->podium() as $index => $place) {
+            $line = $head + 1 + $index;
+
+            expect($page->getCell('E'.$line)->getValue())->toBe($place['place'])
+                ->and((string) $page->getCell('F'.$line)->getValue())
+                ->toContain($place['name']);
+        }
+
+        unlink($path);
     });
 });

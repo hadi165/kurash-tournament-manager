@@ -4,6 +4,7 @@ namespace App\Exports;
 
 use App\Models\Athlete;
 use App\Models\WeightCategory;
+use App\Services\MedalTable;
 use App\Support\BracketSeeding;
 use App\Support\Noc;
 
@@ -283,6 +284,54 @@ final class BracketSheet
             ->first();
 
         return $final?->winner->fullname ?? '';
+    }
+
+    /**
+     * The podium, as it is read out and as it is filed.
+     *
+     * Gold, silver and the two bronzes — derived by MedalTable, not worked out
+     * again here, because a sheet that disagrees with the medal standings
+     * about who came third is worse than a sheet with no podium on it.
+     *
+     * The rows exist before the results do. A class that has not been fought
+     * prints the places with the names left blank, which is what an official
+     * with a pen wants at the table; the sheet is the same drawing either way.
+     *
+     * @return list<array{place:int, name:string, noc:string}>
+     */
+    public function podium(): array
+    {
+        $rounds = $this->rounds();
+
+        if ($rounds < 1) {
+            return [];
+        }
+
+        $podium = app(MedalTable::class)->forCategory($this->category);
+
+        $rows = [
+            $this->place(1, $podium['gold']),
+            $this->place(2, $podium['silver']),
+        ];
+
+        // Two bronzes wherever there is a semi-final round to lose in. A
+        // bracket of two has none, and no third place to award.
+        if ($rounds >= 2) {
+            $rows[] = $this->place(3, $podium['bronze'][0] ?? null);
+            $rows[] = $this->place(3, $podium['bronze'][1] ?? null);
+        }
+
+        return $rows;
+    }
+
+    /** @return array{place:int, name:string, noc:string} */
+    private function place(int $place, ?Athlete $athlete): array
+    {
+        return [
+            'place' => $place,
+            'name' => (string) $athlete?->fullname,
+            'noc' => (string) Noc::normalise($athlete?->noc_code),
+        ];
     }
 
     public function filename(): string
