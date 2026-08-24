@@ -51,11 +51,23 @@
 }
 
 .dc-kicker {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
     font-size: 10.5px;
     font-weight: 700;
     letter-spacing: 0.2em;
     text-transform: uppercase;
     color: var(--dc-muted);
+}
+
+/* How many are still in the pot. On the kicker rather than counted off the
+   rows, because once the panel scrolls the rows on screen stop being the
+   answer. */
+.dc-kicker-count {
+    letter-spacing: 0;
+    color: var(--dc-ink);
 }
 
 .dc-chip {
@@ -289,6 +301,21 @@
     background: var(--dc-bg);
 }
 
+/* Held to the screen where the panel and the tree sit side by side, so each
+   scrolls inside its own column instead of the page scrolling as one. A
+   ceremony whose header and Now-drawing panel slide away while somebody looks
+   for the bottom of the pool is not a ceremony anybody can follow.
+
+   Below 1100px the two stack, and a page that scrolls is the right answer
+   again — see the media query at the foot of this file. */
+@media (min-width: 1101px) {
+    .dc-board-page {
+        height: 100vh;
+        min-height: 0;
+        overflow: hidden;
+    }
+}
+
 .dc-head {
     display: flex;
     align-items: center;
@@ -354,10 +381,17 @@
     min-width: 0;
 }
 
+/* Every athlete still to be drawn is on this list, however many that is: it
+   takes the height that is left and scrolls, rather than the panel deciding
+   how many people are in the draw. */
 .dc-pool-list {
     display: flex;
     flex-direction: column;
     margin-top: 12px;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .dc-foot-group {
@@ -400,7 +434,16 @@
 
 /* ── Pool panel ─────────────────────────────────────────────────────────── */
 
-.dc-pool { width: 340px; flex: none; }
+/* A column, so the pool list can take what is left of the height and scroll
+   inside it. Wider than it was: the list carries a whole name now, not a
+   country and a count. */
+.dc-pool {
+    width: 380px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
 
 .dc-now {
     padding: 20px;
@@ -435,8 +478,21 @@
     font-size: 14px;
 }
 
-.dc-pool-noc { font-weight: 700; min-width: 42px; }
-.dc-pool-name { color: var(--dc-muted); flex: 1; min-width: 0; }
+/* The code sits at the end of the line and never shrinks; the name takes the
+   rest and wraps onto a second line rather than being cut in half, which is
+   what a name three parts long needs. */
+.dc-pool-noc {
+    flex: none;
+    font-weight: 700;
+    color: var(--dc-muted);
+}
+
+.dc-pool-name {
+    flex: 1;
+    min-width: 0;
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
 /* Sized in the sidebar's own terms. The artwork is the nation's, so it is
    never recoloured and never distorted — cover, on a hairline that separates a
    white field from the panel behind it. */
@@ -683,6 +739,21 @@
     background: var(--dc-bg);
 }
 
+/* Held to the screen where the panel and the tree sit side by side, so each
+   scrolls inside its own column instead of the page scrolling as one. A
+   ceremony whose header and Now-drawing panel slide away while somebody looks
+   for the bottom of the pool is not a ceremony anybody can follow.
+
+   Below 1100px the two stack, and a page that scrolls is the right answer
+   again — see the media query at the foot of this file. */
+@media (min-width: 1101px) {
+    .dc-board-page {
+        height: 100vh;
+        min-height: 0;
+        overflow: hidden;
+    }
+}
+
 .sbv-head {
     display: flex;
     align-items: center;
@@ -814,6 +885,34 @@
 .dc-now-waiting { border-left-color: var(--dc-gold); }
 
 .dc-start { margin: -16px 0 28px; }
+
+/* The finished draw, ready to be taken away. Sits where the Next button was,
+   so the eye does not have to go looking for it at the end. */
+.dc-save {
+    margin: -16px 0 28px;
+    padding: 16px;
+    background: var(--dc-panel);
+    border: 1px solid var(--dc-line);
+    border-left: 3px solid var(--dc-accent);
+    border-radius: var(--dc-radius-sm);
+}
+
+.dc-save-done {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--dc-accent);
+    margin-bottom: 12px;
+}
+
+.dc-save-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.dc-save-links .dc-button { text-decoration: none; }
 
 /* ── The board on smaller screens ───────────────────────────────────────────
    It is venue furniture first, but a phone must still be able to read it:

@@ -121,10 +121,27 @@ Route::middleware(['auth', 'verified', 'can:draw.view_published'])->group(functi
     Route::get('operator/draws/{weightCategory}', OperatorPresentation::class)->name('operator.draws.show');
 
     // The ceremony itself: the same board the venue projector runs, opened by
-    // whoever is presenting rather than left on a wall.
+    // whoever is presenting rather than left on a wall. Announced — the person
+    // at the microphone places each position by pressing.
     Route::get('operator/draws/{weightCategory}/ceremony', DrawCeremony::class)
         ->defaults('ceremony', true)
         ->name('operator.draws.ceremony');
+
+    /*
+     | The same board, running itself.
+     |
+     | A separate address rather than a flag on the one above, because the mode
+     | has to survive a refresh and a bookmark: an operator whose browser
+     | reloads mid-ceremony must come back to the ceremony they started, not to
+     | a different one. Which door was used is the whole difference, so the door
+     | is what carries it.
+     |
+     | This is the one Entries and Draw sends an operator through.
+     */
+    Route::get('operator/draws/{weightCategory}/present', DrawCeremony::class)
+        ->defaults('ceremony', true)
+        ->defaults('automatic', true)
+        ->name('operator.draws.present');
 });
 
 /*

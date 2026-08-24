@@ -8,9 +8,14 @@
 //
 // Only the 4x3 set is copied; the 1x1 set would double the size for a shape
 // nothing in this application uses.
+//
+// The print/ subdirectory beside them is the raster set Dompdf uses, made by
+// `php artisan flags:rasterise` from these same files. It is left alone here:
+// the vectors are replaced, and whether the rasters need remaking is that
+// command's business.
 
-import { cp, mkdir, readdir, rm } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { cp, mkdir, readdir, unlink } from 'node:fs/promises';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -24,9 +29,17 @@ try {
     process.exit(1);
 }
 
-await rm(target, { recursive: true, force: true });
 await mkdir(target, { recursive: true });
+
+// The vectors only, so a flag withdrawn upstream still goes — but the print
+// set survives, and so does anything else deliberately put here.
+for (const file of await readdir(target)) {
+    if (file.endsWith('.svg')) {
+        await unlink(join(target, file));
+    }
+}
+
 await cp(source, target, { recursive: true });
 
-const flags = await readdir(target);
+const flags = (await readdir(target)).filter((file) => file.endsWith('.svg'));
 console.log(`flags: copied ${flags.length} SVGs to public/flags`);

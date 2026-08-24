@@ -3,9 +3,9 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "node scripts/copy-flags.mjs && vite build",
-        "dev": "node scripts/copy-flags.mjs && vite",
-        "flags": "node scripts/copy-flags.mjs"
+        "build": "npm run flags && vite build",
+        "dev": "npm run flags && vite",
+        "flags": "node scripts/copy-flags.mjs && php artisan flags:rasterise"
     },
     "dependencies": {
         "@laravel/passkeys": "^0.2.0",

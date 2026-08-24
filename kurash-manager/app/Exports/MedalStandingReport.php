@@ -12,7 +12,7 @@ use App\Support\Noc;
  * Ranked the way standings always are: gold first, then silver, then bronze,
  * so a country with one gold finishes above a country with three bronzes.
  */
-class MedalStandingReport implements HasTotal, Report
+class MedalStandingReport implements HasTotal, Report, ResultDocument
 {
     public function __construct(
         private readonly Championship $championship,

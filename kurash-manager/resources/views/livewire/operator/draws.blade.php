@@ -4,11 +4,19 @@
 >
     <x-ui.card>
         <div class="grid gap-[18px] md:grid-cols-4">
+            {{-- Chosen, not typed. An operator at a draw knows which
+                 competition they are running, and a misspelt one looks exactly
+                 like a competition with nothing published. --}}
             <div class="flex flex-col gap-[7px]">
-                <label for="d-search" class="text-[12.5px] font-semibold text-muted">{{ __('Search') }}</label>
-                <flux:input id="d-search" wire:model.live.debounce.300ms="search"
-                            icon="magnifying-glass" :placeholder="__('Weight, category or championship')"
-                            class:input="!rounded-full" />
+                <label for="d-championship" class="text-[12.5px] font-semibold text-muted">{{ __('Competition') }}</label>
+                <flux:select id="d-championship" wire:model.live="championship">
+                    <flux:select.option value="" :selected="$championship === ''">{{ __('All competitions') }}</flux:select.option>
+                    @foreach ($championships as $event)
+                        <flux:select.option value="{{ $event->id }}" :selected="(string) $event->id === $championship">
+                            {{ $event->title }}@if ($event->starts_on) · {{ $event->starts_on->format('j M Y') }} @endif
+                        </flux:select.option>
+                    @endforeach
+                </flux:select>
             </div>
 
             <div class="flex flex-col gap-[7px]">

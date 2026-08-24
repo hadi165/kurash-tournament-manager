@@ -42,6 +42,9 @@
         /* The logo sits top right in its own box, as the design files it. */
         .logo { border: 1px solid #e2e8e5; border-radius: 5px; padding: 4px; }
 
+        /* Height only: a forced square squashes artwork that is not one. */
+        .logo img { height: 62px; }
+
         .rule { border-top: 3px solid #019a44; margin: 8px 0 10px; }
 
         .tree { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -81,6 +84,10 @@
 
         .seat-name { font-size: 9.5px; font-weight: bold; padding-left: 4px; }
         .seat-noc { font-size: 8.5px; font-weight: bold; color: #5d6d67; }
+
+        /* Smaller than the one the tables fly: a seat is a narrow column with
+           a badge and a name already in it. */
+        .seat-flag { width: 12px; height: 9px; vertical-align: middle; margin-right: 3px; }
         .seat-bye .seat-name { font-weight: normal; color: #7d8b85; }
 
         /* The connector: a bar down the left edge of the cell the match spans,
@@ -164,7 +171,7 @@
 
             <td style="text-align: right; width: 130px;">
                 @if ($printLogo)
-                    <span class="logo"><img src="{{ $printLogo }}" alt="" style="width: 56px; height: 56px;"></span>
+                    <span class="logo"><img src="{{ $printLogo }}" alt=""></span>
                 @endif
 
                 <div class="meta" style="margin-top: 6px;">
@@ -193,6 +200,10 @@
                     <td class="seat {{ $seat['bye'] ? 'seat-bye' : '' }}">
                         <span class="seat-no {{ $seat['corner'] === 'blue' ? 'seat-blue' : 'seat-green' }}">{{ $seat['seed'] }}</span>
                         <span class="seat-name">{{ $seat['name'] }}</span>
+                        @php $seatFlag = \App\Support\PrintFlag::path($seat['noc']); @endphp
+                        @if ($seatFlag)
+                            <img class="seat-flag" src="{{ $seatFlag }}" alt="">
+                        @endif
                         <span class="seat-noc">{{ $seat['noc'] }}</span>
                     </td>
 

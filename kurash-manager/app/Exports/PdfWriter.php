@@ -26,9 +26,10 @@ class PdfWriter
             // Only the reports that end in a meaningful sum carry a total row;
             // a running order has nothing to add up.
             'total' => $report instanceof HasTotal ? $report->total() : null,
-            // Which column carries a nation, so the template can fly its flag
-            // beside the code. Null for the reports that have no use for one.
-            'flagColumn' => $report instanceof HasFlags ? $report->flagColumn() : null,
+            // Results print blue and everything else green, so a medal
+            // standing is never mistaken for a start list on a table covered
+            // in paper.
+            'palette' => $report instanceof ResultDocument ? 'blue' : 'green',
             // The foot of every page says which competition the sheet belongs
             // to, so a page separated from its stack can still be filed.
             'footerLine' => collect([$meta['Competition'] ?? null, $meta['Venue'] ?? null])

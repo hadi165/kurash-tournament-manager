@@ -3,6 +3,19 @@
      external stylesheets, and every rule here is one Dompdf actually supports:
      no flexbox, no web fonts, no absolute connectors. Where the design uses a
      flex row, this template uses a layout table. --}}
+@php
+    /*
+     | Two schemes, one template. A report is about preparation — entries,
+     | weigh-ins, draws, running orders — and prints green. A result is about
+     | what happened, and prints blue, so a medal standing is never mistaken
+     | for a start list on a table covered in paper.
+     |
+     | The writer says which; nothing here decides it.
+     */
+    $scheme = ($palette ?? 'green') === 'blue'
+        ? ['base' => '#0b5fa5', 'edge' => '#3f83bf', 'sub' => '#cfe1f0', 'tag' => '#e6f0f9', 'ref' => '#c6dcf0']
+        : ['base' => '#019a44', 'edge' => '#35ac66', 'sub' => '#cfeadb', 'tag' => '#e4f5ea', 'ref' => '#c8e7d6'];
+@endphp
 <!DOCTYPE html>
 <html>
 <head>
@@ -35,12 +48,12 @@
             top: -112px;
             left: 0;
             width: 100%;
-            background: #019a44;
+            background: {{ $scheme['base'] }};
             color: #fff;
         }
 
         .band table { width: 100%; border-collapse: collapse; }
-        .band td { padding: 20px 40px; vertical-align: middle; border: 0; }
+        .band td { padding: 15px 40px; vertical-align: middle; border: 0; }
 
         /* The logo always sits on a white chip and is never recoloured: the
            artwork is the federation's. */
@@ -50,6 +63,20 @@
             border-radius: 3px;
         }
 
+        /* Block, so the chip is the height of the artwork and not of the line
+           box around it: inline leading was adding a third again and pushing
+           the mark out through the bottom of the band. */
+        .chip img { display: block; }
+
+        .chip-text {
+            display: inline-block;
+            padding: 9px 11px;
+            font-size: 15px;
+            font-weight: bold;
+            letter-spacing: 0.04em;
+            color: {{ $scheme['base'] }};
+        }
+
         .org { font-size: 14px; font-weight: bold; }
 
         .org-sub {
@@ -57,7 +84,7 @@
             font-weight: bold;
             letter-spacing: 0.14em;
             text-transform: uppercase;
-            color: #cfeadb;
+            color: {{ $scheme['sub'] }};
         }
 
         .doc-tag {
@@ -65,13 +92,13 @@
             font-weight: bold;
             letter-spacing: 0.14em;
             text-transform: uppercase;
-            color: #e4f5ea;
+            color: {{ $scheme['tag'] }};
         }
 
         .doc-ref {
             font-family: DejaVu Sans Mono, monospace;
             font-size: 9px;
-            color: #c8e7d6;
+            color: {{ $scheme['ref'] }};
         }
 
         /* ── Title and meta ──────────────────────────────────────────────── */
@@ -79,6 +106,7 @@
         .sheet { padding: 0 40px; }
 
         h1 {
+            text-align: center;
             font-size: 23px;
             font-weight: bold;
             letter-spacing: -0.015em;
@@ -95,7 +123,7 @@
             border-bottom: 1px solid #e0e5e3;
         }
 
-        .meta td { padding: 0 34px 16px 0; vertical-align: top; border: 0; }
+        .meta td { padding: 0 17px 16px; vertical-align: top; border: 0; text-align: center; }
 
         .meta .label {
             font-size: 8.5px;
@@ -114,18 +142,17 @@
         thead { display: table-header-group; }   /* repeat headings on every page */
 
         .data th {
-            background: #019a44;
+            background: {{ $scheme['base'] }};
             color: #fff;
             font-size: 9px;
             font-weight: bold;
             letter-spacing: 0.08em;
             text-transform: uppercase;
-            text-align: left;
+            text-align: center;
             padding: 9px 10px;
-            border-right: 1px solid #35ac66;
+            border-right: 1px solid {{ $scheme['edge'] }};
         }
 
-        .data th.num { text-align: right; }
         .data th:last-child { border-right: 0; }
 
         /* Only a bottom hairline: a full grid turns a start list into graph
@@ -134,24 +161,26 @@
             font-size: 11px;
             padding: 8px 10px;
             border-bottom: 1px solid #eceeed;
-            vertical-align: top;
+            vertical-align: middle;
+            text-align: center;
         }
 
-        .data td.num { text-align: right; }
         .data td.strong { font-weight: bold; }
 
         .data tbody tr:nth-child(even) td { background: #f7f9f8; }
 
-        /* Status reads as a chip in the fixed vocabulary the specification
-           sets: a value, not a sentence. */
+        /* Four by three, the shape the artwork is drawn on, so nothing is
+           stretched. The hairline that keeps a white-edged flag readable is in
+           the artwork itself — see App\Support\PrintFlag. */
         .flag {
-            width: 18px;
+            width: 16px;
             height: 12px;
             vertical-align: middle;
             margin-right: 5px;
-            border: 0.5px solid #cfd8d4;
         }
 
+        /* Status reads as a chip in the fixed vocabulary the specification
+           sets: a value, not a sentence. */
         .chip-status {
             display: inline-block;
             padding: 2px 9px;
@@ -179,7 +208,7 @@
             border-collapse: collapse;
             margin-top: 10px;
             background: #f2f5f4;
-            border-top: 2px solid #019a44;
+            border-top: 2px solid {{ $scheme['base'] }};
         }
 
         .total td {
@@ -191,7 +220,7 @@
             border: 0;
         }
 
-        .total .value { text-align: right; }
+        .total td { text-align: center; }
 
         /* ── Footer ──────────────────────────────────────────────────────── */
 
@@ -208,7 +237,7 @@
             bottom: -20px;
             left: 40px;
             right: 40px;
-            border-top: 2px solid #019a44;
+            border-top: 2px solid {{ $scheme['base'] }};
         }
 
         .foot-left {
@@ -265,6 +294,31 @@
 
         $last = count($headings) - 1;
 
+        /*
+         | The nation in a cell, if there is one.
+         |
+         | Two shapes, because the tables carry it two ways: a column headed
+         | NOC holds the code on its own, and a corner on a running order
+         | holds a name with the code after it — "Rustam Kamolov (UZB)",
+         | which is how the screen sets it. Both are checked against the code
+         | table, so a three-letter word that is not a nation stays a word.
+         */
+        $flagFor = function ($cell, string $heading): ?string {
+            $value = trim((string) $cell);
+
+            if ($value === '') {
+                return null;
+            }
+
+            $code = strcasecmp(trim($heading), 'NOC') === 0
+                ? $value
+                : (preg_match('/\(([A-Za-z]{3})\)\s*$/', $value, $found) ? $found[1] : null);
+
+            // The print copy, not the one the screens fly: Dompdf establishes
+            // no viewport for an SVG, so the raster set is what paper gets.
+            return $code !== null ? \App\Support\PrintFlag::path($code) : null;
+        };
+
         // The specification fixes this vocabulary, so the template can read it.
         $chipKind = function ($value): ?string {
             $value = trim((string) $value);
@@ -284,11 +338,23 @@
                 <td>
                     <table>
                         <tr>
-                            @if ($printLogo)
-                                <td style="padding: 0; width: 48px;">
-                                    <span class="chip"><img src="{{ $printLogo }}" alt="" style="width: 38px; height: 38px;"></span>
-                                </td>
-                            @endif
+                            <td style="padding: 0;">
+                                {{-- Height only: the artwork is the federation's and a
+                                     forced square would squash a wordmark. Set to fill
+                                     the band — 70px of artwork, 5px of chip either side
+                                     and the 15px the row is padded by comes to the 112px
+                                     the page reserves for the header.
+
+                                     Where it cannot be drawn — a PNG on a server with no
+                                     GD — the chip carries the short name instead, so the
+                                     header holds its shape either way rather than
+                                     collapsing to a bare line of text. --}}
+                                @if ($printLogo)
+                                    <span class="chip"><img src="{{ $printLogo }}" alt="" style="height: 70px;"></span>
+                                @else
+                                    <span class="chip chip-text">{{ config('branding.short_name') }}</span>
+                                @endif
+                            </td>
                             <td style="padding: 0 0 0 14px;">
                                 <div class="org">{{ config('branding.organisation') }}</div>
                                 <div class="org-sub">Official competition document</div>
@@ -325,21 +391,28 @@
         <table class="data">
             <thead>
                 <tr>
+                    {{-- Added here rather than by each report, so every sheet
+                         numbers its lines the same way and no report has to
+                         carry a counter of its own. --}}
+                    <th style="width: 34px;">Item No.</th>
+
                     @foreach ($headings as $column => $heading)
-                        <th @class(['num' => $isNumeric[$column]])>{{ $heading }}</th>
+                        <th>{{ $heading }}</th>
                     @endforeach
                 </tr>
             </thead>
             <tbody>
-                @forelse ($rows as $row)
+                @forelse ($rows as $line => $row)
                     <tr>
-                        @foreach ($row as $column => $cell)
-                            @php $kind = $chipKind($cell); @endphp
+                        <td class="strong">{{ $line + 1 }}</td>
 
-                            <td @class([
-                                'num' => $isNumeric[$column] ?? false,
-                                'strong' => $kind === null && ($column === 0 || $column === $last),
-                            ])>
+                        @foreach ($row as $column => $cell)
+                            @php
+                                $kind = $chipKind($cell);
+                                $flag = $kind ? null : $flagFor($cell, $headings[$column] ?? '');
+                            @endphp
+
+                            <td @class(['strong' => $kind === null && $column === $last])>
                                 @if ($kind)
                                     <span class="chip-status chip-{{ $kind }}">{{ $cell }}</span>
                                 @else
@@ -347,8 +420,8 @@
                                          this renders on the server with no
                                          browser and, at an event, often with
                                          no route off the hall's network. --}}
-                                    @if (($flagColumn ?? null) === $column && ($flagPath = \App\Support\Noc::flagPath($cell)))
-                                        <img class="flag" src="{{ $flagPath }}" alt="">
+                                    @if ($flag)
+                                        <img class="flag" src="{{ $flag }}" alt="">
                                     @endif
 
                                     {{ $cell }}
@@ -358,7 +431,7 @@
                     </tr>
                 @empty
                     <tr>
-                        <td class="empty" colspan="{{ max(1, count($headings)) }}">Nothing to report yet.</td>
+                        <td class="empty" colspan="{{ count($headings) + 1 }}">Nothing to report yet.</td>
                     </tr>
                 @endforelse
             </tbody>
@@ -378,8 +451,11 @@
     <div class="foot-rule"></div>
 
     <div class="foot-left">
+        {{-- On every sheet, in the same place: a page that leaves the venue
+             should say who produced it. --}}
+        <div class="strong">{{ config('branding.company') }}</div>
         @if ($footerLine)
-            <div class="strong">{{ $footerLine }}</div>
+            <div>{{ $footerLine }}</div>
         @endif
         <div>Generated {{ now()->format('j M Y H:i') }}</div>
     </div>

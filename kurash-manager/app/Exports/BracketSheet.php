@@ -18,7 +18,19 @@ use App\Support\Noc;
  */
 final class BracketSheet
 {
-    public function __construct(public readonly WeightCategory $category) {}
+    /**
+     * @param  bool  $fightNumbers  Whether the squares carry the number the
+     *                              running order gave each contest. A bracket
+     *                              saved at the end of a draw ceremony does not:
+     *                              the draw is settled at that point and the
+     *                              running order is not, so printing numbers
+     *                              there would put figures on a sheet that the
+     *                              schedule has not agreed to yet.
+     */
+    public function __construct(
+        public readonly WeightCategory $category,
+        public readonly bool $fightNumbers = true,
+    ) {}
 
     /** The bracket the draw was built for, not what today's list would give. */
     public function size(): int
@@ -86,8 +98,11 @@ final class BracketSheet
                 'row' => $position * $span,
                 'span' => $span,
                 // The number the running order gave this contest. A bye has no
-                // contest to number, and an undrawn order has none yet.
-                'fight' => $bout?->fight_number ? 'No. '.$bout->fight_number : '',
+                // contest to number, an undrawn order has none yet, and a
+                // bracket asked for without them shows none at all.
+                'fight' => $this->fightNumbers && $bout?->fight_number
+                    ? 'No. '.$bout->fight_number
+                    : '',
             ];
         }
 

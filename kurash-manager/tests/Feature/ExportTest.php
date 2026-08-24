@@ -22,6 +22,7 @@ use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
 use App\Services\MedalTable;
 use App\Support\BracketSeeding;
+use App\Support\PrintFlag;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 
 beforeEach(function () {
@@ -595,6 +596,62 @@ describe('the bracket sheet', function () {
 
         expect(collect($seats)->where('bye', true))->toHaveCount(3)
             ->and(collect($seats)->firstWhere('bye', true)['name'])->toBe('BYE');
+    });
+
+    /**
+     * A draw sheet is read across a hall, and a nation is quicker to find by
+     * its flag than by three letters — the same as on every other document.
+     */
+    it('flies a flag beside the nation on every seat', function () {
+        $category = weighedClass(8);
+        app(BracketGenerator::class)->generate($category);
+
+        $sheet = new BracketSheet($category->refresh());
+        $html = view('exports.bracket', ['sheet' => $sheet])->render();
+
+        $seated = collect($sheet->seats())->where('bye', false);
+
+        expect($seated)->not->toBeEmpty();
+
+        foreach ($seated as $seat) {
+            expect($html)->toContain((string) PrintFlag::path($seat['noc']));
+        }
+    });
+
+    /**
+     * A bracket saved at the end of a draw ceremony carries positions and not a
+     * running order: the draw is settled at that moment and the schedule is
+     * not, so numbering the squares would print figures nobody has agreed to.
+     */
+    describe('the running order on the squares', function () {
+        beforeEach(function () {
+            $championship = championshipWithBrackets(['-66' => 8]);
+            app(FightOrderScheduler::class)->schedule($championship);
+
+            $this->drawn = $championship->ageCategories()->first()->weightCategories()->first()->refresh();
+        });
+
+        it('numbers them when the bracket is asked for as it stands', function () {
+            $matches = (new BracketSheet($this->drawn))->matches(1);
+
+            expect(collect($matches)->pluck('fight')->filter())->not->toBeEmpty();
+        });
+
+        it('leaves them blank when the bracket is asked for without one', function () {
+            $matches = (new BracketSheet($this->drawn, fightNumbers: false))->matches(1);
+
+            expect(collect($matches)->pluck('fight')->filter())->toBeEmpty();
+        });
+
+        it('is asked for by the download, in both formats', function () {
+            foreach (['pdf', 'xlsx'] as $format) {
+                $this->get(route('exports.bracket-sheet', [
+                    'weightCategory' => $this->drawn,
+                    'format' => $format,
+                    'fights' => 0,
+                ]))->assertOk();
+            }
+        });
     });
 
     it('downloads as a PDF and as a spreadsheet', function () {
