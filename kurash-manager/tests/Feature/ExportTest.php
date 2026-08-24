@@ -685,15 +685,15 @@ describe('the bracket sheet', function () {
         $book = IOFactory::load($path);
         $page = $book->getActiveSheet();
 
-        // Eight seats, two rows each; seven branches; the champion; and the
-        // heading over the podium in the corner. The sheet is ruled in
-        // half-seats so a connector can start on a centre line — see
-        // BracketTreeTest.
-        expect($page->getMergeCells())->toHaveCount(8 * 2 + 7 + 1 + 1);
+        // Eight seats, two rows each; the champion; the podium heading; and
+        // four merges in the tree. The sheet is ruled in half-seats so a
+        // connector can start on a centre line, and a branch is drawn in
+        // three cells of which only the tall ones merge — see BracketTreeTest.
+        expect($page->getMergeCells())->toHaveCount(8 * 2 + 1 + 1 + 4);
 
-        $numbers = collect($page->getMergeCells())
-            ->map(fn (string $range) => (string) $page->getCell(explode(':', $range)[0])->getValue())
-            ->filter(fn (string $value) => str_starts_with($value, 'No. '));
+        $numbers = collect($page->toArray())
+            ->flatten()
+            ->filter(fn ($value) => is_string($value) && str_starts_with($value, 'No. '));
 
         expect($numbers)->toHaveCount(7);
 

@@ -120,17 +120,22 @@
         .seat-flag { width: {{ $scale['flag'] }}px; height: {{ round($scale['flag'] * 0.75, 1) }}px; vertical-align: middle; margin-right: 3px; }
         .tree td.seat-bye .seat-name { font-weight: normal; color: #7d8b85; }
 
-        /* A branch: the two horizontals it is fed by, and the vertical between
-           them. The line leaving its centre belongs to the round on its right. */
-        .tree td.branch {
-            border-top: 1px solid #7d8b85;
-            border-right: 1px solid #7d8b85;
-            border-bottom: 1px solid #7d8b85;
-            text-align: center;
-            vertical-align: middle;
-        }
+        /* A branch is three cells stacked, not one box — see BracketSheet's
+           parts(). The vertical runs down all of them; the line from the upper
+           node lands on the first and the line from the lower one on the last.
+           Written as `td.x` for the same reason everything else here is: a bare
+           class loses to `.tree td` and the borders vanish. */
+        .tree td.branch { border-right: 1px solid #7d8b85; }
+        .tree td.branch-top { border-top: 1px solid #7d8b85; }
+        .tree td.branch-bottom { border-bottom: 1px solid #7d8b85; }
 
+        /* Last, so it outranks the three above on source order — they are all
+           the same specificity. */
         .tree td.branch-final { border-color: #019a44; }
+
+        .tree td.align-top { vertical-align: top; }
+        .tree td.align-bottom { vertical-align: bottom; }
+        .tree td.fight-cell { text-align: center; vertical-align: bottom; }
 
         /* The fight number sits on the line the branch leaves by, which is the
            point of putting it here rather than beside the tree. */
@@ -145,14 +150,15 @@
             background: #fff;
         }
 
-        .branch-final .fight { background: #eaf7ef; border-color: #019a44; }
+        .fight-cell.branch-final .fight, .branch-final .fight { background: #eaf7ef; border-color: #019a44; }
 
-        /* The name of whoever went through, sitting on the line they went
-           through on — the background is what keeps it legible where it
-           crosses. */
-        .won {
+        /* Whoever arrived on the line, written against the line they arrived
+           on — which is the edge of the round they arrived *into*, not the one
+           they came from. The background keeps the name legible where it
+           crosses the rule. */
+        .entrant {
             display: inline-block;
-            padding: 0 4px;
+            padding: 0 3px;
             font-size: {{ $scale['name'] }}px;
             font-weight: bold;
             background: #fff;
@@ -329,35 +335,36 @@
                     @endif
 
                     @for ($round = 1; $round <= $rounds; $round++)
+                        {{-- A blank cell is still a cell: a hole would shift
+                             the column below it. --}}
                         @if (isset($cells[$row][$round]))
                             @php $cell = $cells[$row][$round]; @endphp
 
-                            @if ($cell['branch'])
-                                <td class="branch {{ $cell['branch']['final'] ? 'branch-final' : '' }}"
-                                    rowspan="{{ $cell['span'] }}">
-                                    @if ($cell['branch']['fight'] !== '')
-                                        <span class="fight">{{ $cell['branch']['fight'] }}</span>
-                                    @endif
+                            <td rowspan="{{ $cell['span'] }}" @class([
+                                'branch' => $cell['kind'] !== 'blank',
+                                'branch-top' => $cell['top'],
+                                'branch-bottom' => $cell['bottom'],
+                                'branch-final' => $cell['final'],
+                                'fight-cell' => $cell['kind'] === 'fight',
+                                'align-top' => $cell['kind'] !== 'fight' && $cell['align'] === 'top',
+                                'align-bottom' => $cell['kind'] !== 'fight' && $cell['align'] === 'bottom',
+                            ])>
+                                @if ($cell['text'] === '')
+                                    {{-- Nothing decided yet, and the line is
+                                         left clear for somebody to write on. --}}
+                                @elseif ($cell['kind'] === 'fight')
+                                    <span class="fight">{{ $cell['text'] }}</span>
+                                @else
+                                    @php $entrantFlag = \App\Support\PrintFlag::path($cell['noc']); @endphp
 
-                                    {{-- Whoever went through, on the line they
-                                         went through on. A sheet with nothing
-                                         recorded yet keeps the line clear for
-                                         somebody to write on. --}}
-                                    @if ($cell['branch']['winner'] !== '')
-                                        @php $wonFlag = \App\Support\PrintFlag::path($cell['branch']['winnerNoc']); @endphp
-
-                                        <span class="won">
-                                            @if ($wonFlag)
-                                                <img class="seat-flag" src="{{ $wonFlag }}" alt="{{ $cell['branch']['winnerNoc'] }}">
-                                            @endif
-                                            {{ $cell['branch']['winner'] }}
-                                        </span>
-                                    @endif
-                                </td>
-                            @else
-                                {{-- A hole would shift the column below it. --}}
-                                <td rowspan="{{ $cell['span'] }}"></td>
-                            @endif
+                                    <span class="entrant">
+                                        @if ($entrantFlag)
+                                            <img class="seat-flag" src="{{ $entrantFlag }}" alt="{{ $cell['noc'] }}">
+                                        @endif
+                                        {{ $cell['text'] }}
+                                    </span>
+                                @endif
+                            </td>
                         @endif
                     @endfor
 

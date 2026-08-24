@@ -249,38 +249,74 @@ class BracketSheetWriter
                 ->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB('B9C4BF');
         }
 
-        // The tree itself: one merged cell per branch, bordered on the three
-        // sides that carry a line.
-        foreach ($sheet->branches() as $branch) {
-            $column = $this->column($branch['round'] + 1);
-            $top = $first + $branch['row'];
-            $bottom = $top + $branch['span'] - 1;
-            $range = $column.$top.':'.$column.$bottom;
+        /*
+         | The tree itself.
+         |
+         | A branch is three cells stacked rather than one box — see
+         | BracketSheet's parts() — so the walk is by column, and each cell
+         | says which of its own edges carry a line. The three together are
+         | the same three-sided figure the printed sheet draws, and the two
+         | files still cannot disagree about it.
+         */
+        for ($round = 1; $round <= $rounds; $round++) {
+            foreach ($sheet->column($round) as $cell) {
+                if ($cell['kind'] === 'blank') {
+                    continue;
+                }
 
-            $page->mergeCells($range);
+                $column = $this->column($round + 1);
+                $top = $first + $cell['row'];
+                $range = $column.$top.':'.$column.($top + $cell['span'] - 1);
 
-            // The number the running order gave the contest, and whoever went
-            // through it — the same two the printed sheet writes on the line.
-            $page->setCellValue($column.$top, trim(implode(' · ', array_filter([
-                $branch['fight'],
-                $branch['winner'],
-            ]))));
+                // One row is one cell already; merging it would be a merge of
+                // one, which some readers write out and others reject.
+                if ($cell['span'] > 1) {
+                    $page->mergeCells($range);
+                }
 
-            $style = $page->getStyle($range);
-            $style->getAlignment()
-                ->setHorizontal(Alignment::HORIZONTAL_CENTER)
-                ->setVertical(Alignment::VERTICAL_CENTER);
-            $style->getFont()->setBold(true);
+                // The code beside the name rather than a flag beside it — see
+                // the note on flags at the head of this class.
+                $page->setCellValue($column.$top, $cell['kind'] === 'fight'
+                    ? $cell['text']
+                    : trim($cell['text'].' '.$cell['noc']));
 
-            $colour = $branch['final'] ? '019A44' : '7D8B85';
-            $borders = $style->getBorders();
+                $style = $page->getStyle($range);
+                $style->getFont()->setBold(true);
 
-            foreach ([$borders->getTop(), $borders->getRight(), $borders->getBottom()] as $edge) {
-                $edge->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB($colour);
-            }
+                $style->getAlignment()
+                    ->setHorizontal($cell['kind'] === 'fight'
+                        ? Alignment::HORIZONTAL_CENTER
+                        : Alignment::HORIZONTAL_LEFT)
+                    ->setVertical($cell['align'] === 'top'
+                        ? Alignment::VERTICAL_TOP
+                        : Alignment::VERTICAL_BOTTOM);
 
-            if ($branch['final']) {
-                $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('EAF7EF');
+                // The number sits in a single half-row, and a half-row is nine
+                // points: at the book's default size the reader clips it.
+                if ($cell['kind'] === 'fight') {
+                    $style->getFont()->setSize(7);
+                }
+
+                $colour = $cell['final'] ? '019A44' : '7D8B85';
+                $borders = $style->getBorders();
+
+                $edges = [$borders->getRight()];
+
+                if ($cell['top']) {
+                    $edges[] = $borders->getTop();
+                }
+
+                if ($cell['bottom']) {
+                    $edges[] = $borders->getBottom();
+                }
+
+                foreach ($edges as $edge) {
+                    $edge->setBorderStyle(Border::BORDER_THIN)->getColor()->setRGB($colour);
+                }
+
+                if ($cell['final']) {
+                    $style->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('EAF7EF');
+                }
             }
         }
 

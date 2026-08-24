@@ -111,7 +111,14 @@ final class BracketSheet
      * own border, which is what makes the join continuous rather than two
      * segments that happen to meet.
      *
-     * @return list<array{round:int, position:int, row:int, span:int, centre:int, fight:string, winner:string, winnerNoc:string, final:bool}>
+     * `entrants` are the two who meet here: the winners of the pair of
+     * contests that feed it. They belong to this branch and not to the one
+     * they came from, because the line they arrive on is this branch's own
+     * edge — which is where a hand writes them on a printed sheet. Round one
+     * is fed by the draw rather than by a contest, and its entrants are the
+     * seats, already named in the column on the left.
+     *
+     * @return list<array{round:int, position:int, row:int, span:int, centre:int, fight:string, winner:string, winnerNoc:string, entrants:array{0:array{name:string, noc:string}, 1:array{name:string, noc:string}}, final:bool}>
      */
     public function branches(): array
     {
@@ -150,12 +157,101 @@ final class BracketSheet
                     // the nation is a fact about the athlete, and a renderer
                     // asking for a flag should not have to read one.
                     'winnerNoc' => $contests[$round][$position]['winnerNoc'] ?? '',
+                    'entrants' => [
+                        $this->entrant($contests, $round - 1, $position * 2),
+                        $this->entrant($contests, $round - 1, $position * 2 + 1),
+                    ],
                     'final' => $round === $rounds,
                 ];
             }
         }
 
         return $branches;
+    }
+
+    /**
+     * Whoever won a feeding contest, as the branch above it sees them.
+     *
+     * @param  array<int, array<int, array{fight:string, winner:string, winnerNoc:string}>>  $contests
+     * @return array{name:string, noc:string}
+     */
+    private function entrant(array $contests, int $round, int $position): array
+    {
+        return [
+            'name' => $contests[$round][$position]['winner'] ?? '',
+            'noc' => $contests[$round][$position]['winnerNoc'] ?? '',
+        ];
+    }
+
+    /**
+     * The cells one branch is drawn in, top to bottom.
+     *
+     * A branch is three things stacked, not one box with a name in the middle:
+     *
+     *     ── entrant ──┐   the top line, and whoever arrived on it
+     *                  │
+     *          No. 12  ┤   the number, on the line the branch leaves by
+     *                  │
+     *     ── entrant ──┘   the bottom line, and whoever arrived on that
+     *
+     * Splitting it is what puts each name on its own arriving line instead of
+     * both of them somewhere in between. The borders survive the split by
+     * construction: the first cell carries the line from above, the last the
+     * line from below, and every one of them carries the vertical, so the
+     * three together are the same three-sided figure as before.
+     *
+     * Round one has no entrants to write — it is fed by the draw — so its
+     * upper cell falls away and the number takes the top line. That is
+     * arithmetic, not a case: `$half` is one there and nothing above fits.
+     *
+     * @param  array{round:int, position:int, row:int, span:int, centre:int, fight:string, winner:string, winnerNoc:string, entrants:array{0:array{name:string, noc:string}, 1:array{name:string, noc:string}}, final:bool}  $branch
+     * @return list<array{row:int, span:int, kind:string, text:string, noc:string, align:string, top:bool, bottom:bool, final:bool}>
+     */
+    private function parts(array $branch): array
+    {
+        $half = intdiv($branch['span'], 2);
+        $parts = [];
+
+        if ($half > 1) {
+            $parts[] = [
+                'row' => $branch['row'],
+                'span' => $half - 1,
+                'kind' => 'entrant',
+                'text' => $branch['entrants'][0]['name'],
+                'noc' => $branch['entrants'][0]['noc'],
+                'align' => 'top',
+            ];
+        }
+
+        $parts[] = [
+            'row' => $branch['centre'] - 1,
+            'span' => 1,
+            'kind' => 'fight',
+            'text' => $branch['fight'],
+            'noc' => '',
+            'align' => 'bottom',
+        ];
+
+        $parts[] = [
+            'row' => $branch['centre'],
+            'span' => $half,
+            'kind' => 'entrant',
+            'text' => $branch['entrants'][1]['name'],
+            'noc' => $branch['entrants'][1]['noc'],
+            'align' => 'bottom',
+        ];
+
+        $last = count($parts) - 1;
+
+        foreach ($parts as $index => $part) {
+            $parts[$index] += [
+                'top' => $index === 0,
+                'bottom' => $index === $last,
+                'final' => $branch['final'],
+            ];
+        }
+
+        return $parts;
     }
 
     /**
@@ -195,10 +291,15 @@ final class BracketSheet
      * One round's column, top to bottom, with every half-row accounted for.
      *
      * A table cannot leave a hole: the rows a branch does not cover still need
-     * a cell, or the column below them shifts. This returns both, in order, so
-     * a renderer walks a column rather than working out where the gaps are.
+     * a cell, or the column below them shifts. This returns the branch's own
+     * cells and the blank ones between, in order, so a renderer walks a column
+     * rather than working out where the gaps are.
      *
-     * @return list<array{row:int, span:int, branch:array{round:int, position:int, row:int, span:int, centre:int, fight:string, winner:string, winnerNoc:string, final:bool}|null}>
+     * A branch is more than one cell — see parts() — so a `kind` says what
+     * each is for and three flags say which of its edges carry a line. Both
+     * writers read this, and neither works the borders out for itself.
+     *
+     * @return list<array{row:int, span:int, kind:string, text:string, noc:string, align:string, top:bool, bottom:bool, final:bool}>
      */
     public function column(int $round): array
     {
@@ -211,18 +312,41 @@ final class BracketSheet
             }
 
             if ($branch['row'] > $at) {
-                $cells[] = ['row' => $at, 'span' => $branch['row'] - $at, 'branch' => null];
+                $cells[] = $this->blank($at, $branch['row'] - $at);
             }
 
-            $cells[] = ['row' => $branch['row'], 'span' => $branch['span'], 'branch' => $branch];
+            foreach ($this->parts($branch) as $part) {
+                $cells[] = $part;
+            }
+
             $at = $branch['row'] + $branch['span'];
         }
 
         if ($at < $this->halfRows()) {
-            $cells[] = ['row' => $at, 'span' => $this->halfRows() - $at, 'branch' => null];
+            $cells[] = $this->blank($at, $this->halfRows() - $at);
         }
 
         return $cells;
+    }
+
+    /**
+     * A cell holding nothing, so the column below it does not shift up.
+     *
+     * @return array{row:int, span:int, kind:string, text:string, noc:string, align:string, top:bool, bottom:bool, final:bool}
+     */
+    private function blank(int $row, int $span): array
+    {
+        return [
+            'row' => $row,
+            'span' => $span,
+            'kind' => 'blank',
+            'text' => '',
+            'noc' => '',
+            'align' => 'top',
+            'top' => false,
+            'bottom' => false,
+            'final' => false,
+        ];
     }
 
     /**

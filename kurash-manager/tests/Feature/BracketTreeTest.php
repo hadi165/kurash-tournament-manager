@@ -331,7 +331,10 @@ describe('the printed sheet', function () {
             'scale' => app(BracketSheetWriter::class)->scale($sheet),
         ])->render();
 
-        expect(substr_count($html, 'class="branch'))->toBe(7)
+        // A branch is drawn in cells rather than one box: the four opening
+        // matches in two each — they have no entrants to name, being fed by
+        // the draw — and the three after them in three.
+        expect(substr_count($html, 'class="branch'))->toBe(4 * 2 + 3 * 3)
             ->and($html)->toContain('td.champion')
             ->and($html)->toContain('>Champion<')
             // Two rows per seat: the tree is ruled in half-seats.
@@ -371,9 +374,10 @@ describe('the worksheet', function () {
     it('merges a cell for every seat, every branch and the champion', function () {
         [$page, $path] = workbookFor(drawnSheet(8));
 
-        // Eight seats, twice each; seven branches; one champion; and the
-        // heading over the podium in the corner.
-        expect($page->getMergeCells())->toHaveCount(8 * 2 + 7 + 1 + 1);
+        // Eight seats, twice each; one champion; the heading over the podium;
+        // and four merges in the tree — a branch is drawn in three cells and
+        // only the ones taller than a half-row are merged at all.
+        expect($page->getMergeCells())->toHaveCount(8 * 2 + 1 + 1 + 4);
 
         unlink($path);
     });
@@ -431,9 +435,12 @@ describe('the worksheet', function () {
         $category = $championship->ageCategories()->first()->weightCategories()->first();
         [$page, $path] = workbookFor(new BracketSheet($category->refresh()));
 
-        $numbers = collect($page->getMergeCells())
-            ->map(fn (string $range) => (string) $page->getCell(explode(':', $range)[0])->getValue())
-            ->filter(fn (string $value) => str_starts_with($value, 'No. '));
+        // Read off the sheet rather than off its merges: the number sits on
+        // the line the branch leaves by, which is a single half-row and so
+        // not a merged cell at all.
+        $numbers = collect($page->toArray())
+            ->flatten()
+            ->filter(fn ($value) => is_string($value) && str_starts_with($value, 'No. '));
 
         expect($numbers)->toHaveCount(7)
             ->and((string) $page->getCell('A6')->getValue())->not->toBe('')
@@ -964,6 +971,115 @@ describe('the medals on a bracket', function () {
             expect($page->getCell('E'.$line)->getValue())->toBe($place['place'])
                 ->and((string) $page->getCell('F'.$line)->getValue())
                 ->toContain($place['name']);
+        }
+
+        unlink($path);
+    });
+});
+
+describe('where a winner is written', function () {
+    /**
+     * The point of the whole split. A name belongs on the line it arrives on,
+     * and that line is the edge of the round it arrived *into* — so the winner
+     * of an eighth-final is read in the quarter-final column, standing at the
+     * head of the branch they qualified for.
+     */
+    it('carries a winner into the branch they qualified for, not the one they won', function () {
+        [$category] = categoryWithAthletes(16, '-carry');
+        app(BracketGenerator::class)->generate($category);
+        decideEveryBout($category->refresh());
+
+        $branches = collect((new BracketSheet($category->refresh()))->branches());
+
+        $checked = 0;
+
+        foreach ($branches->where('round', '>', 1) as $branch) {
+            $feeders = $branches
+                ->where('round', $branch['round'] - 1)
+                ->whereIn('position', [$branch['position'] * 2, $branch['position'] * 2 + 1])
+                ->sortBy('position')
+                ->values();
+
+            expect($branch['entrants'][0]['name'])->toBe($feeders[0]['winner'])
+                ->and($branch['entrants'][1]['name'])->toBe($feeders[1]['winner'])
+                // The nation travels with them, so the flag needs no lookup.
+                ->and($branch['entrants'][0]['noc'])->toBe($feeders[0]['winnerNoc']);
+
+            $checked++;
+        }
+
+        // Four quarter-finals, two semis and a final.
+        expect($checked)->toBe(7);
+    });
+
+    /** The opening round is fed by the draw, and the draw has its own column. */
+    it('names nobody in the opening round', function () {
+        [$category] = categoryWithAthletes(8, '-opening');
+        app(BracketGenerator::class)->generate($category);
+        decideEveryBout($category->refresh());
+
+        $sheet = new BracketSheet($category->refresh());
+
+        expect(collect($sheet->column(1))->where('kind', 'entrant')->pluck('text')->filter())
+            ->toBeEmpty()
+            // It still numbers its contests, and still draws its lines.
+            ->and(collect($sheet->column(1))->where('kind', 'fight'))->toHaveCount(4);
+    });
+
+    /** A walkover carries the same way a fought win does. */
+    it('carries a bye through to the next branch', function () {
+        [$category] = categoryWithAthletes(5, '-carry-bye');
+        app(BracketGenerator::class)->generate($category);
+
+        $branches = collect((new BracketSheet($category->refresh()))->branches());
+
+        // Three walked through the opening round, and each is standing in the
+        // branch above it before a single contest has been fought.
+        expect($branches->where('round', 2)->flatMap(fn (array $b) => [
+            $b['entrants'][0]['name'],
+            $b['entrants'][1]['name'],
+        ])->filter())->toHaveCount(3);
+    });
+
+    /**
+     * The champion is the one name the tree does not repeat: the final's box
+     * holds the two who contested it, and the winner is written in the column
+     * that bears their title.
+     */
+    it('leaves the final to its finalists and the champion to their own column', function () {
+        [$category] = categoryWithAthletes(8, '-decided');
+        app(BracketGenerator::class)->generate($category);
+        decideEveryBout($category->refresh());
+
+        $sheet = new BracketSheet($category->refresh());
+        $branches = collect($sheet->branches());
+
+        $final = $branches->firstWhere('final', true);
+        $semis = $branches->where('round', $sheet->rounds() - 1)->sortBy('position')->values();
+
+        expect($final['entrants'][0]['name'])->toBe($semis[0]['winner'])
+            ->and($final['entrants'][1]['name'])->toBe($semis[1]['winner'])
+            ->and($sheet->champion())->toBe($final['winner'])
+            // Written where the tree ends, not inside the box that decided it.
+            ->and(collect($sheet->column($sheet->rounds()))->pluck('text'))
+            ->not->toContain($sheet->champion().' ');
+    });
+
+    /** Both files draw the same tree, so both carry the same names. */
+    it('carries the entrants onto the worksheet too', function () {
+        [$category] = categoryWithAthletes(8, '-both');
+        app(BracketGenerator::class)->generate($category);
+        decideEveryBout($category->refresh());
+
+        $sheet = new BracketSheet($category->refresh());
+        [$page, $path] = workbookFor($sheet);
+
+        $values = collect($page->toArray())->flatten()->filter()->values();
+
+        foreach (collect($sheet->branches())->where('round', 2) as $branch) {
+            foreach ($branch['entrants'] as $entrant) {
+                expect($values)->toContain(trim($entrant['name'].' '.$entrant['noc']));
+            }
         }
 
         unlink($path);
