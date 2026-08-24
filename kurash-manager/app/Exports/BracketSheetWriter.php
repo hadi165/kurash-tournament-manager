@@ -278,7 +278,7 @@ class BracketSheetWriter
                 // the note on flags at the head of this class.
                 $page->setCellValue($column.$top, $cell['kind'] === 'fight'
                     ? $cell['text']
-                    : trim($cell['text'].' '.$cell['noc']));
+                    : $this->named($cell['text'], $cell['noc']));
 
                 $style = $page->getStyle($range);
                 $style->getFont()->setBold(true);
@@ -329,7 +329,10 @@ class BracketSheetWriter
             $range = $championColumn.$first.':'.$championColumn.($first + $championRow - 1);
 
             $page->mergeCells($range);
-            $page->setCellValue($championColumn.$first, $sheet->champion() ?: 'Champion');
+            $page->setCellValue(
+                $championColumn.$first,
+                $this->named($sheet->champion(), $sheet->championNoc()) ?: 'Champion'
+            );
 
             $style = $page->getStyle($range);
             $style->getAlignment()
@@ -427,6 +430,23 @@ class BracketSheetWriter
         }, $sheet->filename().'.xlsx', [
             'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         ]);
+    }
+
+    /**
+     * A winner, as they are written on the sheet: the name, then the nation
+     * in brackets after it.
+     *
+     * The seats are written the other way — name then bare code — because a
+     * seat is read down a column of them as a list, and a winner is read
+     * across a line on their own.
+     */
+    private function named(string $name, string $noc): string
+    {
+        if ($name === '') {
+            return '';
+        }
+
+        return $noc === '' ? $name : "{$name} ({$noc})";
     }
 
     /** Column 1 is the seed, 2 the name, then a column per round. */

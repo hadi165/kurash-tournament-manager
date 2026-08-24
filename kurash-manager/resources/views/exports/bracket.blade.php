@@ -164,6 +164,11 @@
             background: #fff;
         }
 
+        /* The nation in brackets after the name. Lighter than the name it
+           follows: the name is what is being read, and the code is what
+           settles which of two athletes sharing one it is. */
+        .entrant-noc { font-size: {{ $scale['noc'] }}px; color: #5d6d67; }
+
         /* The champion is a node of the tree, not a caption beside it: the
            final's own centre line runs on into it and the name is written on
            that line. */
@@ -362,6 +367,9 @@
                                             <img class="seat-flag" src="{{ $entrantFlag }}" alt="{{ $cell['noc'] }}">
                                         @endif
                                         {{ $cell['text'] }}
+                                        @if ($cell['noc'] !== '')
+                                            <span class="entrant-noc">({{ $cell['noc'] }})</span>
+                                        @endif
                                     </span>
                                 @endif
                             </td>
@@ -373,7 +381,20 @@
                     @if ($row === 0)
                         <td class="champion" rowspan="{{ $championRow }}">
                             <div class="champion-label">{{ __('Champion') }}</div>
-                            <div class="champion-name">{{ $sheet->champion() ?: '—' }}</div>
+                            <div class="champion-name">
+                                @if ($sheet->champion() === '')
+                                    —
+                                @else
+                                    @php $championFlag = \App\Support\PrintFlag::path($sheet->championNoc()); @endphp
+                                    @if ($championFlag)
+                                        <img class="seat-flag" src="{{ $championFlag }}" alt="{{ $sheet->championNoc() }}">
+                                    @endif
+                                    {{ $sheet->champion() }}
+                                    @if ($sheet->championNoc() !== '')
+                                        <span class="entrant-noc">({{ $sheet->championNoc() }})</span>
+                                    @endif
+                                @endif
+                            </div>
                         </td>
                     @elseif ($row === $championRow)
                         <td rowspan="{{ $halfRows - $championRow }}"></td>

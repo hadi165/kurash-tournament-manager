@@ -1065,7 +1065,13 @@ describe('where a winner is written', function () {
             ->not->toContain($sheet->champion().' ');
     });
 
-    /** Both files draw the same tree, so both carry the same names. */
+    /**
+     * Both files draw the same tree, so both carry the same names.
+     *
+     * Read at the cell the entrant is written in and not off the sheet as a
+     * whole: the draw column already names everybody, so a search of every
+     * value answers yes whether the tree carries the name or not.
+     */
     it('carries the entrants onto the worksheet too', function () {
         [$category] = categoryWithAthletes(8, '-both');
         app(BracketGenerator::class)->generate($category);
@@ -1074,14 +1080,45 @@ describe('where a winner is written', function () {
         $sheet = new BracketSheet($category->refresh());
         [$page, $path] = workbookFor($sheet);
 
-        $values = collect($page->toArray())->flatten()->filter()->values();
-
         foreach (collect($sheet->branches())->where('round', 2) as $branch) {
+            // Column A is the seed and B the name, so round two is column D.
+            $top = $page->getCell('D'.(6 + $branch['row']))->getValue();
+            $foot = $page->getCell('D'.(6 + $branch['centre']))->getValue();
+
+            expect($top)->toBe($branch['entrants'][0]['name'].' ('.$branch['entrants'][0]['noc'].')')
+                ->and($foot)->toBe($branch['entrants'][1]['name'].' ('.$branch['entrants'][1]['noc'].')');
+        }
+
+        // And the one winner the tree does not repeat carries their nation in
+        // the same brackets.
+        expect($page->getCell('F6')->getValue())
+            ->toBe($sheet->champion().' ('.$sheet->championNoc().')');
+
+        unlink($path);
+    });
+
+    /** The name is what is read; the code settles which athlete it is. */
+    it('writes the nation in brackets after every winner on paper', function () {
+        [$category] = categoryWithAthletes(8, '-brackets');
+        app(BracketGenerator::class)->generate($category);
+        decideEveryBout($category->refresh());
+
+        $sheet = new BracketSheet($category->refresh());
+
+        $html = view('exports.bracket', [
+            'sheet' => $sheet,
+            'scale' => app(BracketSheetWriter::class)->scale($sheet),
+        ])->render();
+
+        foreach (collect($sheet->branches())->where('round', '>', 1) as $branch) {
             foreach ($branch['entrants'] as $entrant) {
-                expect($values)->toContain(trim($entrant['name'].' '.$entrant['noc']));
+                expect($html)->toContain('('.$entrant['noc'].')');
             }
         }
 
-        unlink($path);
+        // Six entrants across the semis and the final, and the champion.
+        expect(substr_count($html, 'class="entrant-noc"'))->toBe(6 + 1)
+            ->and($html)->toContain('('.$sheet->championNoc().')');
+
     });
 });

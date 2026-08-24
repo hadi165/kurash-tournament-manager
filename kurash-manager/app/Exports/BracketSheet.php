@@ -411,6 +411,23 @@ final class BracketSheet
     }
 
     /**
+     * The champion's nation.
+     *
+     * Its own method rather than folded into champion(): that returns the
+     * name and callers compare it against a bout's winner, which is a name
+     * and not a name with a code after it.
+     */
+    public function championNoc(): string
+    {
+        $final = $this->category->bouts()
+            ->whereNull('next_bout_id')
+            ->with('winner')
+            ->first();
+
+        return (string) Noc::normalise($final?->winner?->noc_code);
+    }
+
+    /**
      * The podium, as it is read out and as it is filed.
      *
      * Gold, silver and the two bronzes — derived by MedalTable, not worked out
