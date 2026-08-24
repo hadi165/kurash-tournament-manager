@@ -588,6 +588,37 @@ describe('the nation on a bracket', function () {
             ->and(substr_count($html, 'class="seat-flag"'))->toBeLessThanOrEqual(5 + 7);
     });
 
+    /**
+     * Whole, never cut.
+     *
+     * The name used to be set to truncate, which in a bracket column narrow
+     * enough turned "Cholpon Toktogulov" into "Cholpon Toktog…". A shortened
+     * name is not the athlete's name: the column is the thing that gives way,
+     * and it gives way by wrapping.
+     */
+    it('shows a long name in full rather than cutting it', function () {
+        $athlete = $this->category->athletes()->orderBy('draw_number')->firstOrFail();
+        $athlete->update(['fullname' => 'Cholpon Toktogulov Abdyrakhmanova']);
+
+        $html = Livewire::test(Bracket::class, ['weightCategory' => $this->category->refresh()])->html();
+
+        expect($html)->toContain('Cholpon Toktogulov Abdyrakhmanova');
+
+        // And the rule that would have cut it is gone from the component.
+        expect(file_get_contents(resource_path('views/components/athlete.blade.php')))
+            ->not->toContain('truncate');
+    });
+
+    it('shows a long name in full on the venue bracket too', function () {
+        $athlete = $this->category->athletes()->orderBy('draw_number')->firstOrFail();
+        $athlete->update(['fullname' => 'Cholpon Toktogulov Abdyrakhmanova']);
+
+        $html = $this->get(route('display.bracket', $this->category->refresh()))->getContent();
+
+        expect($html)->toContain('Cholpon Toktogulov Abdyrakhmanova')
+            ->and($html)->not->toContain('text-overflow: ellipsis');
+    });
+
     /** Whoever went through, with their nation, on the line they went through on. */
     it('flies a raster beside the winner on the branch they won', function () {
         decideEveryBout($this->category);

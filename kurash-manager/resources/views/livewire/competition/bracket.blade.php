@@ -115,7 +115,7 @@
                          input squeezed the names down to "Ak…", "asg…", "DDD…". --}}
                     <div class="flex flex-col gap-1.5" wire:key="draw-{{ $athlete->id }}">
                         <label for="draw-{{ $athlete->id }}" class="flex items-center gap-2 text-[13px] font-bold">
-                            <span class="truncate">{{ $athlete->fullname }}</span>
+                            <span class="min-w-0 break-words">{{ $athlete->fullname }}</span>
 
                             @if ($athlete->weighin_status === 'fail')
                                 <x-ui.tag variant="danger" class="ms-auto">{{ __('failed weigh-in') }}</x-ui.tag>

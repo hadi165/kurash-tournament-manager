@@ -70,14 +70,13 @@
 
             .bkt__side--won { font-weight: 700; color: var(--gold); }
 
-            /* The name gives way before the flag or the code does: those are
-               fixed-width and the name is not. */
-            .bkt__side .competitor { display: flex; }
+            /* The name wraps rather than being cut: a hall reading a bracket
+               needs the whole name, and the row is what should give way. */
+            .bkt__side .competitor { display: flex; align-items: center; }
 
             .bkt__side .competitor > span:not(.noc) {
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
+                min-width: 0;
+                overflow-wrap: anywhere;
             }
 
             .bkt__champ { padding: 0.45rem 0.7rem; }
