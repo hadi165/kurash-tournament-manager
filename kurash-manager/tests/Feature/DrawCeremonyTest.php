@@ -748,12 +748,11 @@ describe('the ceremony that runs itself', function () {
                 ->assertSee(route('operator.draws.present', $this->category));
         });
 
-        it('is not the one the Draws to Present menu opens', function () {
+        it('is also the one the Draws to Present menu opens', function () {
             $this->actingAs($this->operator)
                 ->get(route('operator.draws.index'))
                 ->assertOk()
-                ->assertSee(route('operator.draws.ceremony', $this->category))
-                ->assertDontSee(route('operator.draws.present', $this->category));
+                ->assertSee(route('operator.draws.present', $this->category));
         });
 
         it('carries the mode on the route rather than in a session', function () {

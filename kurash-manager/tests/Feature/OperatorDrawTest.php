@@ -2,12 +2,14 @@
 
 use App\Livewire\Competition\Bracket;
 use App\Livewire\Competition\Dashboard;
+use App\Livewire\Competition\DrawCeremony;
 use App\Livewire\Operator\Draws;
 use App\Livewire\Operator\Presentation;
 use App\Models\Athlete;
 use App\Models\User;
 use App\Models\WeightCategory;
 use App\Services\BracketGenerator;
+use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -120,8 +122,15 @@ describe('the operator list', function () {
         Livewire::test(Draws::class)
             ->assertSee('Waiting for publication')
             ->assertSee('Not yet published')
-            ->assertDontSee('Present draw')
+            // The operator always has the same action in the same place. It is
+            // disabled until an admin publishes, rather than disappearing and
+            // making a waiting class look like it cannot be presented at all.
+            ->assertSee('Present draw')
             ->assertDontSee($athlete->fullname);
+
+        $html = Livewire::test(Draws::class)->html();
+
+        expect($html)->toMatch('/<button[^>]*disabled[^>]*>\s*Present draw\s*<\/button>/s');
     });
 
     /**
@@ -336,6 +345,31 @@ describe('publication is the admin\'s decision', function () {
 
         $screen->call('withdrawDraw');
         expect($category->refresh()->isDrawPublished())->toBeFalse();
+    });
+
+    it('publishes into a waiting presentation that the operator starts', function () {
+        [$category] = categoryWithAthletes(8);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->call('drawAtRandom')
+            ->call('generate');
+
+        expect(Cache::has(DrawCeremony::paceKey($category->id)))->toBeTrue();
+
+        Livewire::test(Bracket::class, ['weightCategory' => $category->refresh()])
+            ->call('publishDraw');
+
+        expect(Cache::has(DrawCeremony::paceKey($category->id)))->toBeFalse();
+
+        Livewire::actingAs($this->operator)
+            ->test(DrawCeremony::class, [
+                'weightCategory' => $category->refresh(),
+                'ceremony' => true,
+                'automatic' => true,
+            ])
+            ->assertViewHas('waiting', true)
+            ->assertViewHas('revealed', 0)
+            ->assertSee('Start presentation');
     });
 
     /** A published table is one other people work from: replacing it is a decision. */

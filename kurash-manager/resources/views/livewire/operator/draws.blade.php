@@ -102,7 +102,7 @@
 
                 <div class="flex flex-wrap items-center gap-2">
                     @if ($published)
-                        <flux:button variant="primary" :href="route('operator.draws.ceremony', $category)">
+                        <flux:button variant="primary" :href="route('operator.draws.present', $category)">
                             {{ __('Present draw') }}
                         </flux:button>
 
@@ -115,8 +115,12 @@
                         {{-- Disabled rather than hidden: an operator who cannot
                              find a category has no way to tell whether it is
                              missing or merely unpublished, and the label leaks
-                             nothing that the schedule does not already say. --}}
-                        <flux:button variant="ghost" disabled>{{ __('Not yet published') }}</flux:button>
+                             nothing that the schedule does not already say.
+                             Keep the action's name stable as well: this is
+                             always where a draw is presented, and publication
+                             controls whether that action is available. --}}
+                        <flux:button variant="ghost" disabled>{{ __('Present draw') }}</flux:button>
+                        <span class="text-[12.5px] text-muted">{{ __('Not yet published') }}</span>
                     @endif
                 </div>
             </div>

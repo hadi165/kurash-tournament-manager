@@ -286,6 +286,14 @@ class Bracket extends Component
 
         $this->weightCategory->forceFill(['draw_published_at' => now()])->save();
 
+        // Building the official table and presenting it are two different
+        // moments. A random draw leaves a pace stamp for the venue board, but
+        // publication may happen minutes later; carrying that timestamp into
+        // the operator screen would make the presentation finish before the
+        // presenter had opened it. Publication therefore starts a fresh,
+        // waiting presentation. The operator begins the reveal explicitly.
+        Cache::forget(DrawCeremony::paceKey($this->weightCategory->id));
+
         session()->flash('status', __('Draw published. Operators can present it now.'));
     }
 
