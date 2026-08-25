@@ -85,15 +85,3 @@ jobs:
       # CI cannot drift from what a developer runs before pushing.
       - name: Lint, analyse and test
         run: composer test
-
-  legacy-mvp:
-    name: Legacy PHP MVP
-    runs-on: ubuntu-latest
-
-    # The monolith is still what runs an event until the Laravel app is
-    # deployed, so its 27-test mock tournament stays covered.
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Run the mock tournament
-        run: ./tests/run.sh

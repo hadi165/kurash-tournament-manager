@@ -3,7 +3,8 @@
 #
 #   ./dev.sh          start the database and the app
 #   ./dev.sh stop     stop both
-#   ./dev.sh reset    wipe the database and re-import the legacy data
+#   ./dev.sh reset    back up, wipe the database, refill it with demo data
+#                     (accounts are carried across — nothing else is)
 #
 # The database runs in Docker because it should match the MariaDB on the
 # DirectAdmin host. The app runs on the system PHP.
@@ -68,6 +69,59 @@ ensure_test_database() {
          FLUSH PRIVILEGES;" 2>/dev/null || true
 }
 
+user_count() {
+    php artisan tinker --execute='echo App\Models\User::count();' 2>/dev/null \
+        | tail -1 | tr -d '[:space:]'
+}
+
+USERS_DUMP=""
+
+# Accounts are not demonstration data.
+#
+# Nothing regenerates them: they are typed in by hand, one per official and one
+# per mat, and the passwords behind them exist only as hashes. A reset that
+# dropped the users table along with everything else has already cost somebody
+# every login they had, so the table is carried across the rebuild instead.
+preserve_users() {
+    USERS_DUMP=$(mktemp)
+    trap 'rm -f "$USERS_DUMP"' EXIT
+
+    if ! docker exec "$DB_CONTAINER" mariadb-dump -ukurash -pdevpass \
+        --no-create-info --complete-insert --skip-extended-insert --skip-comments \
+        kurash users > "$USERS_DUMP" 2>/dev/null; then
+        info "No users table yet — no accounts to carry across"
+        : > "$USERS_DUMP"
+        return
+    fi
+
+    info "Holding on to $(grep -c '^INSERT INTO' "$USERS_DUMP" || true) account(s)"
+}
+
+# Put the accounts back into the rebuilt schema.
+#
+# The inserts run with the foreign key check off and scoreboard_championship_id
+# is cleared immediately after: it points at a championship that migrate:fresh
+# has just dropped, and NULL is the only value it can honestly hold now.
+#
+# A failure here is reported rather than fatal — the caller falls through to
+# creating an administrator, which leaves a usable database instead of an
+# empty one, and the backup taken moments earlier still holds the originals.
+restore_users() {
+    [ -s "$USERS_DUMP" ] || return 0
+
+    if ! {
+        printf 'SET FOREIGN_KEY_CHECKS=0;\n'
+        cat "$USERS_DUMP"
+        printf 'SET FOREIGN_KEY_CHECKS=1;\n'
+        printf 'UPDATE `users` SET `scoreboard_championship_id` = NULL;\n'
+    } | docker exec -i "$DB_CONTAINER" mariadb -ukurash -pdevpass kurash 2>/dev/null; then
+        printf '\033[31m✗\033[0m %s\n' "Could not restore the accounts — they are still in the backup above." >&2
+        return 0
+    fi
+
+    ok "$(user_count) account(s) restored"
+}
+
 case "${1:-start}" in
     stop)
         info "Stopping the app"
@@ -81,20 +135,38 @@ case "${1:-start}" in
     reset)
         start_database
         cd "$APP_DIR"
+
+        # The backup comes first and a failed one stops the reset. Everything
+        # below this line is destructive, and this file is the only warning
+        # anybody gets before it runs.
+        info "Backing up the current database"
+        php artisan kurash:backup --label=before-reset \
+            || die "Backup failed — refusing to reset. Fix the backup first."
+
+        preserve_users
+
         info "Rebuilding the schema"
         php artisan migrate:fresh --force >/dev/null
-        info "Importing the legacy SQLite data"
-        # Needs pdo_sqlite AND pdo_mysql at once, which no single PHP install
-        # here has — see tools/Dockerfile.dev.
-        docker build -q -t kurash-dev:php83 -f "${PROJECT_DIR}/tools/Dockerfile.dev" "${PROJECT_DIR}/tools" >/dev/null
-        docker run --rm --network host -v "${PROJECT_DIR}":/proj -w /proj/kurash-manager \
-            -u "$(id -u):$(id -g)" -e HOME=/tmp \
-            -e DB_HOST=127.0.0.1 -e DB_PORT="${DB_PORT}" -e DB_DATABASE=kurash \
-            -e DB_USERNAME=kurash -e DB_PASSWORD=devpass \
-            kurash-dev:php83 php artisan kurash:import-legacy /proj/data/kurash.db --fresh
-        info "Creating an administrator"
-        php artisan kurash:create-admin --name="Administrator" --email="admin@kurash.local"
-        ok "Reset complete"
+
+        restore_users
+
+        # Some account has to exist before the seeder runs: kurash:demo
+        # attributes every result it records to User::first(), and bout_events
+        # is append-only, so a demo built against an empty users table can
+        # never be given an operator afterwards.
+        if [ "$(user_count)" = "0" ]; then
+            info "No accounts survived — creating an administrator"
+            php artisan kurash:create-admin --name="Administrator" --email="admin@kurash.local"
+        fi
+
+        # A reset used to reload the old system's SQLite export. That export
+        # held seven placeholder athletes, no dates of birth and no bouts at
+        # all, so it demonstrated nothing; the demo seeder builds a championship
+        # that is entered, weighed, drawn and part-fought, which is what the
+        # screens need before they are worth looking at.
+        info "Seeding a demonstration championship"
+        php artisan kurash:demo --fresh-all
+        ok "Reset complete — accounts kept, competition data rebuilt"
         ;;
 
     start)
@@ -111,7 +183,7 @@ case "${1:-start}" in
         info "Running migrations"
         php artisan migrate --force >/dev/null
 
-        if [ "$(php artisan tinker --execute='echo App\Models\User::count();' 2>/dev/null | tail -1 | tr -d '[:space:]')" = "0" ]; then
+        if [ "$(user_count)" = "0" ]; then
             printf '\n'
             info "No accounts exist yet — creating one"
             php artisan kurash:create-admin --name="Administrator" --email="admin@kurash.local"

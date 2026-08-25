@@ -9,18 +9,18 @@ cost somebody an afternoon.
 The repository root is `/home/hadi/WorkArea/Projects/Kurash`.
 
 - `kurash-manager/` — the application. Laravel 13, Livewire 4, Pest 4, PHP 8.3,
-  MariaDB. Everything below is about this directory.
-- `dev.sh` — start, stop and reset the local stack.
-- `data/` — the legacy system's SQLite export. Gitignored, and the only copy:
-  it is the one thing `./dev.sh reset` can repopulate the database from.
-- `tests/` — `run.sh` and two standalone scripts, run by CI. Not the Pest
-  suite, which lives in `kurash-manager/tests/`.
-- `tools/` — `Dockerfile.dev`, the only image carrying both `pdo_sqlite` and
-  `pdo_mysql`, which is what makes the legacy import possible.
+  MariaDB. Everything below is about this directory. The Pest suite lives in
+  `kurash-manager/tests/`; there is no other test tree.
+- `dev.sh` — start, stop and reset the local stack. `reset` takes a backup,
+  rebuilds the schema and fills it with `kurash:demo`, which is now the only
+  way to get a populated database — nothing is imported from anywhere. It
+  carries the `users` table across the rebuild; see the trap below.
 
 The legacy PHP application this system replaces used to sit at the repository
-root and has been removed. Recover it from git history if you ever need to
-know what an old column meant.
+root, along with its SQLite export in `data/`, its acceptance scripts in
+`tests/` and the dual-driver dev image in `tools/`. All of it has been removed,
+together with the `kurash:import-legacy` command that read the export. Recover
+any of it from git history if you ever need to know what an old column meant.
 
 ## Checks before committing
 
@@ -129,6 +129,13 @@ Rules already centralised — go through these, do not re-derive:
   `age_category_id` constraint, and the migration then could not be rolled
   back. Check that another index still leads with the FK column, and always
   test `migrate:rollback` and re-apply.
+- **`migrate:fresh` takes the accounts with it, and nothing regenerates
+  them.** Competition data can be rebuilt from `kurash:demo`; the users cannot
+  — they are typed in by hand and their passwords survive only as hashes.
+  `./dev.sh reset` therefore dumps `users`, rebuilds, and re-inserts it, having
+  taken a full `kurash:backup` first. This is not belt-and-braces: a reset run
+  without it destroyed four live accounts, and the backup was the only reason
+  they came back. Any other path that calls `migrate:fresh` owes the same care.
 - **`ArchivedChampionshipGuard`** blocks every write to an archived
   championship's models. Tests that set up historical data must write *before*
   archiving.
