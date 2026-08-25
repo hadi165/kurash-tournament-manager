@@ -6,11 +6,21 @@ cost somebody an afternoon.
 
 ## Where you are
 
+The repository root is `/home/hadi/WorkArea/Projects/Kurash`.
+
 - `kurash-manager/` — the application. Laravel 13, Livewire 4, Pest 4, PHP 8.3,
   MariaDB. Everything below is about this directory.
-- `app/` (repo root, *not* `kurash-manager/app/`) — the legacy PHP system this
-  one replaces. Flat scripts, no framework. Read it to understand what the old
-  data means; do not extend it.
+- `dev.sh` — start, stop and reset the local stack.
+- `data/` — the legacy system's SQLite export. Gitignored, and the only copy:
+  it is the one thing `./dev.sh reset` can repopulate the database from.
+- `tests/` — `run.sh` and two standalone scripts, run by CI. Not the Pest
+  suite, which lives in `kurash-manager/tests/`.
+- `tools/` — `Dockerfile.dev`, the only image carrying both `pdo_sqlite` and
+  `pdo_mysql`, which is what makes the legacy import possible.
+
+The legacy PHP application this system replaces used to sit at the repository
+root and has been removed. Recover it from git history if you ever need to
+know what an old column meant.
 
 ## Checks before committing
 
@@ -25,6 +35,21 @@ Laravel preset), `composer types:check` (PHPStan level 7 + Larastan),
 **Do not use `php artisan test --parallel`.** The `kurash` database user has no
 grant to create the per-process `kurash_test_test_N` databases, so it fails
 with an access-denied error that looks like a code fault and is not one.
+
+## Commit messages
+
+When creating a commit, include a short summary of the prompt/request that
+led to the change, not just a description of the diff. Format:
+
+<type>: <short summary of the change>
+
+Prompt: <condensed 1-2 sentence version of what was asked>
+
+<optional bullet list of specific changes, only if non-obvious>
+
+
+Keep the prompt line genuinely condensed — do not paste raw conversation
+context or trial-and-error steps, only the final ask.
 
 ## How code is written here
 
