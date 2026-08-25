@@ -3,6 +3,8 @@
 use App\Models\AgeCategory;
 use App\Models\Championship;
 use App\Models\User;
+use App\Models\WeightCategory;
+use App\Support\PresentableDraws;
 
 it('lists every age category under registration and weigh-in', function () {
     $championship = Championship::factory()->create();
@@ -89,4 +91,97 @@ it('leaves the championship screens as plain links when it runs one competition'
         ->assertOk()
         ->assertSee(route('medals.index', $championship), false)
         ->assertDontSee(route('medals.index', ['championship' => $championship, 'competition' => 'M']), false);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Draws to present
+|--------------------------------------------------------------------------
+|
+| The badge is a promise about a list. If the two are counted by different
+| rules the number sends somebody to an empty screen mid-session, which is the
+| one moment nobody has time to work out why.
+*/
+
+/** Publication is the act that makes a draw presentable, not generation. */
+it('counts only published draws in the sidebar badge', function () {
+    $championship = Championship::factory()->create();
+    $ageCategory = AgeCategory::factory()->for($championship)->create();
+
+    WeightCategory::factory()->create([
+        'age_category_id' => $ageCategory->id,
+        'label' => '-60',
+    ]);
+
+    expect(PresentableDraws::count())->toBe(0);
+
+    WeightCategory::factory()->create([
+        'age_category_id' => $ageCategory->id,
+        'label' => '-66',
+    ])->forceFill(['draw_published_at' => now()])->save();
+
+    expect(PresentableDraws::count())->toBe(1);
+});
+
+it('leaves archived championships out of the badge', function () {
+    $championship = Championship::factory()->create();
+    $ageCategory = AgeCategory::factory()->for($championship)->create();
+
+    WeightCategory::factory()->create([
+        'age_category_id' => $ageCategory->id,
+        'label' => '-66',
+    ])->forceFill(['draw_published_at' => now()])->save();
+
+    expect(PresentableDraws::count())->toBe(1);
+
+    // Archived last: ArchivedChampionshipGuard refuses every write afterwards.
+    $championship->archive();
+
+    expect(PresentableDraws::count())->toBe(0);
+});
+
+it('shows the badge beside the draws item once something is published', function () {
+    $championship = Championship::factory()->create();
+    $ageCategory = AgeCategory::factory()->for($championship)->create();
+
+    $response = $this->actingAs(User::factory()->create(['role' => 'admin']))
+        ->get(route('championships.show', $championship));
+
+    $response->assertOk()->assertSee('Draws to present');
+
+    WeightCategory::factory()->create([
+        'age_category_id' => $ageCategory->id,
+        'label' => '-66',
+    ])->forceFill(['draw_published_at' => now()])->save();
+
+    $html = $this->actingAs(User::factory()->create(['role' => 'admin']))
+        ->get(route('championships.show', $championship))
+        ->assertOk()
+        ->getContent();
+
+    // The count sits inside the same pill as the label.
+    expect($html)->toMatch('/Draws to present.*?>\s*1\s*</s');
+});
+
+/** The links have to stay reachable; they just stop competing with the workflow. */
+it('keeps the repository and documentation links behind Help', function () {
+    $championship = Championship::factory()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('championships.show', $championship))
+        ->assertOk()
+        ->assertSee('Help')
+        ->assertSee('Repository')
+        ->assertSee('Documentation')
+        ->assertSee('https://github.com/hadi165/kurash-tournament-manager', false);
+});
+
+/** The word named the theme you were not in, which read as a label. */
+it('offers the theme switch as a button with an accessible name', function () {
+    $championship = Championship::factory()->create();
+
+    $this->actingAs(User::factory()->create())
+        ->get(route('championships.show', $championship))
+        ->assertOk()
+        ->assertSee('Switch theme');
 });

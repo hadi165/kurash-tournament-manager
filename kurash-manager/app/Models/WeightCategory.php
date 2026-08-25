@@ -84,6 +84,13 @@ class WeightCategory extends Model
             return true;
         }
 
+        // Answered from a withCount('bouts') the caller already loaded, when
+        // there is one. The dashboard asks this of every class in a
+        // championship at once, and the fallback below is a query each.
+        if (array_key_exists('bouts_count', $this->attributes)) {
+            return (int) $this->attributes['bouts_count'] > 0;
+        }
+
         // Drawn before formats existed. The backfill stamps these, but a row
         // written by an older release mid-upgrade would not be, and a draw
         // that exists must not read as missing for the length of a deploy.

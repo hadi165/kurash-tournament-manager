@@ -152,7 +152,20 @@
                     {{ __('Archive') }}
                 </x-nav-item>
 
-                <x-nav-item :href="route('operator.draws.index')" :active="request()->routeIs('operator.draws.*')">
+                @php
+                    // Counted only for accounts that may open the screen: a
+                    // badge is a promise about a list, and the query is waste
+                    // for anybody the list would refuse.
+                    $presentableDraws = \Illuminate\Support\Facades\Gate::allows('draw.view_published')
+                        ? \App\Support\PresentableDraws::count()
+                        : 0;
+                @endphp
+
+                <x-nav-item
+                    :href="route('operator.draws.index')"
+                    :active="request()->routeIs('operator.draws.*')"
+                    :badge="$presentableDraws > 0 ? $presentableDraws : null"
+                >
                     {{ __('Draws to present') }}
                 </x-nav-item>
 
@@ -260,15 +273,29 @@
 
             <flux:spacer />
 
-            {{-- Not in the design, but the links have to stay reachable, so they
-                 sit as quiet meta text rather than as nav items competing with
-                 the workflow above. --}}
-            <div class="flex flex-wrap gap-x-3 gap-y-1 px-4 pb-2 text-[11.5px]">
-                <a href="https://github.com/hadi165/kurash-tournament-manager" target="_blank" rel="noopener"
-                   class="text-nav-muted no-underline hover:text-nav-ink">{{ __('Repository') }}</a>
-                <a href="https://laravel.com/docs" target="_blank" rel="noopener"
-                   class="text-nav-muted no-underline hover:text-nav-ink">{{ __('Documentation') }}</a>
-            </div>
+            {{-- Reachable, but out of the way. As two loose links they sat at the
+                 same level as the competition workflow and were read as part of
+                 it; behind one Help item they are what they are — somewhere to
+                 go once, not a step in running an event. --}}
+            <flux:dropdown position="top" align="start">
+                <button type="button"
+                        class="flex w-full items-center gap-2 rounded-full px-4 py-2 text-start text-[12.5px] font-medium text-nav-muted transition-colors hover:bg-nav-hover hover:text-nav-ink">
+                    <flux:icon.question-mark-circle class="size-4" />
+                    {{ __('Help') }}
+                </button>
+
+                <flux:menu>
+                    <flux:menu.item href="https://github.com/hadi165/kurash-tournament-manager"
+                                    target="_blank" rel="noopener" icon="code-bracket">
+                        {{ __('Repository') }}
+                    </flux:menu.item>
+
+                    <flux:menu.item href="https://laravel.com/docs"
+                                    target="_blank" rel="noopener" icon="book-open">
+                        {{ __('Documentation') }}
+                    </flux:menu.item>
+                </flux:menu>
+            </flux:dropdown>
 
             {{-- The user card is the specified design and also the account menu:
                  settings and log out have to stay reachable, so the card itself

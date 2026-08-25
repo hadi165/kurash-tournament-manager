@@ -1,6 +1,7 @@
 @props([
-    // list<array{value:string|int, label:string, hue?:string, accent?:bool, danger?:bool}>
+    // list<array{value:string|int, label:string, hue?:string, accent?:bool, danger?:bool, href?:string}>
     // hue names the data colour the figure carries: brand | info | amber | danger.
+    // href turns the tile into a link to the screen the figure is counted on.
     'items' => [],
     // How the figures sit on the page:
     //   default — tiles inset into the card that holds them
@@ -54,12 +55,27 @@
             };
         @endphp
 
-        <div class="{{ $tile }} {{ $hue ? $rails[$hue] : '' }}">
-            <div class="{{ $figure }} font-bold leading-none tabular-nums {{ $hue ? $inks[$hue] : '' }}">
+        @php
+            // A figure that names a screen becomes the way to it. Given as an
+            // element swap rather than a wrapper so a linked tile and a plain
+            // one are the same box, and a row of them stays on one grid.
+            $href = $item['href'] ?? null;
+            $tag = $href ? 'a' : 'div';
+        @endphp
+
+        <{{ $tag }}
+            @if ($href) href="{{ $href }}" wire:navigate @endif
+            @class([
+                $tile,
+                $hue ? $rails[$hue] : '',
+                'block no-underline transition-shadow hover:shadow-card' => (bool) $href,
+            ])
+        >
+            <div class="{{ $figure }} font-bold leading-none tabular-nums {{ $hue ? $inks[$hue] : 'text-ink' }}">
                 {{ $item['value'] }}
             </div>
 
             <div class="mt-1 text-[12.5px] text-muted">{{ $item['label'] }}</div>
-        </div>
+        </{{ $tag }}>
     @endforeach
 </div>

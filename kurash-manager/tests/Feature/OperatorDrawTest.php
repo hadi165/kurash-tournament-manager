@@ -488,10 +488,9 @@ describe('links an operator can actually follow', function () {
     it('does not offer to draw a bracket from the dashboard', function () {
         [$category] = categoryWithAthletes(8);
 
-        $steps = collect(Livewire::test(Dashboard::class)->viewData('championships'))
-            ->flatMap(fn (array $row) => $row['next_steps'] ?? []);
+        $attention = collect(Livewire::test(Dashboard::class)->viewData('attention'));
 
-        expect($steps->pluck('route'))->not->toContain('bracket.show');
+        expect($attention->pluck('route'))->not->toContain('bracket.show');
     });
 });
 

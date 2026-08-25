@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Bout;
 use App\Models\Championship;
+use App\Support\DisplayCache;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -99,6 +100,13 @@ class FightOrderScheduler
             }
         });
 
+        // Both writes above go through the query builder, which does not fire
+        // model events, so BoutObserver never sees them. The running order is
+        // the whole content of one venue screen and half of another, and
+        // without this the hall keeps showing the previous order until the
+        // five-minute backstop expires.
+        DisplayCache::bump($championship->id);
+
         return [
             'scheduled' => $ordered->count(),
             'violations' => $this->restViolations($championship, $minimumRest)->count(),
@@ -112,6 +120,11 @@ class FightOrderScheduler
     public function clear(Championship $championship): void
     {
         $championship->bouts()->update(['fight_number' => null]);
+
+        // As in schedule(): a bulk update fires no model events, and an
+        // emptied running order that the hall cannot see is worse than a
+        // wrong one, because nothing on screen suggests it has changed.
+        DisplayCache::bump($championship->id);
     }
 
     /**

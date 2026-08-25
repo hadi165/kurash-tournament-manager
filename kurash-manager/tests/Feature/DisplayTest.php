@@ -2,6 +2,7 @@
 
 use App\Models\AgeCategory;
 use App\Models\Athlete;
+use App\Models\Bout;
 use App\Models\Court;
 use App\Models\User;
 use App\Models\WeightCategory;
@@ -218,8 +219,11 @@ describe('the screens themselves', function () {
             'name' => null,
         ]);
 
+        // Sent to the mat *and* started. Holding a court_id is not enough:
+        // assigning a contest and calling it are two actions, and only the
+        // second puts it on the wall.
         $bout = $championship->bouts()->where('fight_number', 1)->first();
-        $bout->update(['court_id' => $court->id]);
+        $bout->update(['court_id' => $court->id, 'status' => Bout::STATUS_ON_COURT]);
 
         $this->get(route('display.mats', $championship))
             ->assertOk()
