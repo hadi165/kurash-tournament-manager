@@ -132,7 +132,10 @@ describe('building the running order', function () {
     it('reports nothing to do when no bracket has been drawn', function () {
         $championship = Championship::factory()->create();
 
-        expect($this->scheduler->schedule($championship))->toBe(['scheduled' => 0, 'violations' => 0]);
+        // The same shape as a run that scheduled something, so a caller never
+        // has to know which path answered.
+        expect($this->scheduler->schedule($championship))
+            ->toBe(['scheduled' => 0, 'violations' => 0, 'unattainable' => 0]);
     });
 
     it('clears every fight number', function () {

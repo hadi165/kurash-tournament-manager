@@ -414,8 +414,11 @@ class Registration extends Component
 
         $athlete = $this->athleteQuery()->findOrFail($id);
 
-        if ($athlete->weightCategory?->bouts()->exists()) {
-            session()->flash('error', __('Cannot remove: a bracket has already been drawn for :class. Delete that bracket on its draw screen first, then remove the athlete and draw again.', [
+        // hasDraw(), not bouts()->exists(): a class of one is drawn by an
+        // administrative placement and has no bouts at all, and removing its
+        // athlete would silently unmake a decided, published class.
+        if ($athlete->weightCategory?->hasDraw()) {
+            session()->flash('error', __('Cannot remove: a draw already exists for :class. Delete that draw on its draw screen first, then remove the athlete and draw again.', [
                 'class' => $athlete->weightCategory->label,
             ]));
 

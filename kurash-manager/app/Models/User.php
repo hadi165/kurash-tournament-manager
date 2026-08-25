@@ -133,6 +133,19 @@ class User extends Authenticatable implements PasskeyUser
         return $this->is_active && in_array($this->role, self::MANAGING_ROLES, true);
     }
 
+    /**
+     * The administrator, as distinct from everybody who may run a competition.
+     *
+     * Supervisors manage competitions — they draw, publish and delete — but a
+     * decision taken against the IKA rule is narrower than that, and the
+     * account that signs for it is named here rather than inferred from
+     * MANAGING_ROLES.
+     */
+    public function isAdmin(): bool
+    {
+        return $this->is_active && $this->role === self::ROLE_ADMIN;
+    }
+
     public function canViewScoreboard(): bool
     {
         return $this->is_active && in_array($this->role, self::SCOREBOARD_ROLES, true);

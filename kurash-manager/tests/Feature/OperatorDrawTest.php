@@ -350,16 +350,29 @@ describe('publication is the admin\'s decision', function () {
     it('publishes into a waiting presentation that the operator starts', function () {
         [$category] = categoryWithAthletes(8);
 
-        Livewire::test(Bracket::class, ['weightCategory' => $category])
-            ->call('drawAtRandom')
-            ->call('generate');
+        $screen = Livewire::test(Bracket::class, ['weightCategory' => $category])
+            ->call('drawAtRandom');
 
-        expect(Cache::has(DrawCeremony::paceKey($category->id)))->toBeTrue();
+        // The positions being pulled at random are paced for the venue board,
+        // against the draw the class holds at that moment.
+        $version = (int) $category->refresh()->draw_version;
+
+        expect(Cache::has(DrawCeremony::paceKey($category->id, $version)))->toBeTrue();
+
+        $screen->call('generate');
+
+        // Generating is a new draw and bumps the version, so the presentation
+        // of *that* draw starts fresh — the reveal of the position pull cannot
+        // carry into it and finish the ceremony before it is opened.
+        $drawn = (int) $category->refresh()->draw_version;
+
+        expect($drawn)->toBeGreaterThan($version)
+            ->and(Cache::has(DrawCeremony::paceKey($category->id, $drawn)))->toBeFalse();
 
         Livewire::test(Bracket::class, ['weightCategory' => $category->refresh()])
             ->call('publishDraw');
 
-        expect(Cache::has(DrawCeremony::paceKey($category->id)))->toBeFalse();
+        expect(Cache::has(DrawCeremony::paceKey($category->id, $drawn)))->toBeFalse();
 
         Livewire::actingAs($this->operator)
             ->test(DrawCeremony::class, [

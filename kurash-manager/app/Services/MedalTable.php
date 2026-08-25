@@ -18,7 +18,13 @@ use Illuminate\Support\Collection;
  *
  * Same rule the original medal-helpers.php used, but reading forward links
  * instead of MAX(roundnumber) with a bare non-aggregated column in HAVING,
- * which SQLite tolerated and MySQL rejects outright.
+ * which SQLite tolerated and MySQL rejects outright. *
+ * That is the knockout's podium. A class drawn as a round robin has no final
+ * to win and no semi-finals to lose, so its podium is the standings table's to
+ * derive and this class asks RoundRobinStandings for it — one podium shape
+ * either way, so every screen and export that already renders one renders the
+ * other. A class of one athlete has a podium only once an administrator has
+ * placed them: being unopposed is not a result, and nothing here infers one.
  */
 class MedalTable
 {
@@ -30,9 +36,24 @@ class MedalTable
      */
     public function forCategory(WeightCategory $category): array
     {
-        $bouts = $category->bouts()->with(['athleteA', 'athleteB', 'winner'])->get();
-
         $empty = ['decided' => false, 'gold' => null, 'silver' => null, 'bronze' => []];
+
+        // Dispatched on what the class was drawn as, never on what its athlete
+        // count would suggest today — a class that has grown since it was drawn
+        // still has the podium its own draw produced.
+        if ($category->isRoundRobin()) {
+            return app(RoundRobinStandings::class)->podiumFor($category);
+        }
+
+        if ($category->isPlacement()) {
+            $placed = $category->placedAthlete;
+
+            return $placed === null
+                ? $empty
+                : ['decided' => true, 'gold' => $placed, 'silver' => null, 'bronze' => []];
+        }
+
+        $bouts = $category->bouts()->with(['athleteA', 'athleteB', 'winner'])->get();
 
         if ($bouts->isEmpty()) {
             return $empty;

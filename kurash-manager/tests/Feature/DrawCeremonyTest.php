@@ -3,12 +3,26 @@
 use App\Livewire\Competition\Bracket;
 use App\Livewire\Competition\DrawCeremony;
 use App\Models\User;
+use App\Models\WeightCategory;
 use App\Services\BracketGenerator;
 use App\Support\BracketSeeding;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Livewire\Livewire;
+
+/**
+ * The presentation key for a class, at the draw it currently holds.
+ *
+ * Presentation state is kept per draw and not merely per class — a redrawn
+ * class is a different draw, and a half-told reveal of the old one must not
+ * open the new one part-finished. Tests read the version off the row for the
+ * same reason the component does.
+ */
+function ceremonyKey(WeightCategory $category): string
+{
+    return DrawCeremony::paceKey($category->id, (int) $category->fresh()->draw_version);
+}
 
 beforeEach(function () {
     $this->admin = User::factory()->create(['role' => 'admin']);
@@ -60,9 +74,13 @@ describe('what the server tells the ceremony', function () {
     });
 
     it('carries the server message into the failure state', function () {
-        [$category] = categoryWithAthletes(1);
+        // A class nobody has been drawn in. One athlete is no longer a
+        // failure — it is settled by an administrative placement — so the
+        // failure being plumbed here is a draw with nothing to draw.
+        [$category, $athletes] = categoryWithAthletes(3);
+        $athletes->each(fn ($athlete) => $athlete->forceFill(['draw_number' => null])->save());
 
-        Livewire::test(Bracket::class, ['weightCategory' => $category])
+        Livewire::test(Bracket::class, ['weightCategory' => $category->refresh()])
             ->call('generate')
             ->assertDispatched('draw-failed');
     });
@@ -147,7 +165,7 @@ describe('the venue draw board', function () {
      * each other.
      */
     it('keeps placed, drawing and remaining adding up to the entry list', function () {
-        Cache::put(DrawCeremony::paceKey($this->category->id), ['at' => now()->timestamp - 21, 'per' => 3], now()->addHour());
+        Cache::put(ceremonyKey($this->category), ['at' => now()->timestamp - 21, 'per' => 3], now()->addHour());
 
         $board = Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category]);
 
@@ -160,7 +178,7 @@ describe('the venue draw board', function () {
     });
 
     it('paces the reveal from the stamp the draw left', function () {
-        Cache::put(DrawCeremony::paceKey($this->category->id), ['at' => now()->timestamp - 9, 'per' => 3], now()->addHour());
+        Cache::put(ceremonyKey($this->category), ['at' => now()->timestamp - 9, 'per' => 3], now()->addHour());
 
         expect(Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category])->viewData('revealed'))->toBe(3);
     });
@@ -185,7 +203,7 @@ describe('the venue draw board', function () {
     });
 
     it('marks only the position just filled', function () {
-        Cache::put(DrawCeremony::paceKey($this->category->id), ['at' => now()->timestamp - 15, 'per' => 3], now()->addHour());
+        Cache::put(ceremonyKey($this->category), ['at' => now()->timestamp - 15, 'per' => 3], now()->addHour());
 
         $justFilled = collect(Livewire::test(DrawCeremony::class, ['weightCategory' => $this->category])->viewData('seats'))
             ->filter(fn (array $seat) => $seat['justFilled']);
@@ -202,11 +220,11 @@ describe('the venue draw board', function () {
     });
 
     it('is stamped by the random draw so the hall sees it position by position', function () {
-        Cache::forget(DrawCeremony::paceKey($this->category->id));
+        Cache::forget(ceremonyKey($this->category));
 
         Livewire::test(Bracket::class, ['weightCategory' => $this->category])->call('drawAtRandom');
 
-        expect(Cache::get(DrawCeremony::paceKey($this->category->id)))->toHaveKey('at');
+        expect(Cache::get(ceremonyKey($this->category)))->toHaveKey('at');
     });
 });
 
@@ -219,7 +237,7 @@ describe('the operator runs the ceremony', function () {
 
         $this->operator = User::factory()->official()->create();
 
-        Cache::forget(DrawCeremony::paceKey($this->category->id));
+        Cache::forget(ceremonyKey($this->category));
     });
 
     it('waits to be started rather than showing the answer', function () {
@@ -240,7 +258,7 @@ describe('the operator runs the ceremony', function () {
             ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
             ->call('startCeremony');
 
-        expect(Cache::has(DrawCeremony::paceKey($this->category->id)))->toBeTrue()
+        expect(Cache::has(ceremonyKey($this->category)))->toBeTrue()
             ->and($this->category->refresh()->draw_version)->toBe($version)
             ->and($this->category->bouts()->pluck('athlete_a_id', 'id')->toArray())->toBe($before);
     });
@@ -257,7 +275,7 @@ describe('the operator runs the ceremony', function () {
     it('keeps drawn, drawing and remaining adding up at every step', function () {
         foreach ([0, 3, 15, 33, 36] as $elapsed) {
             Cache::put(
-                DrawCeremony::paceKey($this->category->id),
+                ceremonyKey($this->category),
                 ['at' => now()->timestamp - $elapsed, 'per' => 3],
                 now()->addHour(),
             );
@@ -275,7 +293,7 @@ describe('the operator runs the ceremony', function () {
     /** The reveal is derived from the stamp, so a refresh lands where it left. */
     it('shows the same positions after a refresh', function () {
         Cache::put(
-            DrawCeremony::paceKey($this->category->id),
+            ceremonyKey($this->category),
             ['at' => now()->timestamp - 18, 'per' => 3],
             now()->addHour(),
         );
@@ -291,7 +309,7 @@ describe('the operator runs the ceremony', function () {
 
     it('reveals in the seeded order and never twice', function () {
         Cache::put(
-            DrawCeremony::paceKey($this->category->id),
+            ceremonyKey($this->category),
             ['at' => now()->timestamp - 3600, 'per' => 3],
             now()->addHour(),
         );
@@ -330,7 +348,7 @@ describe('the beat inside a position', function () {
         app(BracketGenerator::class)->generate($category);
         $category->forceFill(['draw_published_at' => now()])->save();
 
-        Cache::put(DrawCeremony::paceKey($category->id), ['at' => now()->timestamp - 5, 'per' => 3], now()->addHour());
+        Cache::put(ceremonyKey($category), ['at' => now()->timestamp - 5, 'per' => 3], now()->addHour());
 
         $board = Livewire::actingAs(User::factory()->official()->create())
             ->test(DrawCeremony::class, ['weightCategory' => $category->refresh(), 'ceremony' => true]);
@@ -347,7 +365,7 @@ describe('the beat inside a position', function () {
         app(BracketGenerator::class)->generate($category);
         $category->forceFill(['draw_published_at' => now()])->save();
 
-        Cache::put(DrawCeremony::paceKey($category->id), ['at' => now()->timestamp - 5, 'per' => 3], now()->addHour());
+        Cache::put(ceremonyKey($category), ['at' => now()->timestamp - 5, 'per' => 3], now()->addHour());
 
         $board = Livewire::actingAs(User::factory()->official()->create())
             ->test(DrawCeremony::class, ['weightCategory' => $category->refresh(), 'ceremony' => true]);
@@ -362,7 +380,7 @@ describe('the beat inside a position', function () {
         app(BracketGenerator::class)->generate($category);
         $category->forceFill(['draw_published_at' => now()])->save();
 
-        Cache::put(DrawCeremony::paceKey($category->id), ['at' => now()->timestamp - 3600, 'per' => 3], now()->addHour());
+        Cache::put(ceremonyKey($category), ['at' => now()->timestamp - 3600, 'per' => 3], now()->addHour());
 
         $board = Livewire::actingAs(User::factory()->official()->create())
             ->test(DrawCeremony::class, ['weightCategory' => $category->refresh(), 'ceremony' => true]);
@@ -380,7 +398,7 @@ describe('the operator paces the reveal', function () {
         $this->category->refresh();
 
         $this->operator = User::factory()->official()->create();
-        Cache::forget(DrawCeremony::paceKey($this->category->id));
+        Cache::forget(ceremonyKey($this->category));
 
         $this->board = fn () => Livewire::actingAs($this->operator)
             ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true]);
@@ -541,7 +559,7 @@ describe('the pool sidebar', function () {
         $this->operator = User::factory()->official()->create();
 
         // Nothing revealed yet, so everybody is still in the pot.
-        Cache::forget(DrawCeremony::paceKey($this->category->id));
+        Cache::forget(ceremonyKey($this->category));
     });
 
     /** @return Collection<int, array<string, mixed>> */
@@ -575,7 +593,7 @@ describe('the pool sidebar', function () {
     /** The board carries the flag beside the code, seat by seat. */
     it('flies a flag on every seat that has been filled', function () {
         Cache::put(
-            DrawCeremony::paceKey($this->category->id),
+            ceremonyKey($this->category),
             ['revealed' => 8],
             now()->addHour(),
         );
@@ -606,7 +624,7 @@ describe('the pool sidebar', function () {
      */
     it('puts the athlete\'s full name on the board', function () {
         Cache::put(
-            DrawCeremony::paceKey($this->category->id),
+            ceremonyKey($this->category),
             ['revealed' => 8],
             now()->addHour(),
         );
@@ -649,7 +667,7 @@ describe('finding the next class', function () {
         foreach ([User::factory()->official()->create(), User::factory()->create(['role' => 'admin'])] as $user) {
             Livewire::actingAs($user)
                 ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
-                ->assertSee('All classes')
+                ->assertSee('All Weights')
                 ->assertSee(route('entries.index', $championship), false);
         }
     });
@@ -658,7 +676,27 @@ describe('finding the next class', function () {
     it('offers nothing of the kind on the venue board', function () {
         Livewire::actingAs($this->admin)
             ->test(DrawCeremony::class, ['weightCategory' => $this->category])
-            ->assertDontSee('All classes');
+            ->assertDontSee('All Weights');
+    });
+
+    /**
+     * The mark belongs on the wall, not on the working copy.
+     *
+     * On the operator's screen it earned nothing and cost a flash: an image
+     * with no reserved box, repainting as the page was navigated away from.
+     * The board in the hall keeps it, which is the only place it was for.
+     */
+    it('flies the mark on the board and not on the operator screen', function () {
+        config(['branding.logo' => 'images/logo.png']);
+
+        $board = Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category])->html();
+
+        $operator = Livewire::actingAs($this->admin)
+            ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])->html();
+
+        expect($board)->toContain('dc-logo')
+            ->and($operator)->not->toContain('dc-logo');
     });
 });
 
@@ -724,7 +762,7 @@ describe('the ceremony that runs itself', function () {
         $this->category->refresh();
 
         $this->operator = User::factory()->official()->create();
-        Cache::forget(DrawCeremony::paceKey($this->category->id));
+        Cache::forget(ceremonyKey($this->category));
 
         $this->auto = fn () => Livewire::actingAs($this->operator)->test(DrawCeremony::class, [
             'weightCategory' => $this->category,
@@ -795,7 +833,7 @@ describe('the ceremony that runs itself', function () {
         it('tells every position exactly once', function () {
             ($this->auto)()->call('startCeremony');
 
-            $order = Cache::get(DrawCeremony::paceKey($this->category->id))['order'];
+            $order = Cache::get(ceremonyKey($this->category))['order'];
             $sorted = $order;
             sort($sorted);
 
@@ -812,10 +850,10 @@ describe('the ceremony that runs itself', function () {
             $counted = 0;
 
             foreach (range(1, 8) as $attempt) {
-                Cache::forget(DrawCeremony::paceKey($this->category->id));
+                Cache::forget(ceremonyKey($this->category));
                 ($this->auto)()->call('startCeremony');
 
-                if (Cache::get(DrawCeremony::paceKey($this->category->id))['order'] === range(1, 12)) {
+                if (Cache::get(ceremonyKey($this->category))['order'] === range(1, 12)) {
                     $counted++;
                 }
             }
@@ -826,12 +864,12 @@ describe('the ceremony that runs itself', function () {
         it('settles the order once and keeps it', function () {
             ($this->auto)()->call('startCeremony');
 
-            $first = Cache::get(DrawCeremony::paceKey($this->category->id))['order'];
+            $first = Cache::get(ceremonyKey($this->category))['order'];
 
             ($this->auto)();
             ($this->auto)();
 
-            expect(Cache::get(DrawCeremony::paceKey($this->category->id))['order'])->toBe($first);
+            expect(Cache::get(ceremonyKey($this->category))['order'])->toBe($first);
         });
 
         /**
@@ -841,7 +879,7 @@ describe('the ceremony that runs itself', function () {
          */
         it('falls back to counting when the draw has moved under it', function () {
             Cache::put(
-                DrawCeremony::paceKey($this->category->id),
+                ceremonyKey($this->category),
                 ['at' => now()->timestamp - 5, 'per' => 1, 'order' => [4, 3, 2, 1]],
                 now()->addHour(),
             );
@@ -862,7 +900,7 @@ describe('the ceremony that runs itself', function () {
             // A telling order that is plainly not the counting one, stamped
             // five seconds ago: five placed, the sixth being placed.
             Cache::put(
-                DrawCeremony::paceKey($this->category->id),
+                ceremonyKey($this->category),
                 [
                     'at' => now()->timestamp - 5,
                     'per' => 1,
@@ -963,7 +1001,7 @@ describe('the athletes still to be drawn', function () {
         $this->category->refresh();
 
         $this->operator = User::factory()->official()->create();
-        Cache::forget(DrawCeremony::paceKey($this->category->id));
+        Cache::forget(ceremonyKey($this->category));
 
         $this->board = fn () => Livewire::actingAs($this->operator)->test(DrawCeremony::class, [
             'weightCategory' => $this->category,
@@ -983,7 +1021,7 @@ describe('the athletes still to be drawn', function () {
 
     it('counts down as the draw is told', function () {
         Cache::put(
-            DrawCeremony::paceKey($this->category->id),
+            ceremonyKey($this->category),
             ['at' => now()->timestamp - 6, 'per' => 1],
             now()->addHour(),
         );
@@ -1029,7 +1067,7 @@ describe('saving the finished draw', function () {
         ]);
 
         $this->finish = fn () => Cache::put(
-            DrawCeremony::paceKey($this->category->id),
+            ceremonyKey($this->category),
             ['at' => now()->timestamp - 60, 'per' => 1],
             now()->addHour(),
         );
@@ -1037,7 +1075,7 @@ describe('saving the finished draw', function () {
 
     it('offers nothing while the draw is still being told', function () {
         Cache::put(
-            DrawCeremony::paceKey($this->category->id),
+            ceremonyKey($this->category),
             ['at' => now()->timestamp - 2, 'per' => 1],
             now()->addHour(),
         );
@@ -1079,7 +1117,7 @@ describe('saving the finished draw', function () {
 
     it('refuses to save a draw that is only half told', function () {
         Cache::put(
-            DrawCeremony::paceKey($this->category->id),
+            ceremonyKey($this->category),
             ['at' => now()->timestamp - 2, 'per' => 1],
             now()->addHour(),
         );

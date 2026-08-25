@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Services\TournamentFormatPolicy;
 use App\Services\WeightValidator;
+use App\Support\TournamentFormat;
 use App\Support\WeightRange;
 use Carbon\CarbonImmutable;
 use Database\Factories\WeightCategoryFactory;
@@ -23,6 +25,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $draw_bucket_size
  * @property int|null $draw_bye_count
  * @property int $draw_version
+ * @property string|null $draw_format_preference
+ * @property string|null $draw_format
+ * @property string|null $draw_format_override_reason
+ * @property int|null $draw_format_override_by
+ * @property CarbonImmutable|null $draw_format_override_at
+ * @property int|null $draw_placement_athlete_id
+ * @property int|null $draw_placement_by
+ * @property CarbonImmutable|null $draw_placement_at
  */
 class WeightCategory extends Model
 {
@@ -41,6 +51,8 @@ class WeightCategory extends Model
             'draw_generated_at' => 'datetime',
             'draw_published_at' => 'datetime',
             'draw_locked_at' => 'datetime',
+            'draw_format_override_at' => 'datetime',
+            'draw_placement_at' => 'datetime',
         ];
     }
 
@@ -55,9 +67,82 @@ class WeightCategory extends Model
      | the shape of a table somebody is presenting from.
      */
 
+    /**
+     * Has this class been drawn?
+     *
+     * Not "does it have bouts". A class of one athlete is drawn by an
+     * administrative placement and has no contests at all — asking the bouts
+     * table would call it undrawn, and every screen that gates on this would
+     * offer to draw it again.
+     *
+     * The stored format is what makes the difference: it is written in the
+     * same transaction as whatever the draw produced, contests or not.
+     */
     public function hasDraw(): bool
     {
+        if ($this->draw_format !== null) {
+            return true;
+        }
+
+        // Drawn before formats existed. The backfill stamps these, but a row
+        // written by an older release mid-upgrade would not be, and a draw
+        // that exists must not read as missing for the length of a deploy.
         return $this->bouts()->exists();
+    }
+
+    /**
+     * What this class was drawn as, or null if it has not been drawn.
+     *
+     * The snapshot, never today's athlete count — an operator presenting a
+     * published table must see the table that was published.
+     */
+    public function drawFormat(): ?TournamentFormat
+    {
+        $format = TournamentFormat::tryFromValue($this->draw_format);
+
+        if ($format !== null) {
+            return $format;
+        }
+
+        // Same reasoning as hasDraw(): contests that predate the column are a
+        // knockout bracket, because that is the only thing that generated them.
+        return $this->bouts()->exists() ? TournamentFormat::Knockout : null;
+    }
+
+    /** What drawing this class right now would produce. */
+    public function resolvedFormat(): ?TournamentFormat
+    {
+        return app(TournamentFormatPolicy::class)->resolveFor($this);
+    }
+
+    /** Was this class drawn as a round robin? */
+    public function isRoundRobin(): bool
+    {
+        return $this->drawFormat() === TournamentFormat::RoundRobin;
+    }
+
+    /** Was it settled by placing a single unopposed athlete? */
+    public function isPlacement(): bool
+    {
+        return $this->drawFormat() === TournamentFormat::Placement;
+    }
+
+    /**
+     * Was the format chosen against the IKA rule for this field?
+     *
+     * Read off the recorded override rather than recomputed, so a class that
+     * has since grown past five athletes still says that its knockout was an
+     * override when it was made.
+     */
+    public function formatWasOverridden(): bool
+    {
+        return $this->draw_format_override_at !== null;
+    }
+
+    /** @return BelongsTo<Athlete, $this> */
+    public function placedAthlete(): BelongsTo
+    {
+        return $this->belongsTo(Athlete::class, 'draw_placement_athlete_id');
     }
 
     public function isDrawPublished(): bool

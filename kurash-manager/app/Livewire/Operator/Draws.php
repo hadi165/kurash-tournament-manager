@@ -60,6 +60,10 @@ class Draws extends Component
             ->when($this->status === 'waiting', fn ($q) => $q->whereNull('draw_published_at'))
             ->with(['ageCategory.championship'])
             ->withCount('bouts')
+            // How many rounds a round robin runs to. Read as an aggregate over
+            // the contests that exist rather than derived from the athlete
+            // count, so the figure describes the draw that was generated.
+            ->withMax('bouts', 'round')
             ->orderBy('age_category_id')
             ->orderBy('sort_order')
             ->get();

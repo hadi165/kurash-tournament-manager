@@ -3,9 +3,13 @@
 namespace App\Livewire\Competition;
 
 use App\Models\Athlete;
+use App\Models\Bout;
 use App\Models\WeightCategory;
+use App\Services\RoundRobinStandings;
+use App\Services\TournamentFormatPolicy;
 use App\Support\BracketSeeding;
 use App\Support\Noc;
+use App\Support\TournamentFormat;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
@@ -37,6 +41,22 @@ use Livewire\Component;
  * The order is the only difference, and it is a *telling* order: it decides
  * when a seat is filled, never which seat. Every athlete lands on the number
  * the draw gave them before this screen was opened, in both modes.
+ *
+ * ── Two boards, one ceremony ─────────────────────────────────────────────
+ *
+ * What is revealed here is the *draw*: which athlete holds which draw number.
+ * That is the same question in every format, which is why the pacing, the
+ * pool, the order and the cache behind them are shared rather than written
+ * twice — a venue board and an operator screen watching the same class have to
+ * agree about which position came out when, whatever shape the competition is.
+ *
+ * What differs is where the names land. A knockout fills seats in a tree; a
+ * round robin fills a list of draw positions and then shows the fixtures those
+ * positions produced. So the board is chosen by the format the draw was
+ * *generated* as — `drawFormat()`, the stored snapshot — and never by today's
+ * athlete count or by a preference describing a draw that has not happened.
+ * A class published as a round robin is presented as one for the life of that
+ * draw, even if somebody registers a sixth athlete while the hall is watching.
  */
 #[Layout('components.layouts.scoreboard')]
 class DrawCeremony extends Component
@@ -90,6 +110,11 @@ class DrawCeremony extends Component
         if ($ceremony) {
             Gate::authorize('presentation.operate');
 
+            // An archived championship is history, and history is not
+            // presented as a ceremony. The same refusal the operator's draw
+            // table gives, for the same reason.
+            abort_if($this->weightCategory->ageCategory?->championship?->isArchived() ?? false, 403);
+
             // Only a table an admin approved is presented in public.
             abort_unless(
                 $this->weightCategory->isDrawPublished() && $this->weightCategory->hasDraw(),
@@ -127,7 +152,7 @@ class DrawCeremony extends Component
         shuffle($order);
 
         Cache::put(
-            self::paceKey($this->weightCategory->id),
+            $this->key(),
             ['at' => now()->timestamp, 'per' => self::AUTO_PACE, 'order' => $order],
             now()->addHours(6),
         );
@@ -171,16 +196,36 @@ class DrawCeremony extends Component
     private function setRevealed(int $revealed): void
     {
         Cache::put(
-            self::paceKey($this->weightCategory->id),
+            $this->key(),
             ['revealed' => $revealed],
             now()->addHours(6),
         );
     }
 
-    /** The cache key the draw stamps when it runs, so the reveal can be paced. */
-    public static function paceKey(int $weightCategoryId): string
+    /**
+     * The cache key the draw stamps when it runs, so the reveal can be paced.
+     *
+     * Keyed by the draw as well as by the class. A class redrawn — from a
+     * knockout to a round robin, or simply again — is a different draw, and the
+     * telling of the old one must not survive into it: a stored shuffle of
+     * eight positions has nothing to say about a round robin of two, and a
+     * half-finished reveal left in the cache would open the new presentation
+     * part-told. Every generation bumps draw_version, so a new draw starts with
+     * a key nobody has written to.
+     *
+     * The version defaults to zero so a caller that has only an id still gets a
+     * usable key — that is the shape this had before, and the draw a class held
+     * when it was first published.
+     */
+    public static function paceKey(int $weightCategoryId, int $drawVersion = 0): string
     {
-        return "draw-ceremony:{$weightCategoryId}";
+        return "draw-ceremony:{$weightCategoryId}:v{$drawVersion}";
+    }
+
+    /** This class's key, at the version of the draw actually on it. */
+    private function key(): string
+    {
+        return self::paceKey($this->weightCategory->id, (int) $this->weightCategory->draw_version);
     }
 
     /**
@@ -192,7 +237,7 @@ class DrawCeremony extends Component
      */
     private function revealed(int $total): int
     {
-        $pace = Cache::get(self::paceKey($this->weightCategory->id));
+        $pace = Cache::get($this->key());
 
         // Announced: the operator has placed this many, one press at a time.
         if (is_array($pace) && isset($pace['revealed'])) {
@@ -227,7 +272,7 @@ class DrawCeremony extends Component
      */
     private function order(int $total): array
     {
-        $pace = Cache::get(self::paceKey($this->weightCategory->id));
+        $pace = Cache::get($this->key());
         $stored = is_array($pace) ? ($pace['order'] ?? null) : null;
 
         if (is_array($stored)) {
@@ -254,7 +299,7 @@ class DrawCeremony extends Component
      */
     private function pace(): ?array
     {
-        $pace = Cache::get(self::paceKey($this->weightCategory->id));
+        $pace = Cache::get($this->key());
 
         // Only a clock-paced ceremony has a beat to find; an announced one
         // changes when somebody presses, which the poll already carries.
@@ -270,6 +315,76 @@ class DrawCeremony extends Component
         return $per > 1 ? ['at' => (int) $pace['at'], 'per' => $per] : null;
     }
 
+    /**
+     * The generated fixtures, grouped by round, as the board shows them.
+     *
+     * Derived entirely from the persisted Bout rows: this reads the draw, it
+     * does not reconstruct it. Nothing here consults BracketSeeding, the entry
+     * count or the athlete list — a fixture exists because the generator wrote
+     * it, and the board's job is to say so.
+     *
+     * A pairing is held back until both of its athletes have been placed. That
+     * is the same rule the bracket board follows for a seat, and it is what
+     * stops the fixtures giving away positions the hall has not been told yet.
+     *
+     * @param  array<int, int>  $filled  draw numbers placed so far
+     * @param  Collection<int, Bout>  $bouts  the class's contests, already loaded
+     * @return array<int, list<array<string, mixed>>>
+     */
+    private function pairings(array $filled, Collection $bouts): array
+    {
+        $rounds = [];
+
+        foreach ($bouts as $bout) {
+            $a = $bout->athleteA;
+            $b = $bout->athleteB;
+
+            $rounds[(int) $bout->round][] = [
+                'id' => $bout->id,
+                // Both sides told, or the fixture waits.
+                'revealed' => $a !== null && $b !== null
+                    && isset($filled[(int) $a->draw_number])
+                    && isset($filled[(int) $b->draw_number]),
+                'fight' => $bout->fight_number,
+                'a' => $this->competitor($a),
+                'b' => $this->competitor($b),
+                'winner' => $bout->winner?->fullname,
+                // The id, because the board decides which *side* won by it.
+                // Two athletes sharing a full name is common in a small
+                // regional class, and a name comparison would gild them both.
+                'winner_id' => $bout->winner_athlete_id === null ? null : (int) $bout->winner_athlete_id,
+                'decided' => $bout->winner_athlete_id !== null,
+            ];
+        }
+
+        return $rounds;
+    }
+
+    /**
+     * One side of a fixture, with everything the board needs to draw it.
+     *
+     * "Draw No." rather than a seed: a round robin seeds nobody, and a number
+     * presented as a seed on a public board says the competition works a way
+     * it does not.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function competitor(?Athlete $athlete): ?array
+    {
+        if ($athlete === null) {
+            return null;
+        }
+
+        return [
+            'id' => (int) $athlete->id,
+            'draw' => $athlete->draw_number === null ? null : (int) $athlete->draw_number,
+            'name' => (string) $athlete->fullname,
+            'noc' => Noc::normalise($athlete->noc_code),
+            'country' => $athlete->noc_name,
+            'iso' => Noc::iso($athlete->noc_code),
+        ];
+    }
+
     public function render(): View
     {
         /** @var Collection<int, Athlete> $drawn keyed by draw number */
@@ -278,7 +393,31 @@ class DrawCeremony extends Component
         $total = $drawn->count();
         $revealed = $this->revealed($total);
 
-        $size = $total >= 2 ? BracketSeeding::size($total) : 0;
+        /*
+         | The board is chosen by what the draw *was generated as*.
+         |
+         | Never by the athlete count and never by the stored preference: both
+         | describe a draw that might be made, and this screen is showing one
+         | that already exists. A class published as a round robin that has
+         | since gained a sixth entry is still presented as the round robin the
+         | hall was told about.
+         */
+        $format = $this->weightCategory->drawFormat()
+            // Nothing generated yet, which is the board's other job: the
+            // positions are being pulled and the contests do not exist to be
+            // read. Only here is the rule consulted, and only to preview the
+            // shape the draw is heading for — the moment a draw exists, the
+            // stored snapshot above answers and this line is never reached.
+            // Compliant, because the shape being previewed is the one drawing
+            // would produce with nobody signing an override.
+            ?? app(TournamentFormatPolicy::class)->resolveCompliantFor($this->weightCategory, $total);
+
+        // Seats belong to a tree. Nothing computes one for a format that has
+        // none — a round robin asked for a bracket size would be handed the
+        // next power of two and quietly draw the wrong competition.
+        $size = $format === TournamentFormat::Knockout && $total >= 2
+            ? BracketSeeding::size($total)
+            : 0;
 
         // Which positions have been told, in the order they were told. An
         // announced ceremony counts from one; an automatic one does not, which
@@ -289,7 +428,7 @@ class DrawCeremony extends Component
 
         // Waiting is a ceremony that has not begun, which is not the same as
         // one with nothing in it.
-        $waiting = $this->ceremony && $total > 0 && ! Cache::has(self::paceKey($this->weightCategory->id));
+        $waiting = $this->ceremony && $total > 0 && ! Cache::has($this->key());
 
         // The one being pulled now is simply the next in that order — and
         // before the ceremony starts there is no such person: everybody is
@@ -324,7 +463,58 @@ class DrawCeremony extends Component
             fn (Athlete $a, int $number) => isset($filled[$number]) || $number === $drawingSeat
         );
 
+        /*
+         | The positions themselves, for a telling with no contests behind it.
+         |
+         | drawAtRandom() can pull positions before any draw is generated, and
+         | for a small field the board previews as a round robin — which has no
+         | fixtures to reveal the names onto, because none exist yet. The
+         | bracket board has its seat grid for this moment; the round robin
+         | gets the same thing in its own terms: the draw numbers, filling one
+         | by one as they are told.
+         */
+        $positions = $format === TournamentFormat::RoundRobin && $total > 0
+            ? $drawn->keys()->map(fn ($number) => (int) $number)->sort()->values()
+                ->map(fn (int $number) => [
+                    'number' => $number,
+                    'athlete' => isset($filled[$number]) ? $drawn->get($number) : null,
+                    'iso' => isset($filled[$number]) ? Noc::iso($drawn->get($number)?->noc_code) : null,
+                    'justFilled' => $newest !== null && $number === $newest,
+                ])->all()
+            : [];
+
+        // One fetch for everything the round-robin board says about its
+        // contests. This screen polls twice a second on a venue wall, and the
+        // fixture list, the contest count and the round count must all
+        // describe the same instant anyway.
+        $bouts = $format === TournamentFormat::RoundRobin
+            ? $this->weightCategory->bouts()
+                ->with(['athleteA', 'athleteB', 'winner'])
+                ->orderBy('round')
+                ->orderBy('position_in_round')
+                ->get()
+            : collect();
+
         return view('livewire.competition.draw-ceremony', [
+            'format' => $format,
+            'positions' => $positions,
+            // The fixtures, read off the contests the generator committed —
+            // never recomputed here. A pairing appears once both of its
+            // athletes have been placed, which is the round robin's answer to
+            // a bracket filling up.
+            'pairings' => $format === TournamentFormat::RoundRobin
+                ? $this->pairings($filled, $bouts)
+                : [],
+            'contests' => $bouts->count(),
+            'roundCount' => (int) ($bouts->max('round') ?? 0),
+            // Shown once the telling is over: a table beside a draw still being
+            // revealed answers the hall before the reveal reaches it.
+            'standings' => $format === TournamentFormat::RoundRobin && $total > 0 && $revealed >= $total
+                ? app(RoundRobinStandings::class)->forCategory($this->weightCategory)
+                : null,
+            'placed' => $format === TournamentFormat::Placement
+                ? $this->weightCategory->placedAthlete
+                : null,
             'size' => $size,
             'rounds' => $size > 0 ? BracketSeeding::totalRounds($size) : 0,
             'seats' => $seats,

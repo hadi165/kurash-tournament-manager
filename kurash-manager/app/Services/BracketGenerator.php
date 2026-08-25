@@ -29,7 +29,7 @@ use RuntimeException;
 class BracketGenerator
 {
     /**
-     * @return array{bouts:int, byes:int, rounds:int, size:int}
+     * @return array{bouts:int, byes:int, rounds:int, size:int, athletes:int}
      */
     public function generate(WeightCategory $category, bool $discardResults = false, bool $replacePublished = false): array
     {

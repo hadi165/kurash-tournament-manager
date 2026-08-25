@@ -9,11 +9,16 @@ use App\Models\BoutEvent;
 use App\Models\Court;
 use App\Models\WeightCategory;
 use App\Services\BoutAdvancer;
-use App\Services\BracketGenerator;
 use App\Services\BracketHasResultsException;
+use App\Services\DrawFormatException;
+use App\Services\DrawGenerator;
 use App\Services\DrawIsProtectedException;
 use App\Services\MedalTable;
+use App\Services\RoundRobinGenerator;
+use App\Services\RoundRobinStandings;
+use App\Services\TournamentFormatPolicy;
 use App\Support\BracketSeeding;
+use App\Support\TournamentFormat;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -41,6 +46,27 @@ class Bracket extends Component
      * @var array<int, string|null>
      */
     public array $draws = [];
+
+    /**
+     * The format the administrator has chosen for a draw not yet generated.
+     *
+     * A string because it is bound to a select, and the browser owns it once
+     * the page is live. It is never trusted: DrawGenerator checks it against
+     * the rule on the server every time, so a hand-edited option cannot draw a
+     * round robin of sixteen.
+     */
+    public string $format = '';
+
+    /**
+     * Why this class is being run against the IKA rule.
+     *
+     * Required before a small field can be drawn as a knockout, and stored on
+     * the class with the administrator's name against it.
+     */
+    public string $overrideReason = '';
+
+    /** Set when the chosen format departs from the rule and needs confirming. */
+    public bool $confirmingOverride = false;
 
     public bool $confirmingRegenerate = false;
 
@@ -73,6 +99,53 @@ class Bracket extends Component
         $this->weightCategory = $weightCategory->load('ageCategory.championship');
         $this->syncDraws();
         $this->syncFightNumbers();
+        $this->syncFormat();
+    }
+
+    /**
+     * Put the selector where the rule says it should start.
+     *
+     * This is a choice about the *next* draw, not a label for the current one
+     * — what the class was drawn as is shown by the table itself, further down
+     * the screen. So it starts at what drawing now would produce: the stored
+     * preference if an administrator has expressed one and the field still
+     * allows it, and otherwise the IKA default, which for a small field is the
+     * round robin.
+     *
+     * Seeding it from the existing draw instead would mean a class drawn as a
+     * small knockout asked for a fresh override reason merely to be looked at,
+     * and would quietly re-propose a departure from the rule as the default.
+     */
+    private function syncFormat(): void
+    {
+        // Compliant resolution, so a stored small-field knockout preference
+        // never arrives pre-selected with its warning unarmed: an override is
+        // chosen and signed afresh each time, through updatedFormat().
+        //
+        // `??` reads through a null with isset() semantics, so no nullsafe
+        // arrow is needed — and PHPStan flags one that is not.
+        $this->format = app(TournamentFormatPolicy::class)
+            ->resolveCompliantFor($this->weightCategory)->value ?? '';
+    }
+
+    /**
+     * Choosing knockout for a small field arms the confirmation.
+     *
+     * The warning and the reason box appear here rather than on submission, so
+     * an administrator sees what they are departing from before they have
+     * typed anything — not after they have pressed Generate.
+     */
+    public function updatedFormat(string $value): void
+    {
+        $chosen = TournamentFormat::tryFromValue($value);
+        $athletes = $this->weightCategory->drawnAthletes()->count();
+
+        $this->confirmingOverride = $chosen !== null
+            && app(TournamentFormatPolicy::class)->isOverride($athletes, $chosen);
+
+        if (! $this->confirmingOverride) {
+            $this->overrideReason = '';
+        }
     }
 
     private function syncFightNumbers(): void
@@ -206,7 +279,7 @@ class Bracket extends Component
         // it, never the drawing, so a hall watching position 4 appear is
         // watching a result that has been final for ten seconds.
         Cache::put(
-            DrawCeremony::paceKey($this->weightCategory->id),
+            DrawCeremony::paceKey($this->weightCategory->id, (int) $this->weightCategory->draw_version),
             ['at' => (int) now()->timestamp, 'per' => 3],
             now()->addHour(),
         );
@@ -221,8 +294,36 @@ class Bracket extends Component
     {
         Gate::authorize('manage-competition');
 
+        $chosen = TournamentFormat::tryFromValue($this->format);
+        $athletes = $this->weightCategory->drawnAthletes()->count();
+
+        /*
+         | The narrower permission, and only where it is actually needed.
+         |
+         | Drawing the format the rule gives is an ordinary competition
+         | decision that any supervisor may take. Departing from the rule is
+         | not, so the admin-only gate is asked here — and asked before
+         | anything is written, so a refusal leaves the class untouched.
+         */
+        if ($chosen !== null && app(TournamentFormatPolicy::class)->isOverride($athletes, $chosen)) {
+            Gate::authorize('draw.override_format');
+        }
+
         try {
-            $result = app(BracketGenerator::class)->generate($this->weightCategory, $discardResults, $replacePublished);
+            $result = app(DrawGenerator::class)->generate(
+                category: $this->weightCategory,
+                format: $chosen,
+                discardResults: $discardResults,
+                replacePublished: $replacePublished,
+                overrideReason: $this->overrideReason,
+                user: auth()->user(),
+            );
+        } catch (DrawFormatException $e) {
+            // Nothing to confirm: the request is one the rules do not allow,
+            // or an override with nobody's name on it.
+            $this->drawFailed($e->getMessage());
+
+            return;
         } catch (DrawIsProtectedException $e) {
             // A published draw is one other people have been told to work
             // from, so replacing it is a decision, not a click.
@@ -243,14 +344,52 @@ class Bracket extends Component
 
         $this->confirmingRegenerate = false;
         $this->confirmingReplacePublished = false;
+        $this->confirmingOverride = false;
 
-        $this->dispatch('draw-completed', mode: 'bracket');
+        $this->syncDraws();
+        $this->syncFightNumbers();
+        $this->syncFormat();
 
-        session()->flash('status', __('Bracket drawn: :bouts bouts across :rounds rounds, :byes bye(s).', [
-            'bouts' => $result['bouts'],
-            'rounds' => $result['rounds'],
-            'byes' => $result['byes'],
-        ]));
+        // The ceremony overlay is a bracket's; a round robin reveals pairings
+        // rather than seats walking down a tree, and says which it is.
+        $this->dispatch('draw-completed', mode: $result['format'] === TournamentFormat::Knockout ? 'bracket' : 'pairings');
+
+        session()->flash('status', match ($result['format']) {
+            TournamentFormat::RoundRobin => __('Round robin drawn: :bouts contests across :rounds rounds.', [
+                'bouts' => $result['bouts'],
+                'rounds' => $result['rounds'],
+            ]),
+            TournamentFormat::Placement => __('One athlete in this class. Place them to settle it.'),
+            TournamentFormat::Knockout => __('Bracket drawn: :bouts bouts across :rounds rounds, :byes bye(s).', [
+                'bouts' => $result['bouts'],
+                'rounds' => $result['rounds'],
+                'byes' => $result['byes'],
+            ]),
+        });
+    }
+
+    /**
+     * Award a class of one to the athlete standing in it.
+     *
+     * Its own action, and its own decision. Nothing about being registered
+     * unopposed makes somebody a champion, so this is a button an
+     * administrator presses and their name goes on the record.
+     */
+    public function placeSoleAthlete(): void
+    {
+        Gate::authorize('manage-competition');
+
+        try {
+            $athlete = app(DrawGenerator::class)->placeSoleAthlete($this->weightCategory, auth()->user());
+        } catch (Throwable $e) {
+            session()->flash('error', $e->getMessage());
+
+            return;
+        }
+
+        $this->weightCategory->refresh();
+
+        session()->flash('status', __('Placed :name first in this class.', ['name' => $athlete->fullname]));
     }
 
     /**
@@ -292,7 +431,7 @@ class Bracket extends Component
         // the operator screen would make the presentation finish before the
         // presenter had opened it. Publication therefore starts a fresh,
         // waiting presentation. The operator begins the reveal explicitly.
-        Cache::forget(DrawCeremony::paceKey($this->weightCategory->id));
+        Cache::forget(DrawCeremony::paceKey($this->weightCategory->id, (int) $this->weightCategory->draw_version));
 
         session()->flash('status', __('Draw published. Operators can present it now.'));
     }
@@ -336,8 +475,11 @@ class Bracket extends Component
     {
         Gate::authorize('manage-competition');
 
-        if (! $this->weightCategory->bouts()->exists()) {
-            session()->flash('error', __('There is no bracket to delete.'));
+        // hasDraw(), not bouts()->exists(): a placement draw has no contests
+        // at all, and it too must be deletable — undoing a placement is done
+        // the same way as undoing any other draw.
+        if (! $this->weightCategory->hasDraw()) {
+            session()->flash('error', __('There is no draw to delete.'));
 
             return;
         }
@@ -387,6 +529,21 @@ class Bracket extends Component
                     'draw_bye_count' => null,
                     'draw_published_at' => null,
                     'draw_locked_at' => null,
+                    // The format is the record that a draw exists — hasDraw()
+                    // reads it — so a deleted draw must surrender it, or the
+                    // class would still publish, present and export a draw
+                    // that is no longer there. The override signature and the
+                    // placement go with it: both signed for the draw being
+                    // deleted, not for whatever is drawn next. Only the
+                    // preference survives, because it describes the next draw
+                    // rather than this one.
+                    'draw_format' => null,
+                    'draw_format_override_reason' => null,
+                    'draw_format_override_by' => null,
+                    'draw_format_override_at' => null,
+                    'draw_placement_athlete_id' => null,
+                    'draw_placement_by' => null,
+                    'draw_placement_at' => null,
                 ])->save();
             });
         } catch (Throwable $e) {
@@ -586,21 +743,40 @@ class Bracket extends Component
             ->orderBy('position_in_round')
             ->get();
 
+        // Counted once and passed down: drawSummary, projectedSize and the
+        // format choices must all describe the same field, and one count per
+        // render is also five fewer queries on the busiest admin screen.
+        $drawnCount = $this->weightCategory->drawnAthletes()->count();
+
         return view('livewire.competition.bracket', [
             'athletes' => $this->athletes(),
             'bouts' => $bouts,
             'rounds' => $bouts->groupBy('round'),
             'totalRounds' => (int) ($bouts->max('round') ?? 0),
             'podium' => app(MedalTable::class)->forCategory($this->weightCategory),
-            'drawnCount' => $this->weightCategory->drawnAthletes()->count(),
+            'drawnCount' => $drawnCount,
             'courts' => Court::where('championship_id', $this->weightCategory->ageCategory->championship_id)
                 ->where('is_active', true)
                 ->orderBy('number')
                 ->get(),
-            'projectedSize' => $this->projectedSize(),
-            // Read from the same query the generator counts, so the summary and
-            // the draw can never disagree about how many are in the class.
-            'drawSummary' => $this->drawSummary(),
+            'projectedSize' => $this->projectedSize($drawnCount),
+            // Read from the same count the choices are offered from, so the
+            // summary and the selector can never disagree about the field.
+            'drawSummary' => $this->drawSummary($drawnCount),
+
+            // What this class was drawn as, and what drawing it now would
+            // produce. Two questions, never conflated: the first is what the
+            // screen is showing, the second is what the button would do —
+            // and the second is the compliant resolution, because "what the
+            // button would do" is a draw nobody has signed an override for.
+            'drawnFormat' => $this->weightCategory->drawFormat(),
+            'resolvedFormat' => app(TournamentFormatPolicy::class)
+                ->resolveCompliantFor($this->weightCategory, $drawnCount),
+            'formatChoices' => app(TournamentFormatPolicy::class)->availableFor($drawnCount),
+            'mayOverride' => Gate::allows('draw.override_format'),
+            'standings' => $this->weightCategory->isRoundRobin()
+                ? app(RoundRobinStandings::class)->forCategory($this->weightCategory)
+                : null,
         ]);
     }
 
@@ -609,9 +785,25 @@ class Bracket extends Component
      *
      * @return array{athletes:int, size:int, byes:int, firstRound:int}
      */
-    private function drawSummary(): array
+    private function drawSummary(int $athletes): array
     {
-        $athletes = $this->weightCategory->drawnAthletes()->count();
+        $format = app(TournamentFormatPolicy::class)->resolveCompliantFor($this->weightCategory, $athletes);
+
+        // A round robin has no bracket to round up to and nobody sits out, so
+        // the figures a bracket summary quotes are the wrong ones entirely:
+        // what an administrator wants to know before drawing one is how many
+        // contests it will cost the session.
+        if ($format === TournamentFormat::RoundRobin) {
+            return [
+                'athletes' => $athletes,
+                'size' => 0,
+                'byes' => 0,
+                'contests' => RoundRobinGenerator::contestsFor($athletes),
+                'rounds' => RoundRobinGenerator::roundsFor($athletes),
+                'firstRound' => 0,
+            ];
+        }
+
         $size = $athletes >= 2 ? BracketSeeding::size($athletes) : 0;
         $byes = max(0, $size - $athletes);
 
@@ -619,15 +811,29 @@ class Bracket extends Component
             'athletes' => $athletes,
             'size' => $size,
             'byes' => $byes,
+            'contests' => max(0, $size - 1),
+            'rounds' => BracketSeeding::totalRounds($size),
             // Every first-round pair that is not a walkover.
             'firstRound' => $size > 0 ? max(0, intdiv($size, 2) - $byes) : 0,
         ];
     }
 
-    private function projectedSize(): ?int
+    /**
+     * The bracket size the header quotes, or null where there is no bracket.
+     *
+     * Null for a round robin and for a class of one: neither has a bucket to
+     * round up to, and "bracket of 4" over a round robin of four would be a
+     * caption describing a different competition.
+     */
+    private function projectedSize(int $drawn): ?int
     {
-        $drawn = $this->weightCategory->drawnAthletes()->count();
+        $format = $this->weightCategory->drawFormat()
+            ?? app(TournamentFormatPolicy::class)->resolveCompliantFor($this->weightCategory, $drawn);
 
-        return $drawn >= 2 ? BracketSeeding::size($drawn) : null;
+        if ($format !== TournamentFormat::Knockout || $drawn < 2) {
+            return null;
+        }
+
+        return BracketSeeding::size($drawn);
     }
 }

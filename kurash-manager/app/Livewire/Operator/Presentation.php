@@ -4,6 +4,7 @@ namespace App\Livewire\Operator;
 
 use App\Models\Bout;
 use App\Models\WeightCategory;
+use App\Services\RoundRobinStandings;
 use App\Support\BracketSeeding;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
@@ -63,6 +64,21 @@ class Presentation extends Component
             'bouts' => $bouts,
             'rounds' => $rounds,
             'totalRounds' => $totalRounds,
+
+            /*
+             | What this draw is, so the presentation shows the right thing.
+             |
+             | Read off the stored draw and not recomputed from today's entry
+             | list — the operator is presenting a published table, and a late
+             | registration must not change its shape underneath them. There is
+             | nothing here for an operator to choose: the format was settled
+             | by whoever generated the draw, and this component has no method
+             | that writes.
+             */
+            'drawnFormat' => $this->weightCategory->drawFormat(),
+            'standings' => $this->weightCategory->isRoundRobin()
+                ? app(RoundRobinStandings::class)->forCategory($this->weightCategory)
+                : null,
             // The order the reveal follows: the official one, round by round
             // and position by position, exactly as generated.
             'reveal' => $bouts->values(),

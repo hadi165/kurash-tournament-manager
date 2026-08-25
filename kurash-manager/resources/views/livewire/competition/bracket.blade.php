@@ -1,6 +1,26 @@
 @php
     $championship = $weightCategory->ageCategory->championship;
 
+    /*
+     | The competition this class is run in, and the entry list scoped to it.
+     |
+     | Taken from the division rather than from the weight class: the entries
+     | screen narrows by age_categories.gender — see ScopesToCompetition — so
+     | asking the weight class instead would build a link that silently fell
+     | back to showing every competition.
+     |
+     | `competition` is a query parameter and not a path segment because the
+     | entry list belongs to the whole championship and a competition is a way
+     | of reading it. Dropping it shows everything, which is why an unconfigured
+     | gender degrades to the full list rather than to an error.
+     */
+    $competition = $weightCategory->ageCategory?->gender;
+
+    $entriesUrl = route('entries.index', array_filter([
+        'championship' => $championship,
+        'competition' => $competition,
+    ]));
+
     $drawn = trans_choice(
         '{0}Nobody drawn yet|{1}:count athlete drawn|[2,*]:count athletes drawn',
         $drawnCount, ['count' => $drawnCount]
@@ -24,6 +44,7 @@
     :breadcrumbs="[
         ['label' => __('Championships'), 'href' => route('championships.index')],
         ['label' => $championship->title, 'href' => route('championships.show', $championship)],
+        ['label' => __('Entries and Draw'), 'href' => $entriesUrl],
         ['label' => $weightCategory->label.' '.__('kg')],
     ]"
 >
@@ -31,6 +52,20 @@
     {{-- The sheet the draw numbers get written onto, and the drawn bracket
          itself. Both are named the way the federation files them. --}}
     <x-slot:aside>
+        {{-- The way back to the class list this screen is opened from, still
+             narrowed to the competition it belongs to: an official working the
+             women's classes should land back among the women's classes, not at
+             the top of the championship.
+
+             The breadcrumb above says the same thing, but a crumb is a small
+             grey label and this is a screen somebody works in for a whole
+             division — they should not have to aim at it. --}}
+        <x-ui.chip :href="$entriesUrl" wire:navigate>
+            {{ __('All :competition weight classes', [
+                'competition' => \App\Support\Gender::label($competition),
+            ]) }}
+        </x-ui.chip>
+
         @if ($weightCategory->isDrawPublished())
             <x-ui.tag variant="brand">{{ __('Published to operators') }}</x-ui.tag>
         @elseif ($bouts->isNotEmpty())
@@ -138,10 +173,101 @@
                  the summary and the draw cannot disagree. --}}
             <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1.5 rounded-md border border-line bg-ground px-[18px] py-3.5 text-[13px]">
                 <span><span class="text-muted">{{ __('Registered athletes') }}</span> <b class="tabular-nums">{{ $drawSummary['athletes'] }}</b></span>
-                <span><span class="text-muted">{{ __('Bracket size') }}</span> <b class="tabular-nums">{{ $drawSummary['size'] ?: '—' }}</b></span>
-                <span><span class="text-muted">{{ __('Byes') }}</span> <b class="tabular-nums">{{ $drawSummary['byes'] }}</b></span>
-                <span><span class="text-muted">{{ __('First-round bouts') }}</span> <b class="tabular-nums">{{ $drawSummary['firstRound'] }}</b></span>
+
+                @if ($resolvedFormat === \App\Support\TournamentFormat::RoundRobin)
+                    <span><span class="text-muted">{{ __('Contests') }}</span> <b class="tabular-nums">{{ $drawSummary['contests'] }}</b></span>
+                    <span><span class="text-muted">{{ __('Rounds') }}</span> <b class="tabular-nums">{{ $drawSummary['rounds'] }}</b></span>
+                    <span><span class="text-muted">{{ __('Rest positions') }}</span> <b class="tabular-nums">{{ $drawSummary['athletes'] % 2 === 1 ? __('one per round') : '—' }}</b></span>
+                @else
+                    <span><span class="text-muted">{{ __('Bracket size') }}</span> <b class="tabular-nums">{{ $drawSummary['size'] ?: '—' }}</b></span>
+                    <span><span class="text-muted">{{ __('Byes') }}</span> <b class="tabular-nums">{{ $drawSummary['byes'] }}</b></span>
+                    <span><span class="text-muted">{{ __('First-round bouts') }}</span> <b class="tabular-nums">{{ $drawSummary['firstRound'] }}</b></span>
+                @endif
             </div>
+
+            {{-- The format.
+
+                 Offered only where the rule leaves a choice — a field of two
+                 to five, which the IKA runs as a round robin and which this
+                 system will run as a bracket if a federation has local reasons
+                 to. Six or more has one lawful shape and no selector at all,
+                 so there is nothing on the screen inviting somebody to pick
+                 the wrong one. --}}
+            @if (count($formatChoices) > 1)
+                <div class="mb-4 rounded-md border border-line bg-ground px-[18px] py-3.5">
+                    <div class="kicker mb-2 text-ink/55">{{ __('Tournament format') }}</div>
+
+                    <flux:select wire:model.live="format" size="sm" class="max-w-md">
+                        @foreach ($formatChoices as $choice)
+                            <flux:select.option value="{{ $choice->value }}">
+                                {{ $choice->followsIkaRule($drawSummary['athletes'])
+                                    ? __(':format — IKA default', ['format' => $choice->label()])
+                                    : __(':format — local rules override', ['format' => $choice->label()]) }}
+                            </flux:select.option>
+                        @endforeach
+                    </flux:select>
+
+                    {{-- The non-compliance warning, the reason, and the
+                         confirmation — all three, because a departure from the
+                         rule that nobody signed is one nobody can answer for
+                         when the federation asks about it afterwards. --}}
+                    @if ($confirmingOverride)
+                        <div class="mt-3.5 rounded-md bg-amber-soft px-[18px] py-3.5">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <x-ui.tag variant="amber">{{ __('Not IKA compliant') }}</x-ui.tag>
+                                <span class="text-[13.5px] text-amber-deep">
+                                    {{ __('The IKA rule runs :count athletes as a round robin. A knockout here is a local decision.', [
+                                        'count' => $drawSummary['athletes'],
+                                    ]) }}
+                                </span>
+                            </div>
+
+                            @if ($mayOverride)
+                                <div class="mt-3">
+                                    <flux:input
+                                        wire:model="overrideReason"
+                                        size="sm"
+                                        :label="__('Reason for the override')"
+                                        :placeholder="__('Recorded against your name, with the time.')"
+                                    />
+                                </div>
+                            @else
+                                <p class="mt-2 text-[13px] text-amber-deep">
+                                    {{ __('Only an administrator may authorise this. Choose the round robin, or ask one to draw it.') }}
+                                </p>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            {{-- A class of one has nobody to fight. It is settled by an
+                 administrator placing the athlete, never by the software
+                 noticing they are on their own. --}}
+            @if ($drawnFormat === \App\Support\TournamentFormat::Placement)
+                <div class="mb-4 rounded-md border border-line bg-ground px-[18px] py-3.5">
+                    @if ($weightCategory->draw_placement_athlete_id)
+                        <div class="flex flex-wrap items-center gap-3">
+                            <x-ui.tag variant="brand">{{ __('Placed first') }}</x-ui.tag>
+                            <span class="text-[13.5px]">
+                                <x-athlete :athlete="$weightCategory->placedAthlete" />
+                            </span>
+                            <span class="text-[12.5px] text-muted">
+                                {{ __('Recorded :when', ['when' => $weightCategory->draw_placement_at?->format('j M Y H:i')]) }}
+                            </span>
+                        </div>
+                    @else
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="text-[13.5px]">
+                                {{ __('One athlete is entered. Being unopposed is not a result — place them to settle the class.') }}
+                            </span>
+                            <flux:button size="sm" variant="primary" wire:click="placeSoleAthlete">
+                                {{ __('Place first') }}
+                            </flux:button>
+                        </div>
+                    @endif
+                </div>
+            @endif
 
             @if ($weightCategory->drawIsStale())
                 {{-- Informational, and only here: the published table an
@@ -158,6 +284,13 @@
                 </div>
             @endif
 
+            {{-- The button is named after the live selection, not the stored
+                 resolution: the moment an administrator picks the override in
+                 the select, the button that signs for it must say so. --}}
+            @php
+                $chosenFormat = \App\Support\TournamentFormat::tryFromValue($format) ?? $resolvedFormat;
+            @endphp
+
             <div class="flex flex-wrap items-center gap-3">
                 <flux:button
                     variant="primary"
@@ -165,8 +298,10 @@
                     wire:loading.attr="disabled"
                     wire:target="drawAtRandom,generate"
                     x-on:click="$dispatch('draw-started', { mode: 'bracket' })"
-                    :disabled="$drawnCount < 2"
-                >{{ $bouts->isEmpty() ? __('Draw the bracket') : __('Redraw the bracket') }}</flux:button>
+                    :disabled="$drawnCount < 1 || ($confirmingOverride && ! $mayOverride)"
+                >{{ $weightCategory->hasDraw()
+                    ? __('Redraw :format', ['format' => $chosenFormat?->label() ?? __('the draw')])
+                    : __('Draw :format', ['format' => $chosenFormat?->label() ?? __('the draw')]) }}</flux:button>
 
                 @if ($confirmingRegenerate)
                     <flux:button
@@ -249,6 +384,16 @@
                 </div>
             @endif
         @endcan
+
+        @if ($drawnFormat === \App\Support\TournamentFormat::RoundRobin)
+            @include('livewire.competition.partials.round-robin', [
+                'weightCategory' => $weightCategory,
+                'bouts' => $bouts,
+                'standings' => $standings,
+                'courts' => $courts,
+                'editable' => true,
+            ])
+        @else
 
         <x-ui.card flush :title="__('Bracket')">
             <div class="rule-2"></div>
@@ -426,6 +571,7 @@
         {{-- The geometry is shared with the venue bracket rather than
              written twice: see the partial for why. --}}
         <style>@include('partials.bracket-geometry')</style>
+        @endif
     @endif
     <x-draw.ceremony :names="$ceremonyNames" :pairs="$ceremonyPairs" />
 </x-page>
