@@ -10,6 +10,8 @@ use App\Models\Court;
 use App\Models\WeightCategory;
 use App\Services\BoutAdvancer;
 use App\Services\BracketHasResultsException;
+use App\Services\DrawEligibility;
+use App\Services\DrawEligibilityException;
 use App\Services\DrawFormatException;
 use App\Services\DrawGenerator;
 use App\Services\DrawIsProtectedException;
@@ -206,7 +208,43 @@ class Bracket extends Component
                 return;
             }
 
-            $seen[$number] = $athleteId;
+            $seen[$number] = (int) $athleteId;
+        }
+
+        /*
+         | The ids come from the browser, so they are not believed.
+         |
+         | $draws is a public Livewire property keyed by athlete id: its keys
+         | are whatever was posted, not whatever was rendered. Loading them
+         | through this category's own relation is what makes an id from
+         | another class — or from another championship — resolve to nothing
+         | rather than to somebody else's athlete being given a number here.
+         */
+        $candidates = $this->weightCategory->athletes()
+            ->whereIn('id', array_values($seen))
+            ->get()
+            ->keyBy('id');
+
+        foreach ($seen as $number => $athleteId) {
+            if (! $candidates->has($athleteId)) {
+                session()->flash('error', __('That draw number was submitted for somebody who is not in this weight class. Nothing was saved.'));
+
+                return;
+            }
+        }
+
+        // The rule, before anything is written. Named, because an official has
+        // to go and find the person — and refused as a whole, so a screenful
+        // of numbers is never half-saved around the one that was wrong.
+        $ineligible = $candidates->reject(fn (Athlete $athlete) => $athlete->passedWeighIn())->values();
+
+        if ($ineligible->isNotEmpty()) {
+            session()->flash('error', app(DrawEligibility::class)->refusal(
+                $ineligible,
+                __('No draw numbers were saved.'),
+            ));
+
+            return;
         }
 
         // Cleared first, then written, and both inside one transaction. Draw
@@ -219,7 +257,22 @@ class Bracket extends Component
         // attributes, and these were loaded before the clear, so an athlete
         // keeping the number they already had would look unchanged and be left
         // at NULL.
-        DB::transaction(function () use ($seen) {
+        $saved = DB::transaction(function () use ($seen) {
+            WeightCategory::whereKey($this->weightCategory->id)->lockForUpdate()->firstOrFail();
+
+            // Asked again under the lock, against the same ids: the check
+            // above ran before the lock was held, and a weigh-in recorded in
+            // between would otherwise slip a failure into the draw.
+            $stillEligible = $this->weightCategory->athletes()
+                ->whereIn('id', array_values($seen))
+                ->passedWeighIn()
+                ->pluck('id')
+                ->all();
+
+            if (count($stillEligible) !== count($seen)) {
+                return false;
+            }
+
             $this->weightCategory->athletes()->update(['draw_number' => null, 'draw_number_source' => null]);
 
             foreach ($seen as $number => $athleteId) {
@@ -228,7 +281,15 @@ class Bracket extends Component
                     'draw_number_source' => 'manual',
                 ]);
             }
+
+            return true;
         });
+
+        if ($saved === false) {
+            session()->flash('error', __('Somebody in this list stopped being eligible while it was being saved. Nothing was saved — check the weigh-in and try again.'));
+
+            return;
+        }
 
         $this->syncDraws();
 
@@ -241,25 +302,46 @@ class Bracket extends Component
             : __('Draw numbers saved.'));
     }
 
-    /** Assign draw numbers at random to everyone who passed the scale. */
+    /**
+     * Assign draw numbers at random to everyone who passed the scale.
+     *
+     * Everyone who *passed*, which is narrower than everyone who did not fail:
+     * an athlete nobody has weighed yet is pending, and the IKA rule keeps
+     * pending off the mat exactly as firmly as it keeps a failure off it. This
+     * read "!= fail" and so handed numbers to athletes who had never stood on
+     * the scale.
+     */
     public function drawAtRandom(): void
     {
         Gate::authorize('manage-competition');
 
-        $eligibleIds = $this->weightCategory->athletes()
-            ->where('weighin_status', '!=', 'fail')
-            ->pluck('id')
-            ->shuffle();
-
-        if ($eligibleIds->isEmpty()) {
+        if ($this->weightCategory->eligibleAthletes()->doesntExist()) {
             $this->drawFailed(__('Nobody in this class has passed the weigh-in.'));
 
             return;
         }
 
-        DB::transaction(function () use ($eligibleIds) {
-            // Clear first: draw numbers are unique per category, so reassigning
-            // in place would collide with the numbers still held.
+        /*
+         | Chosen and written inside one transaction, under the category's own
+         | row lock.
+         |
+         | The weigh-in desk and the draw screen are two people at two
+         | computers. Selecting outside the transaction would read a field that
+         | somebody is still changing — an athlete passed a moment after the
+         | shuffle would be left out of a draw that says it included everybody
+         | eligible, and one who failed a moment after it would be given a
+         | number the rules forbid. So the field is re-read after the lock is
+         | held, and it is the re-read one that is drawn.
+         */
+        $drawn = DB::transaction(function () {
+            WeightCategory::whereKey($this->weightCategory->id)->lockForUpdate()->firstOrFail();
+
+            $eligibleIds = $this->weightCategory->eligibleAthletes()->pluck('id')->shuffle();
+
+            // Cleared for everybody, not only for the eligible: this is where a
+            // number held by somebody who has since failed the scale is taken
+            // back, and leaving it would let a fresh random draw still contain
+            // them.
             $this->weightCategory->athletes()->update(['draw_number' => null, 'draw_number_source' => null]);
 
             // Write by query rather than through loaded models. An Eloquent
@@ -272,7 +354,16 @@ class Bracket extends Component
                     'draw_number_source' => 'random',
                 ]);
             }
+
+            return $eligibleIds->count();
         });
+
+        if ($drawn === 0) {
+            $this->drawFailed(__('Nobody in this class has passed the weigh-in.'));
+            $this->syncDraws();
+
+            return;
+        }
 
         // The ceremony board reads this stamp to pace its reveal. The draw
         // itself is already committed above — what is paced is the telling of
@@ -285,7 +376,7 @@ class Bracket extends Component
         );
 
         $this->syncDraws();
-        session()->flash('status', __('Drew :count athlete(s) at random.', ['count' => $eligibleIds->count()]));
+        session()->flash('status', __('Drew :count athlete(s) at random.', ['count' => $drawn]));
 
         $this->dispatch('draw-completed', mode: 'positions');
     }
@@ -318,9 +409,11 @@ class Bracket extends Component
                 overrideReason: $this->overrideReason,
                 user: auth()->user(),
             );
-        } catch (DrawFormatException $e) {
-            // Nothing to confirm: the request is one the rules do not allow,
-            // or an override with nobody's name on it.
+        } catch (DrawEligibilityException|DrawFormatException $e) {
+            // Nothing to confirm in either: a request the rules do not allow,
+            // an override with nobody's name on it, or somebody in the field
+            // who has not passed the scale. All three are corrected rather
+            // than confirmed.
             $this->drawFailed($e->getMessage());
 
             return;
@@ -423,7 +516,44 @@ class Bracket extends Component
             return;
         }
 
-        $this->weightCategory->forceFill(['draw_published_at' => now()])->save();
+        /*
+         | The last gate, and the one that matters most.
+         |
+         | Publication is what turns a table being worked on into one the hall
+         | is told to work from, and it can be minutes or hours after the draw
+         | was generated — a whole weigh-in session can have run in between.
+         | So the field is checked again here, against the contests themselves
+         | rather than against the draw numbers: taking somebody's number away
+         | does not take them out of a bracket that was built around them, and
+         | it is the bracket that is about to be published.
+         |
+         | Checked and published under one lock, so a status changing between
+         | the two cannot be published by the writer that read before it.
+         */
+        $refused = DB::transaction(function (): ?string {
+            $locked = WeightCategory::whereKey($this->weightCategory->id)->lockForUpdate()->firstOrFail();
+
+            $ineligible = app(DrawEligibility::class)->ineligibleInGeneratedDraw($locked);
+
+            if ($ineligible->isNotEmpty()) {
+                return app(DrawEligibility::class)->refusal(
+                    $ineligible,
+                    __('This draw cannot be published: the weigh-in has changed since it was generated.'),
+                );
+            }
+
+            $locked->forceFill(['draw_published_at' => now()])->save();
+
+            return null;
+        });
+
+        if ($refused !== null) {
+            session()->flash('error', $refused);
+
+            return;
+        }
+
+        $this->weightCategory->refresh();
 
         // Building the official table and presenting it are two different
         // moments. A random draw leaves a pace stamp for the venue board, but
@@ -774,6 +904,24 @@ class Bracket extends Component
                 ->resolveCompliantFor($this->weightCategory, $drawnCount),
             'formatChoices' => app(TournamentFormatPolicy::class)->availableFor($drawnCount),
             'mayOverride' => Gate::allows('draw.override_format'),
+
+            /*
+             | Athletes holding a number the rules do not admit.
+             |
+             | Empty in anything drawn since eligibility was enforced. Where it
+             | is not — a championship imported from the legacy database, or a
+             | row changed outside the application — the screen says so rather
+             | than quietly dropping them from the counts, because a class that
+             | silently lost an entrant between two page loads is a worse
+             | failure than one that explains what is wrong with it.
+             */
+            'ineligibleNumbered' => $this->weightCategory->ineligibleNumberedAthletes()->get(),
+
+            // The same question asked of the contests rather than of the draw
+            // numbers, which is what publication is refused on.
+            'ineligibleInDraw' => $this->weightCategory->hasDraw()
+                ? app(DrawEligibility::class)->ineligibleInGeneratedDraw($this->weightCategory)
+                : collect(),
             'standings' => $this->weightCategory->isRoundRobin()
                 ? app(RoundRobinStandings::class)->forCategory($this->weightCategory)
                 : null,

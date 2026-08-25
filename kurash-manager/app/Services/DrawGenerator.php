@@ -35,6 +35,7 @@ class DrawGenerator
         private readonly TournamentFormatPolicy $policy,
         private readonly BracketGenerator $brackets,
         private readonly RoundRobinGenerator $roundRobins,
+        private readonly DrawEligibility $eligibility,
     ) {}
 
     /**
@@ -69,6 +70,30 @@ class DrawGenerator
             $locked = WeightCategory::whereKey($category->id)->lockForUpdate()->firstOrFail();
             $locked->setRelation('ageCategory', $category->ageCategory);
 
+            /*
+             | The scale, checked here and not only where the numbers were
+             | handed out.
+             |
+             | Assignment is one moment and generation is another, with a
+             | weigh-in desk running in between: an athlete numbered while
+             | passing can have been re-weighed and failed before anybody
+             | presses Generate. This is inside the lock and the transaction
+             | that write the draw, so what is checked is what is about to be
+             | built — and a screen is not what is trusted to have filtered it,
+             | because a command, a test or a screen written later reaches this
+             | same door.
+             */
+            $ineligible = $this->eligibility->ineligibleInDraw($locked);
+
+            if ($ineligible->isNotEmpty()) {
+                throw new DrawEligibilityException($this->eligibility->refusal(
+                    $ineligible,
+                    __('The draw for :class cannot be generated.', ['class' => $locked->label]),
+                ));
+            }
+
+            // Counted off the eligible field, so the format, the override gate
+            // and the contests are all decided about the same set of people.
             $athletes = $locked->drawnAthletes()->count();
 
             if ($athletes < 1) {
@@ -204,6 +229,19 @@ class DrawGenerator
         $athlete = $category->drawnAthletes()->first();
 
         if ($athlete === null) {
+            // Either nobody is entered, or the one entrant has not passed the
+            // scale — and the second is worth saying plainly, because placing
+            // is what awards the class and an unweighed athlete does not win it
+            // by standing alone in it.
+            $unweighed = $category->ineligibleNumberedAthletes()->get();
+
+            if ($unweighed->isNotEmpty()) {
+                throw new DrawEligibilityException($this->eligibility->refusal(
+                    $unweighed,
+                    __('Nobody can be placed first in :class.', ['class' => $category->label]),
+                ));
+            }
+
             throw new DrawFormatException("{$category->label} has nobody to place.");
         }
 

@@ -6,10 +6,12 @@ use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Championship;
 use App\Models\WeightCategory;
+use App\Services\DrawEligibility;
 use App\Services\WeightValidator;
 use App\Support\Gender;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 use Livewire\Component;
@@ -85,11 +87,62 @@ class WeighIn extends Component
         // the scale can act on.
         $verdict = app(WeightValidator::class)->check($category, $kg);
 
-        $athlete->update([
-            'weighin_kg' => $kg,
-            'weighin_status' => $verdict->status(),
-            'weighin_at' => now(),
-        ]);
+        /*
+         |----------------------------------------------------------------------
+         | Losing a pass that a draw was built on
+         |----------------------------------------------------------------------
+         |
+         | The IKA rule is about admission: an athlete who has not been weighed
+         | does not compete. What to do when a *generated* draw already contains
+         | somebody who has just lost their pass is not a rule of the sport — it
+         | is a decision about this application, and the decision here is to
+         | refuse the change and say what has to happen first.
+         |
+         | The alternative is to rewrite the draw underneath whoever is holding
+         | it: a bracket with a seat emptied, a round robin missing a third of
+         | its fixtures, possibly with results already recorded against them.
+         | This system already refuses to remove a drawn athlete from
+         | registration, refuses to redraw a published table without withdrawing
+         | it, and refuses to redraw a locked one at all. The scale answers the
+         | same way, and for the same reason: the draw is a document other
+         | people are working from, and unmaking it is a decision somebody takes
+         | deliberately on the draw screen, not a side effect of a second
+         | weighing.
+         |
+         | Before a draw exists there is nothing to protect, so the number is
+         | simply taken back — see below.
+         */
+        $losesPass = $athlete->passedWeighIn() && $verdict->status() !== Athlete::WEIGHIN_PASS;
+
+        if ($losesPass && app(DrawEligibility::class)->isCommittedToDraw($athlete)) {
+            session()->flash('error', __(
+                ':name is in the generated draw for :class, so this weight cannot be recorded against them yet. Delete that draw on its draw screen — withdrawing or unlocking it first if it is published or locked — and then weigh them again.',
+                // Committed to a draw means there is a class holding it, so the
+                // label is always there to be quoted.
+                ['name' => $athlete->fullname, 'class' => $category->label],
+            ));
+
+            return;
+        }
+
+        DB::transaction(function () use ($athlete, $kg, $verdict, $losesPass) {
+            $attributes = [
+                'weighin_kg' => $kg,
+                'weighin_status' => $verdict->status(),
+                'weighin_at' => now(),
+            ];
+
+            // An athlete who is no longer admitted holds no draw number. Safe
+            // here precisely because the guard above has established that no
+            // generated draw depends on them: the number is a plan for a draw
+            // that has not been made, and the plan is no longer true.
+            if ($losesPass) {
+                $attributes['draw_number'] = null;
+                $attributes['draw_number_source'] = null;
+            }
+
+            $athlete->update($attributes);
+        });
 
         // An athlete with no class is never accepted, so the two conditions
         // always agree — stated together rather than reached for with a

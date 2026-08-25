@@ -46,7 +46,7 @@
             @if ($placed)
                 <x-display.athlete :athlete="$placed" />
             @else
-                <x-display.athlete :athlete="$weightCategory->drawnAthletes()->first()" fallback="—" />
+                <x-display.athlete :athlete="$weightCategory->numberedAthletes()->first()" fallback="—" />
             @endif
         </div>
 

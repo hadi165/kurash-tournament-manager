@@ -62,7 +62,7 @@ class RoundRobinStandings
      */
     public function forCategory(WeightCategory $category): array
     {
-        $field = $category->drawnAthletes()->get()->keyBy('id');
+        $field = $category->numberedAthletes()->get()->keyBy('id');
         $contests = $this->contests($category);
 
         $decided = $contests->filter(fn (Bout $b) => $b->winner_athlete_id !== null);

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Database\Factories\AthleteFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -25,6 +26,25 @@ class Athlete extends Model
     /** @use HasFactory<AthleteFactory> */
     use HasFactory;
 
+    /*
+     |--------------------------------------------------------------------------
+     | The scale
+     |--------------------------------------------------------------------------
+     |
+     | The three states of weighin_status, named once. The strings are the
+     | values in the enum column and are read back for the life of a
+     | championship, so they are part of the schema and are not renamed.
+     */
+
+    /** Registered, not yet weighed. Not admitted to competition. */
+    public const WEIGHIN_PENDING = 'pending';
+
+    /** Weighed, inside the class. The only state that competes. */
+    public const WEIGHIN_PASS = 'pass';
+
+    /** Weighed, outside the class. Not admitted to competition. */
+    public const WEIGHIN_FAIL = 'fail';
+
     protected $fillable = [
         'ika_id', 'championship_id', 'age_category_id', 'weight_category_id',
         'fullname', 'gender', 'noc_code', 'noc_name', 'national_id', 'club', 'photo_url',
@@ -40,6 +60,60 @@ class Athlete extends Model
             'weighin_at' => 'datetime',
             'accreditation_areas' => 'array',
         ];
+    }
+
+    /*
+     |--------------------------------------------------------------------------
+     | Admission to competition
+     |--------------------------------------------------------------------------
+     |
+     | The IKA rule is short: an athlete who has not been weighed must not be
+     | admitted to competition, and one who was weighed outside their class is
+     | not in that class. Both are the single condition below —
+     | weighin_status = 'pass' — and it is written here once so that the draw
+     | screen, the generators, the format policy and the tests cannot each
+     | arrive at a slightly different reading of it.
+     |
+     | "Not fail" is NOT that condition, and was the bug this replaces: an
+     | athlete nobody has weighed is pending, not passed, and pending is
+     | exactly who the rule keeps off the mat.
+     |
+     | https://kurash-ika.org/2022/08/20/kurash-rules/
+     */
+
+    /** Has this athlete been weighed and admitted to their class? */
+    public function passedWeighIn(): bool
+    {
+        return $this->weighin_status === self::WEIGHIN_PASS;
+    }
+
+    /**
+     * Narrow a query to the athletes who may compete.
+     *
+     * @param  Builder<Athlete>  $query
+     * @return Builder<Athlete>
+     */
+    public function scopePassedWeighIn(Builder $query): Builder
+    {
+        return $query->where('weighin_status', self::WEIGHIN_PASS);
+    }
+
+    /**
+     * Narrow a query to the athletes who may NOT compete.
+     *
+     * The complement of the scope above rather than a list of the other two
+     * states, so a fourth state added to the enum later is refused admission
+     * by default instead of being quietly let through.
+     *
+     * @param  Builder<Athlete>  $query
+     * @return Builder<Athlete>
+     */
+    public function scopeFailedOrPendingWeighIn(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q) {
+            $q->where('weighin_status', '!=', self::WEIGHIN_PASS)
+                ->orWhereNull('weighin_status');
+        });
     }
 
     /** @return BelongsTo<Championship, $this> */

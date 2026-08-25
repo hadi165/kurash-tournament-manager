@@ -66,6 +66,18 @@ class RoundRobinGenerator
             );
         }
 
+        // The same guard the bracket keeps, for the same reason: a field short
+        // of the numbers it was drawn from is a competition somebody has been
+        // dropped out of without being told.
+        $ineligible = $category->ineligibleNumberedAthletes()->get();
+
+        if ($ineligible->isNotEmpty()) {
+            throw new DrawEligibilityException(app(DrawEligibility::class)->refusal(
+                $ineligible,
+                __('The round robin for :class cannot be drawn.', ['class' => $category->label]),
+            ));
+        }
+
         $athletes = $category->drawnAthletes()->get();
         $count = $athletes->count();
 

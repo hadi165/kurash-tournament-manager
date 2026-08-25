@@ -2,6 +2,7 @@
     // brand  — a good state: passed, done, active, decided
     // info   — neutral information, and the blue corner
     // danger — a failed or blocking state
+    // amber  — a caution: something needs attention but nothing is broken
     // muted  — a state that is simply not started yet
     'variant' => 'muted',
     'dot' => false,   // a filled dot before the label, for a live state
@@ -12,6 +13,11 @@
         'brand' => ['bg-brand-soft text-brand-deep', 'bg-brand'],
         'info' => ['bg-info-soft text-info-deep', 'bg-info'],
         'danger' => ['bg-danger-soft text-danger-deep', 'bg-danger'],
+        // Named here at last: nine callers across the draw, operator and
+        // standings screens were already asking for amber — a locked draw, a
+        // rule override, a tie awaiting a decision — and every one of them was
+        // falling through to the muted default and reading as grey.
+        'amber' => ['bg-amber-soft text-amber-deep', 'bg-amber'],
         default => ['bg-ground text-muted ring-1 ring-inset ring-line', 'bg-muted'],
     };
 @endphp

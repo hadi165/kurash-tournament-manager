@@ -36,7 +36,7 @@ final class BracketSheet
     public function size(): int
     {
         return (int) ($this->category->draw_bucket_size
-            ?: BracketSeeding::size($this->category->drawnAthletes()->count()));
+            ?: BracketSeeding::size($this->category->numberedAthletes()->count()));
     }
 
     public function rounds(): int
@@ -54,7 +54,7 @@ final class BracketSheet
      */
     public function seats(): array
     {
-        $drawn = $this->category->drawnAthletes()->get()->keyBy('draw_number');
+        $drawn = $this->category->numberedAthletes()->get()->keyBy('draw_number');
 
         $seats = [];
 

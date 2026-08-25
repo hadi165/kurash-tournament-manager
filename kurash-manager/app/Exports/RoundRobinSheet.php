@@ -55,7 +55,7 @@ final class RoundRobinSheet
     {
         $rows = [];
 
-        foreach ($this->category->drawnAthletes()->get() as $athlete) {
+        foreach ($this->category->numberedAthletes()->get() as $athlete) {
             $rows[] = [
                 'draw' => $athlete->draw_number === null ? null : (int) $athlete->draw_number,
                 'name' => (string) $athlete->fullname,
@@ -122,7 +122,7 @@ final class RoundRobinSheet
     public function matrix(): array
     {
         /** @var list<Athlete> $field */
-        $field = array_values($this->category->drawnAthletes()->get()->all());
+        $field = array_values($this->category->numberedAthletes()->get()->all());
         $size = count($field);
 
         // Position in the field, so a contest can be placed by its athletes.

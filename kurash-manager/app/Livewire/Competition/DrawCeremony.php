@@ -145,7 +145,7 @@ class DrawCeremony extends Component
         // The telling order, settled once and kept: every poll from here — this
         // screen's and the venue board's — has to agree about which position
         // came out when, and a shuffle recomputed per request would not.
-        $order = $this->weightCategory->drawnAthletes()->pluck('draw_number')
+        $order = $this->weightCategory->numberedAthletes()->pluck('draw_number')
             ->map(fn ($number) => (int) $number)
             ->all();
 
@@ -169,7 +169,7 @@ class DrawCeremony extends Component
     {
         Gate::authorize('presentation.operate');
 
-        $total = $this->weightCategory->drawnAthletes()->count();
+        $total = $this->weightCategory->numberedAthletes()->count();
 
         // Saving a draw that is still being told would put a half-told bracket
         // on somebody's desk.
@@ -188,7 +188,7 @@ class DrawCeremony extends Component
     {
         Gate::authorize('presentation.operate');
 
-        $total = $this->weightCategory->drawnAthletes()->count();
+        $total = $this->weightCategory->numberedAthletes()->count();
 
         $this->setRevealed(min($total, $this->revealed($total) + 1));
     }
@@ -388,7 +388,7 @@ class DrawCeremony extends Component
     public function render(): View
     {
         /** @var Collection<int, Athlete> $drawn keyed by draw number */
-        $drawn = $this->weightCategory->drawnAthletes()->get()->keyBy('draw_number');
+        $drawn = $this->weightCategory->numberedAthletes()->get()->keyBy('draw_number');
 
         $total = $drawn->count();
         $revealed = $this->revealed($total);

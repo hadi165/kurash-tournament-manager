@@ -9,7 +9,7 @@
     <div class="dc-panel dc-solo-panel">
         <div class="dc-kicker">{{ __('Single entrant') }}</div>
 
-        @php $entrant = $placed ?? $weightCategory->drawnAthletes()->first(); @endphp
+        @php $entrant = $placed ?? $weightCategory->numberedAthletes()->first(); @endphp
 
         <div class="dc-solo-name">{{ $entrant?->fullname ?? '—' }}</div>
 

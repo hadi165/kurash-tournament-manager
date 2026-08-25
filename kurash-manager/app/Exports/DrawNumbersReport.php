@@ -108,6 +108,6 @@ class DrawNumbersReport implements HasTotal, Report
      */
     private function drawn(): Collection
     {
-        return $this->category->drawnAthletes()->get();
+        return $this->category->numberedAthletes()->get();
     }
 }

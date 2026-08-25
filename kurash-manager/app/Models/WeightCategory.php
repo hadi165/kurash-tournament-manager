@@ -186,14 +186,90 @@ class WeightCategory extends Model
         return $this->hasMany(Bout::class);
     }
 
+    /*
+     |--------------------------------------------------------------------------
+     | Three questions about a class's athletes, never conflated
+     |--------------------------------------------------------------------------
+     |
+     |   eligibleAthletes()   who may be drawn at all      — passed the scale
+     |   drawnAthletes()      who is IN the draw to make   — passed AND numbered
+     |   numberedAthletes()   who holds a number today     — numbered, whatever
+     |                                                       the scale later said
+     |
+     | The first two are the admission rule and are what every generator, count
+     | and format decision reads: a draw is made from athletes the rules admit.
+     |
+     | The third exists for reading a draw that already exists. A bracket is
+     | built from athlete ids and keeps them; if the set a sheet or a board
+     | renders from were the strict one, a single inconsistent legacy row would
+     | punch a hole in a printed draw rather than showing what was actually
+     | drawn. Displays stay faithful to the draw; only the making of one is
+     | policed. In data written since eligibility was enforced the two sets are
+     | identical, because a number is only ever given to somebody who passed and
+     | a pass is not taken back underneath a draw.
+     */
+
     /**
-     * Athletes who may be drawn: they have a draw number and passed the scale.
+     * Everybody in this class who may be admitted to competition.
+     *
+     * The pool a random draw picks from, and the answer to "how many could be
+     * drawn here". Not ordered by draw number, because most of these do not
+     * have one yet.
+     *
+     * @return HasMany<Athlete, $this>
+     */
+    public function eligibleAthletes(): HasMany
+    {
+        return $this->athletes()->passedWeighIn();
+    }
+
+    /**
+     * The field of the draw: athletes who passed the scale and hold a number.
+     *
+     * Both halves, always. The name says "drawn" and the rule says "admitted",
+     * and every caller of this — the generators, the format policy, the
+     * counts on the draw screen — needs exactly that conjunction.
      *
      * @return HasMany<Athlete, $this>
      */
     public function drawnAthletes(): HasMany
     {
         return $this->athletes()
+            ->passedWeighIn()
+            ->whereNotNull('draw_number')
+            ->orderBy('draw_number');
+    }
+
+    /**
+     * Whoever holds a draw number, admitted or not.
+     *
+     * What a board, a sheet or a standings table renders from. See the note
+     * above: a draw that exists is shown as it is.
+     *
+     * @return HasMany<Athlete, $this>
+     */
+    public function numberedAthletes(): HasMany
+    {
+        return $this->athletes()
+            ->whereNotNull('draw_number')
+            ->orderBy('draw_number');
+    }
+
+    /**
+     * Athletes holding a draw number that the rules do not admit.
+     *
+     * Always empty in data written since eligibility was enforced. Where it is
+     * not — a championship imported from the legacy database, or a row changed
+     * outside the application — the screens surface it as a warning rather than
+     * silently dropping the athlete, and the draw refuses to be generated or
+     * published until somebody has resolved it.
+     *
+     * @return HasMany<Athlete, $this>
+     */
+    public function ineligibleNumberedAthletes(): HasMany
+    {
+        return $this->athletes()
+            ->failedOrPendingWeighIn()
             ->whereNotNull('draw_number')
             ->orderBy('draw_number');
     }

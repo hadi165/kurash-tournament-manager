@@ -148,18 +148,41 @@
                 @forelse ($athletes as $athlete)
                     {{-- The athlete is the field's label. Sitting them beside the
                          input squeezed the names down to "Ak…", "asg…", "DDD…". --}}
+                    {{-- An athlete who has not passed the scale cannot hold a
+                         draw number, so the field that would give them one is
+                         closed rather than left open to be refused on save.
+                         The tag says which of the two reasons it is: not
+                         weighed yet is a different thing to weighed and
+                         outside the class, and only one of them is fixed by
+                         waiting. --}}
                     <div class="flex flex-col gap-1.5" wire:key="draw-{{ $athlete->id }}">
                         <label for="draw-{{ $athlete->id }}" class="flex items-center gap-2 text-[13px] font-bold">
-                            <span class="min-w-0 break-words">{{ $athlete->fullname }}</span>
+                            <span class="min-w-0 break-words {{ $athlete->passedWeighIn() ? '' : 'text-ink/45' }}">{{ $athlete->fullname }}</span>
 
-                            @if ($athlete->weighin_status === 'fail')
+                            @if ($athlete->weighin_status === \App\Models\Athlete::WEIGHIN_FAIL)
                                 <x-ui.tag variant="danger" class="ms-auto">{{ __('failed weigh-in') }}</x-ui.tag>
+                            @elseif (! $athlete->passedWeighIn())
+                                <x-ui.tag variant="amber" class="ms-auto">{{ __('not weighed') }}</x-ui.tag>
                             @else
                                 <x-ui.tag variant="outline" class="ms-auto">{{ $athlete->noc_code }}</x-ui.tag>
                             @endif
                         </label>
 
-                        <flux:input id="draw-{{ $athlete->id }}" wire:model="draws.{{ $athlete->id }}" type="number" min="1" />
+                        <flux:input
+                            id="draw-{{ $athlete->id }}"
+                            wire:model="draws.{{ $athlete->id }}"
+                            type="number"
+                            min="1"
+                            :disabled="! $athlete->passedWeighIn()"
+                        />
+
+                        @if (! $athlete->passedWeighIn())
+                            <p class="text-[12px] text-muted">
+                                {{ $athlete->weighin_status === \App\Models\Athlete::WEIGHIN_FAIL
+                                    ? __('Weighed outside this class — cannot be drawn.')
+                                    : __('Not weighed yet — cannot be drawn until they pass the scale.') }}
+                            </p>
+                        @endif
                     </div>
                 @empty
                     <p class="text-sm text-ink/55">{{ __('No athletes registered in this weight class.') }}</p>
@@ -266,6 +289,39 @@
                             </flux:button>
                         </div>
                     @endif
+                </div>
+            @endif
+
+            {{-- Somebody holds a draw number the rules do not admit.
+
+                 Only reachable from data this application did not write — a
+                 legacy import, or a row edited underneath it — because a
+                 number is now only ever given to an athlete who passed, and a
+                 pass is not taken back from under a generated draw. Said out
+                 loud rather than silently corrected: the numbers are somebody
+                 else's record and it is not this screen's place to rewrite
+                 them, but generating or publishing over them is refused. --}}
+            @if ($ineligibleNumbered->isNotEmpty() || $ineligibleInDraw->isNotEmpty())
+                <div class="mb-4 rounded-md bg-danger-soft px-[18px] py-3.5">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <x-ui.tag variant="danger">{{ __('Weigh-in') }}</x-ui.tag>
+                        <span class="text-[13.5px] text-danger-deep">
+                            {{ $ineligibleInDraw->isNotEmpty()
+                                ? __('This draw contains athletes who have not passed the weigh-in. It cannot be published until that is resolved.')
+                                : __('These athletes hold a draw number but have not passed the weigh-in. The draw cannot be generated until that is resolved.') }}
+                        </span>
+                    </div>
+
+                    <ul class="mt-2 ps-4 text-[13px] text-danger-deep">
+                        @foreach (($ineligibleInDraw->isNotEmpty() ? $ineligibleInDraw : $ineligibleNumbered) as $athlete)
+                            <li wire:key="ineligible-{{ $athlete->id }}">
+                                {{ $athlete->fullname }} —
+                                {{ $athlete->weighin_status === \App\Models\Athlete::WEIGHIN_FAIL
+                                    ? __('failed weigh-in')
+                                    : __('not weighed') }}
+                            </li>
+                        @endforeach
+                    </ul>
                 </div>
             @endif
 
