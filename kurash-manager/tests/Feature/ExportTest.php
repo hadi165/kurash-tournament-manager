@@ -30,31 +30,6 @@ beforeEach(function () {
     $this->viewer = User::factory()->create(['role' => 'viewer']);
 });
 
-/** A weight class with athletes who all made the scale. */
-function weighedClass(int $count, string $gender = 'M', string $label = '-91'): WeightCategory
-{
-    $ageCategory = AgeCategory::factory()->create();
-
-    $category = WeightCategory::factory()->create([
-        'age_category_id' => $ageCategory->id,
-        'label' => $label,
-        'gender' => $gender,
-    ]);
-
-    foreach (range(1, $count) as $draw) {
-        Athlete::factory()->drawn($draw)->create([
-            'championship_id' => $ageCategory->championship_id,
-            'age_category_id' => $ageCategory->id,
-            'weight_category_id' => $category->id,
-            'fullname' => "Athlete {$draw}",
-            'noc_code' => 'UZB',
-            'weighin_status' => 'pass',
-        ]);
-    }
-
-    return $category->refresh();
-}
-
 describe('the weigh-in form', function () {
     /**
      * The specification fixes this filename because the federation files the
@@ -490,16 +465,21 @@ describe('the printed sheet', function () {
 describe('the draw numbers', function () {
     beforeEach(fn () => $this->actingAs($this->admin));
 
-    it('lists everybody holding a number, in draw order', function () {
+    /**
+     * A register, read down the accreditation numbers. The draw numbers on it
+     * come out in whatever order the draw put them, which is the point of
+     * sorting by anything else.
+     */
+    it('lists everybody in the class, by accreditation number', function () {
         $category = weighedClass(6);
         app(BracketGenerator::class)->generate($category);
 
-        $report = new DrawNumbersReport($category->refresh());
-        $rows = $report->rows();
+        $rows = (new DrawNumbersReport($category->refresh()))->rows();
+
+        $ika = array_column($rows, 0);
 
         expect($rows)->toHaveCount(6)
-            ->and(array_column($rows, 0))->toBe([1, 2, 3, 4, 5, 6])
-            ->and($rows[0][1])->toBe('Athlete 1');
+            ->and($ika)->toBe(collect($ika)->sort()->values()->all());
     });
 
     /**
@@ -513,7 +493,8 @@ describe('the draw numbers', function () {
         $numbers = (new DrawNumbersReport($category))->rows();
 
         expect(array_column($weighIn, 5))->each->toBe('')
-            ->and(array_filter(array_column($numbers, 0)))->toHaveCount(4);
+            // Column five is the draw number here, and every one of them is filled.
+            ->and(array_filter(array_column($numbers, 4), fn ($n) => $n !== '—'))->toHaveCount(4);
     });
 
     /**
@@ -526,16 +507,24 @@ describe('the draw numbers', function () {
 
         $report = new DrawNumbersReport($category->refresh());
 
-        expect($report->headings())->toBe(['Draw No.', "Athlete's Name", "Athlete's ID (IKA)", 'NOC', 'Country'])
+        expect($report->headings())->toBe(["Athlete's ID (IKA)", "Athlete's Name", 'NOC', 'Country', 'Draw No.'])
             ->and($report->rows()[0])->toHaveCount(5)
             ->and(collect($report->rows())->flatten()->contains('Random draw'))->toBeFalse();
     });
 
-    it('leaves out anybody who was never drawn', function () {
+    /**
+     * Everybody appears, drawn or not. A register that quietly omits whoever
+     * has no number yet is a register nobody can count heads against — and the
+     * blank is the thing an official is looking for.
+     */
+    it('keeps anybody who was never drawn, with a dash for a number', function () {
         $category = weighedClass(5);
         $category->athletes()->orderByDesc('draw_number')->first()->update(['draw_number' => null]);
 
-        expect((new DrawNumbersReport($category->refresh()))->rows())->toHaveCount(4);
+        $rows = (new DrawNumbersReport($category->refresh()))->rows();
+
+        expect($rows)->toHaveCount(5)
+            ->and(collect($rows)->pluck(4)->filter(fn ($n) => $n === '—'))->toHaveCount(1);
     });
 
     it('downloads in both formats', function () {
@@ -573,19 +562,19 @@ describe('the bracket sheet', function () {
             ->and(array_column($sheet->seats(), 'corner'))->toBe(['blue', 'green', 'blue', 'green', 'blue', 'green', 'blue', 'green']);
     });
 
-    it('puts a square on every match, with its fight number', function () {
+    it('puts a branch on every match, with its fight number', function () {
         $championship = championshipWithBrackets(['-66' => 8]);
         app(FightOrderScheduler::class)->schedule($championship);
 
         $category = $championship->ageCategories()->first()->weightCategories()->first();
-        $sheet = new BracketSheet($category->refresh());
+        $branches = collect((new BracketSheet($category->refresh()))->branches());
 
-        expect($sheet->matches(1))->toHaveCount(4)
-            ->and($sheet->matches(2))->toHaveCount(2)
-            ->and($sheet->matches(3))->toHaveCount(1)
-            // Each spans the rows it feeds from: 2, 4, 8.
-            ->and(array_column($sheet->matches(2), 'span'))->toBe([4, 4])
-            ->and($sheet->matches(1)[0]['fight'])->toStartWith('No. ');
+        expect($branches->where('round', 1))->toHaveCount(4)
+            ->and($branches->where('round', 2))->toHaveCount(2)
+            ->and($branches->where('round', 3))->toHaveCount(1)
+            // In half-seats, so a branch can start on a centre line: 2, 4, 8.
+            ->and($branches->where('round', 2)->pluck('span')->all())->toBe([4, 4])
+            ->and($branches->first()['fight'])->toStartWith('No. ');
     });
 
     it('marks the empty seats as byes rather than inventing people', function () {
@@ -607,7 +596,12 @@ describe('the bracket sheet', function () {
         app(BracketGenerator::class)->generate($category);
 
         $sheet = new BracketSheet($category->refresh());
-        $html = view('exports.bracket', ['sheet' => $sheet])->render();
+        $html = view('exports.bracket', [
+            'sheet' => $sheet,
+            // The same two the writer hands it: the sheet says what to draw and
+            // the scale says how big the page it is being drawn on is.
+            'scale' => app(BracketSheetWriter::class)->scale($sheet),
+        ])->render();
 
         $seated = collect($sheet->seats())->where('bye', false);
 
@@ -632,15 +626,15 @@ describe('the bracket sheet', function () {
         });
 
         it('numbers them when the bracket is asked for as it stands', function () {
-            $matches = (new BracketSheet($this->drawn))->matches(1);
+            $branches = (new BracketSheet($this->drawn))->branches();
 
-            expect(collect($matches)->pluck('fight')->filter())->not->toBeEmpty();
+            expect(collect($branches)->pluck('fight')->filter())->not->toBeEmpty();
         });
 
         it('leaves them blank when the bracket is asked for without one', function () {
-            $matches = (new BracketSheet($this->drawn, fightNumbers: false))->matches(1);
+            $branches = (new BracketSheet($this->drawn, fightNumbers: false))->branches();
 
-            expect(collect($matches)->pluck('fight')->filter())->toBeEmpty();
+            expect(collect($branches)->pluck('fight')->filter())->toBeEmpty();
         });
 
         it('is asked for by the download, in both formats', function () {
@@ -691,12 +685,15 @@ describe('the bracket sheet', function () {
         $book = IOFactory::load($path);
         $page = $book->getActiveSheet();
 
-        // Four first-round matches, two quarters, one final, plus the champion.
-        expect($page->getMergeCells())->toHaveCount(8);
+        // Eight seats, two rows each; the champion; the podium heading; and
+        // four merges in the tree. The sheet is ruled in half-seats so a
+        // connector can start on a centre line, and a branch is drawn in
+        // three cells of which only the tall ones merge — see BracketTreeTest.
+        expect($page->getMergeCells())->toHaveCount(8 * 2 + 1 + 1 + 4);
 
-        $numbers = collect($page->getMergeCells())
-            ->map(fn (string $range) => (string) $page->getCell(explode(':', $range)[0])->getValue())
-            ->filter(fn (string $value) => str_starts_with($value, 'No. '));
+        $numbers = collect($page->toArray())
+            ->flatten()
+            ->filter(fn ($value) => is_string($value) && str_starts_with($value, 'No. '));
 
         expect($numbers)->toHaveCount(7);
 

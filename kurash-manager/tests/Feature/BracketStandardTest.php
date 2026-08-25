@@ -89,8 +89,9 @@ describe('the bracket screen', function () {
 
         $html = Livewire::test(Bracket::class, ['weightCategory' => $category])->html();
 
-        // 4 + 2 + 1 bouts in an eight-draw.
-        expect(substr_count($html, 'class="bkt__slot"'))->toBe(7);
+        // 4 + 2 + 1 bouts in an eight-draw, and the champion the final feeds:
+        // the tree does not stop at the final, so neither does the count.
+        expect(substr_count($html, 'class="bkt__slot"'))->toBe(8);
     });
 });
 

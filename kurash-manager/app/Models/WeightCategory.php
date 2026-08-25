@@ -2,7 +2,9 @@
 
 namespace App\Models;
 
+use App\Services\TournamentFormatPolicy;
 use App\Services\WeightValidator;
+use App\Support\TournamentFormat;
 use App\Support\WeightRange;
 use Carbon\CarbonImmutable;
 use Database\Factories\WeightCategoryFactory;
@@ -23,6 +25,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $draw_bucket_size
  * @property int|null $draw_bye_count
  * @property int $draw_version
+ * @property string|null $draw_format_preference
+ * @property string|null $draw_format
+ * @property string|null $draw_format_override_reason
+ * @property int|null $draw_format_override_by
+ * @property CarbonImmutable|null $draw_format_override_at
+ * @property int|null $draw_placement_athlete_id
+ * @property int|null $draw_placement_by
+ * @property CarbonImmutable|null $draw_placement_at
  */
 class WeightCategory extends Model
 {
@@ -41,6 +51,8 @@ class WeightCategory extends Model
             'draw_generated_at' => 'datetime',
             'draw_published_at' => 'datetime',
             'draw_locked_at' => 'datetime',
+            'draw_format_override_at' => 'datetime',
+            'draw_placement_at' => 'datetime',
         ];
     }
 
@@ -55,9 +67,82 @@ class WeightCategory extends Model
      | the shape of a table somebody is presenting from.
      */
 
+    /**
+     * Has this class been drawn?
+     *
+     * Not "does it have bouts". A class of one athlete is drawn by an
+     * administrative placement and has no contests at all — asking the bouts
+     * table would call it undrawn, and every screen that gates on this would
+     * offer to draw it again.
+     *
+     * The stored format is what makes the difference: it is written in the
+     * same transaction as whatever the draw produced, contests or not.
+     */
     public function hasDraw(): bool
     {
+        if ($this->draw_format !== null) {
+            return true;
+        }
+
+        // Drawn before formats existed. The backfill stamps these, but a row
+        // written by an older release mid-upgrade would not be, and a draw
+        // that exists must not read as missing for the length of a deploy.
         return $this->bouts()->exists();
+    }
+
+    /**
+     * What this class was drawn as, or null if it has not been drawn.
+     *
+     * The snapshot, never today's athlete count — an operator presenting a
+     * published table must see the table that was published.
+     */
+    public function drawFormat(): ?TournamentFormat
+    {
+        $format = TournamentFormat::tryFromValue($this->draw_format);
+
+        if ($format !== null) {
+            return $format;
+        }
+
+        // Same reasoning as hasDraw(): contests that predate the column are a
+        // knockout bracket, because that is the only thing that generated them.
+        return $this->bouts()->exists() ? TournamentFormat::Knockout : null;
+    }
+
+    /** What drawing this class right now would produce. */
+    public function resolvedFormat(): ?TournamentFormat
+    {
+        return app(TournamentFormatPolicy::class)->resolveFor($this);
+    }
+
+    /** Was this class drawn as a round robin? */
+    public function isRoundRobin(): bool
+    {
+        return $this->drawFormat() === TournamentFormat::RoundRobin;
+    }
+
+    /** Was it settled by placing a single unopposed athlete? */
+    public function isPlacement(): bool
+    {
+        return $this->drawFormat() === TournamentFormat::Placement;
+    }
+
+    /**
+     * Was the format chosen against the IKA rule for this field?
+     *
+     * Read off the recorded override rather than recomputed, so a class that
+     * has since grown past five athletes still says that its knockout was an
+     * override when it was made.
+     */
+    public function formatWasOverridden(): bool
+    {
+        return $this->draw_format_override_at !== null;
+    }
+
+    /** @return BelongsTo<Athlete, $this> */
+    public function placedAthlete(): BelongsTo
+    {
+        return $this->belongsTo(Athlete::class, 'draw_placement_athlete_id');
     }
 
     public function isDrawPublished(): bool
@@ -101,14 +186,90 @@ class WeightCategory extends Model
         return $this->hasMany(Bout::class);
     }
 
+    /*
+     |--------------------------------------------------------------------------
+     | Three questions about a class's athletes, never conflated
+     |--------------------------------------------------------------------------
+     |
+     |   eligibleAthletes()   who may be drawn at all      — passed the scale
+     |   drawnAthletes()      who is IN the draw to make   — passed AND numbered
+     |   numberedAthletes()   who holds a number today     — numbered, whatever
+     |                                                       the scale later said
+     |
+     | The first two are the admission rule and are what every generator, count
+     | and format decision reads: a draw is made from athletes the rules admit.
+     |
+     | The third exists for reading a draw that already exists. A bracket is
+     | built from athlete ids and keeps them; if the set a sheet or a board
+     | renders from were the strict one, a single inconsistent legacy row would
+     | punch a hole in a printed draw rather than showing what was actually
+     | drawn. Displays stay faithful to the draw; only the making of one is
+     | policed. In data written since eligibility was enforced the two sets are
+     | identical, because a number is only ever given to somebody who passed and
+     | a pass is not taken back underneath a draw.
+     */
+
     /**
-     * Athletes who may be drawn: they have a draw number and passed the scale.
+     * Everybody in this class who may be admitted to competition.
+     *
+     * The pool a random draw picks from, and the answer to "how many could be
+     * drawn here". Not ordered by draw number, because most of these do not
+     * have one yet.
+     *
+     * @return HasMany<Athlete, $this>
+     */
+    public function eligibleAthletes(): HasMany
+    {
+        return $this->athletes()->passedWeighIn();
+    }
+
+    /**
+     * The field of the draw: athletes who passed the scale and hold a number.
+     *
+     * Both halves, always. The name says "drawn" and the rule says "admitted",
+     * and every caller of this — the generators, the format policy, the
+     * counts on the draw screen — needs exactly that conjunction.
      *
      * @return HasMany<Athlete, $this>
      */
     public function drawnAthletes(): HasMany
     {
         return $this->athletes()
+            ->passedWeighIn()
+            ->whereNotNull('draw_number')
+            ->orderBy('draw_number');
+    }
+
+    /**
+     * Whoever holds a draw number, admitted or not.
+     *
+     * What a board, a sheet or a standings table renders from. See the note
+     * above: a draw that exists is shown as it is.
+     *
+     * @return HasMany<Athlete, $this>
+     */
+    public function numberedAthletes(): HasMany
+    {
+        return $this->athletes()
+            ->whereNotNull('draw_number')
+            ->orderBy('draw_number');
+    }
+
+    /**
+     * Athletes holding a draw number that the rules do not admit.
+     *
+     * Always empty in data written since eligibility was enforced. Where it is
+     * not — a championship imported from the legacy database, or a row changed
+     * outside the application — the screens surface it as a warning rather than
+     * silently dropping the athlete, and the draw refuses to be generated or
+     * published until somebody has resolved it.
+     *
+     * @return HasMany<Athlete, $this>
+     */
+    public function ineligibleNumberedAthletes(): HasMany
+    {
+        return $this->athletes()
+            ->failedOrPendingWeighIn()
             ->whereNotNull('draw_number')
             ->orderBy('draw_number');
     }

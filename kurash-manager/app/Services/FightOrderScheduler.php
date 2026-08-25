@@ -23,10 +23,42 @@ use Illuminate\Support\Facades\DB;
  *  2. There is a minimum number of bouts between a bout and each of its
  *     feeders, so whoever advances gets a rest. This is structural — it holds
  *     whoever wins, because it depends on bracket position, not on results.
+ *
+ * ── Two formats, two kinds of constraint ─────────────────────────────────
+ *
+ * Both of the guarantees above are about *feeders*, and a round robin has
+ * none: nobody advances, every pairing is known before anybody fights, and any
+ * order of the contests is a legal order. What a round robin has instead is an
+ * athlete appearing in almost every round, so the rest a bracket gets for free
+ * from its own shape has to be arranged here.
+ *
+ * So the rest rule is stated once, in terms of athletes rather than of
+ * brackets: no athlete should fight again within the configured number of
+ * bouts. In a knockout that is what the feeder chain already delivers and the
+ * feeder check is kept, because it holds whoever wins and a shared-athlete
+ * check could only see the athletes already known. In a round robin the
+ * shared-athlete check is the whole of it.
+ *
+ * Where the arithmetic cannot deliver the rest — an athlete with four contests
+ * in a session of ten cannot have three bouts between each of them — that is
+ * reported as unattainable rather than quietly scheduled anyway. See
+ * unattainableRest().
  */
 class FightOrderScheduler
 {
     public const DEFAULT_REST = 3;
+
+    /**
+     * The rest the configuration asks for, in bouts.
+     *
+     * Read here rather than at every call site, so the config knob the
+     * round_robin block documents is actually connected to the scheduler that
+     * promises to honour it.
+     */
+    public static function configuredRest(): int
+    {
+        return (int) config('kurash.round_robin.minimum_rest', self::DEFAULT_REST);
+    }
 
     /**
      * Number every contested bout in the championship.
@@ -40,17 +72,21 @@ class FightOrderScheduler
      * usually different categories — easier to rotate across mats, and it
      * spreads each class's officials and coaches through the session.
      *
-     * @return array{scheduled:int, violations:int}
+     * @param  int|null  $minimumRest  null takes the configured rest,
+     *                                 kurash.round_robin.minimum_rest
+     * @return array{scheduled:int, violations:int, unattainable:int}
      */
-    public function schedule(Championship $championship, int $minimumRest = self::DEFAULT_REST): array
+    public function schedule(Championship $championship, ?int $minimumRest = null): array
     {
+        $minimumRest ??= self::configuredRest();
+
         $bouts = $this->schedulableBouts($championship);
 
         if ($bouts->isEmpty()) {
-            return ['scheduled' => 0, 'violations' => 0];
+            return ['scheduled' => 0, 'violations' => 0, 'unattainable' => 0];
         }
 
-        $ordered = $this->orderRoundMajor($bouts);
+        $ordered = $this->spaceSharedAthletes($this->orderRoundMajor($bouts), $minimumRest);
 
         DB::transaction(function () use ($championship, $ordered) {
             // Clear first: fight_number has no uniqueness constraint, but a
@@ -66,6 +102,10 @@ class FightOrderScheduler
         return [
             'scheduled' => $ordered->count(),
             'violations' => $this->restViolations($championship, $minimumRest)->count(),
+            // Told apart from the violations above on purpose: one is an order
+            // that could be better, and this is a rest that no order could
+            // have delivered. An administrator can act on the first.
+            'unattainable' => $this->unattainableRest($championship, $minimumRest)->count(),
         ];
     }
 
@@ -124,6 +164,164 @@ class FightOrderScheduler
     }
 
     /**
+     * Push an athlete's contests apart, where the order is free to be changed.
+     *
+     * Only round-robin contests are moved. A knockout bout may not be
+     * reordered freely — it has to follow the bouts that feed it, and
+     * orderRoundMajor has already placed it where that holds — but a round
+     * robin has no such constraint, so any two of its contests may trade
+     * places with each other.
+     *
+     * Greedy and bounded: walk the order, and where a contest would put an
+     * athlete back on the mat too soon, look ahead for a round-robin contest
+     * that fits there instead and swap the two. A swap can create a conflict
+     * further down, which the same walk then repairs when it reaches it.
+     *
+     * This improves an order; it does not guarantee one. What cannot be
+     * achieved at all is reported by unattainableRest() rather than hidden by
+     * shuffling until the loop gives up.
+     *
+     * @param  Collection<int, Bout>  $ordered
+     * @return Collection<int, Bout>
+     */
+    private function spaceSharedAthletes(Collection $ordered, int $minimumRest): Collection
+    {
+        $list = $ordered->values()->all();
+        $count = count($list);
+
+        // Feeder links resolved in memory before the walk: a bout has feeders
+        // exactly when another bout points at it, and every candidate feeder
+        // is in this very list (a bye feeding a bout is knockout by
+        // definition, and knockout bouts are immovable on their format
+        // alone). The alternative — previousBouts()->doesntExist() per
+        // candidate — is a live query inside an O(n²) repair loop.
+        $fed = [];
+
+        foreach ($list as $bout) {
+            if ($bout->next_bout_id !== null) {
+                $fed[$bout->next_bout_id] = true;
+            }
+        }
+
+        // Where each athlete was last placed, so the check is a lookup rather
+        // than a scan back over the whole order.
+        $lastAt = [];
+
+        for ($i = 0; $i < $count; $i++) {
+            if (! $this->tooSoon($list[$i], $i, $lastAt, $minimumRest)) {
+                $this->remember($list[$i], $i, $lastAt);
+
+                continue;
+            }
+
+            // Only a round robin's contests may be moved, and only into a
+            // position another round-robin contest is holding.
+            if ($this->isMovable($list[$i], $fed)) {
+                for ($j = $i + 1; $j < $count; $j++) {
+                    if (! $this->isMovable($list[$j], $fed) || $this->tooSoon($list[$j], $i, $lastAt, $minimumRest)) {
+                        continue;
+                    }
+
+                    [$list[$i], $list[$j]] = [$list[$j], $list[$i]];
+                    break;
+                }
+            }
+
+            $this->remember($list[$i], $i, $lastAt);
+        }
+
+        return collect($list);
+    }
+
+    /**
+     * A contest whose place in the order is not fixed by a feeder.
+     *
+     * @param  array<int, bool>  $fed  bout ids some other bout advances into
+     */
+    private function isMovable(Bout $bout, array $fed): bool
+    {
+        return $bout->next_bout_id === null
+            && ! isset($fed[$bout->id])
+            && ($bout->weightCategory?->isRoundRobin() ?? false);
+    }
+
+    /**
+     * Would putting this contest here bring somebody back too soon?
+     *
+     * @param  array<int, int>  $lastAt
+     */
+    private function tooSoon(Bout $bout, int $at, array $lastAt, int $minimumRest): bool
+    {
+        foreach ([$bout->athlete_a_id, $bout->athlete_b_id] as $athlete) {
+            if ($athlete !== null && isset($lastAt[$athlete]) && $at - $lastAt[$athlete] <= $minimumRest) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param  array<int, int>  $lastAt */
+    private function remember(Bout $bout, int $at, array &$lastAt): void
+    {
+        foreach ([$bout->athlete_a_id, $bout->athlete_b_id] as $athlete) {
+            if ($athlete !== null) {
+                $lastAt[$athlete] = $at;
+            }
+        }
+    }
+
+    /**
+     * Athletes for whom the requested rest is arithmetically out of reach.
+     *
+     * An athlete with k contests inside a running order of N bouts cannot have
+     * them spaced further apart than floor((N-1)/(k-1)) on average, whatever
+     * order is chosen — the contests have to fit in the session. Where the
+     * requested rest asks for more than that, no scheduler could deliver it,
+     * and saying so is more use than a list of violations that reads like a
+     * mistake somebody could correct.
+     *
+     * @return Collection<int, array{athlete_id:int, contests:int, total:int, best_possible:int, requested:int}>
+     */
+    public function unattainableRest(Championship $championship, int $minimumRest = self::DEFAULT_REST): Collection
+    {
+        $bouts = $championship->bouts()->where('is_bye', false)->get();
+        $total = $bouts->count();
+
+        $contests = [];
+
+        foreach ($bouts as $bout) {
+            foreach ([$bout->athlete_a_id, $bout->athlete_b_id] as $athlete) {
+                if ($athlete !== null) {
+                    $contests[$athlete] = ($contests[$athlete] ?? 0) + 1;
+                }
+            }
+        }
+
+        $unattainable = collect();
+
+        foreach ($contests as $athlete => $count) {
+            if ($count < 2 || $total < 2) {
+                continue;
+            }
+
+            $best = intdiv($total - 1, $count - 1);
+
+            if ($best <= $minimumRest) {
+                $unattainable->push([
+                    'athlete_id' => (int) $athlete,
+                    'contests' => $count,
+                    'total' => $total,
+                    'best_possible' => $best,
+                    'requested' => $minimumRest,
+                ]);
+            }
+        }
+
+        return $unattainable;
+    }
+
+    /**
      * Bouts scheduled too soon after one of their feeders, or — worse — before
      * it. Byes are skipped on the way up: an athlete who received a walkover
      * has not fought, so the rest clock starts at the bout before it.
@@ -149,8 +347,64 @@ class FightOrderScheduler
                 $gap = $bout->fight_number - $feeder->fight_number;
 
                 if ($gap <= $minimumRest) {
-                    $violations->push(['bout' => $bout, 'feeder' => $feeder, 'gap' => $gap]);
+                    $violations->push([
+                        'bout' => $bout,
+                        'feeder' => $feeder,
+                        'gap' => $gap,
+                        'reason' => 'feeder',
+                    ]);
                 }
+            }
+        }
+
+        return $violations->concat($this->sharedAthleteViolations($bouts, $minimumRest));
+    }
+
+    /**
+     * An athlete brought back to the mat too soon by the running order itself.
+     *
+     * Round-robin contests only. In a bracket the same athlete's two contests
+     * are always joined by a feeder link, so the walk above has already found
+     * them, and reporting them twice would double every count on the screen.
+     *
+     * @param  Collection<int, Bout>  $bouts  scheduled bouts, keyed by id
+     * @return Collection<int, array{bout:Bout, feeder:Bout, gap:int, reason:string}>
+     */
+    private function sharedAthleteViolations(Collection $bouts, int $minimumRest): Collection
+    {
+        $ordered = $bouts
+            ->filter(fn (Bout $b) => ! $b->is_bye && ($b->weightCategory?->isRoundRobin() ?? false))
+            ->sortBy('fight_number')
+            ->values();
+
+        // The last contest each athlete was given, so each pair is reported
+        // once — against the contest immediately before it and not against
+        // every earlier one.
+        $previous = [];
+        $violations = collect();
+
+        foreach ($ordered as $bout) {
+            foreach ([$bout->athlete_a_id, $bout->athlete_b_id] as $athlete) {
+                if ($athlete === null) {
+                    continue;
+                }
+
+                $earlier = $previous[$athlete] ?? null;
+
+                if ($earlier !== null) {
+                    $gap = $bout->fight_number - $earlier->fight_number;
+
+                    if ($gap <= $minimumRest) {
+                        $violations->push([
+                            'bout' => $bout,
+                            'feeder' => $earlier,
+                            'gap' => $gap,
+                            'reason' => 'shared_athlete',
+                        ]);
+                    }
+                }
+
+                $previous[$athlete] = $bout;
             }
         }
 

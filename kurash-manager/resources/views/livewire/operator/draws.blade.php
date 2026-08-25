@@ -53,7 +53,15 @@
 
     @forelse ($categories as $category)
         @php
-            $published = $category->isDrawPublished() && $category->bouts_count > 0;
+            /*
+             | Presentable means published *and drawn*, which is not the same as
+             | having contests: a class of one athlete is settled by an
+             | administrative placement and has none, and gating on the bout
+             | count would leave it permanently unpresentable.
+             */
+            $published = $category->isDrawPublished() && $category->hasDraw();
+            $format = $category->drawFormat();
+
             $gender = match ($category->gender) {
                 'M' => __('Men'),
                 'F' => __('Women'),
@@ -86,13 +94,29 @@
                          shows nothing about who is in it. --}}
                     @if ($published)
                         <p class="mt-1 text-[12.5px] text-muted">
+                            {{-- Each format counts the things it actually has.
+                                 A round robin rounds up to no bracket and nobody
+                                 sits out of one, so quoting a size and a bye
+                                 count here would describe a competition that is
+                                 not being held. --}}
+                            <span class="font-semibold">{{ $format?->label() }}</span>
+                            ·
                             {{ trans_choice('{1}:count athlete|[2,*]:count athletes', $category->draw_athlete_count ?? 0, ['count' => $category->draw_athlete_count ?? 0]) }}
-                            ·
-                            {{ __('bracket of :size', ['size' => $category->draw_bucket_size]) }}
-                            ·
-                            {{ trans_choice('{0}no byes|{1}:count bye|[2,*]:count byes', $category->draw_bye_count ?? 0, ['count' => $category->draw_bye_count ?? 0]) }}
-                            ·
-                            {{ trans_choice('{1}:count bout|[2,*]:count bouts', $category->bouts_count, ['count' => $category->bouts_count]) }}
+
+                            @if ($format === \App\Support\TournamentFormat::RoundRobin)
+                                ·
+                                {{ trans_choice('{1}:count round|[2,*]:count rounds', (int) $category->bouts_max_round, ['count' => (int) $category->bouts_max_round]) }}
+                                ·
+                                {{ trans_choice('{1}:count contest|[2,*]:count contests', $category->bouts_count, ['count' => $category->bouts_count]) }}
+                            @elseif ($format === \App\Support\TournamentFormat::Knockout)
+                                ·
+                                {{ __('bracket of :size', ['size' => $category->draw_bucket_size]) }}
+                                ·
+                                {{ trans_choice('{0}no byes|{1}:count bye|[2,*]:count byes', $category->draw_bye_count ?? 0, ['count' => $category->draw_bye_count ?? 0]) }}
+                                ·
+                                {{ trans_choice('{1}:count bout|[2,*]:count bouts', $category->bouts_count, ['count' => $category->bouts_count]) }}
+                            @endif
+
                             @if ($category->draw_generated_at)
                                 · {{ __('drawn :when', ['when' => $category->draw_generated_at->diffForHumans()]) }}
                             @endif
@@ -102,7 +126,7 @@
 
                 <div class="flex flex-wrap items-center gap-2">
                     @if ($published)
-                        <flux:button variant="primary" :href="route('operator.draws.ceremony', $category)">
+                        <flux:button variant="primary" :href="route('operator.draws.present', $category)">
                             {{ __('Present draw') }}
                         </flux:button>
 
@@ -115,8 +139,12 @@
                         {{-- Disabled rather than hidden: an operator who cannot
                              find a category has no way to tell whether it is
                              missing or merely unpublished, and the label leaks
-                             nothing that the schedule does not already say. --}}
-                        <flux:button variant="ghost" disabled>{{ __('Not yet published') }}</flux:button>
+                             nothing that the schedule does not already say.
+                             Keep the action's name stable as well: this is
+                             always where a draw is presented, and publication
+                             controls whether that action is available. --}}
+                        <flux:button variant="ghost" disabled>{{ __('Present draw') }}</flux:button>
+                        <span class="text-[12.5px] text-muted">{{ __('Not yet published') }}</span>
                     @endif
                 </div>
             </div>

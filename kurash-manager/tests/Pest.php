@@ -54,6 +54,36 @@ expect()->extend('toBeOne', function () {
 */
 
 /**
+ * A weight class with athletes who all made the scale.
+ *
+ * Shared, because more than one suite needs a class that is past the scale and
+ * ready to draw.
+ */
+function weighedClass(int $count, string $gender = 'M', string $label = '-91'): WeightCategory
+{
+    $ageCategory = AgeCategory::factory()->create();
+
+    $category = WeightCategory::factory()->create([
+        'age_category_id' => $ageCategory->id,
+        'label' => $label,
+        'gender' => $gender,
+    ]);
+
+    foreach (range(1, $count) as $draw) {
+        Athlete::factory()->drawn($draw)->create([
+            'championship_id' => $ageCategory->championship_id,
+            'age_category_id' => $ageCategory->id,
+            'weight_category_id' => $category->id,
+            'fullname' => "Athlete {$draw}",
+            'noc_code' => 'UZB',
+            'weighin_status' => 'pass',
+        ]);
+    }
+
+    return $category->refresh();
+}
+
+/**
  * Build a weight category seated with `$count` athletes, drawn 1..N.
  *
  * Draw numbers are the seeds: athlete with draw 1 is the top seed. Tests use
@@ -176,4 +206,29 @@ function championshipWithBrackets(array $classes): Championship
     }
 
     return $ageCategory->championship->refresh();
+}
+
+/**
+ * A date of birth that puts an athlete squarely inside an age group.
+ *
+ * The IKA states its bands in birth years relative to the competition year, so
+ * a fixed date would drift out of the band it was chosen for as the seasons
+ * pass. This works back from the year the championship is held in and lands in
+ * the middle of the band rather than on its edge — the boundaries themselves
+ * are asserted deliberately in AgeEligibilityTest, and a test about something
+ * else should not be sitting on one by accident.
+ */
+function dobFor(string $ageGroup = 'Senior', ?int $competitionYear = null): string
+{
+    $competitionYear ??= (int) now()->year;
+
+    $age = match ($ageGroup) {
+        'Cadet' => 15,
+        'Junior' => 16,
+        'Veteran' => 40,
+        // Clear of the 16-17 window that needs the Chief Referee's signature.
+        default => 25,
+    };
+
+    return ($competitionYear - $age).'-06-15';
 }

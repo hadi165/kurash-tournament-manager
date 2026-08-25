@@ -73,6 +73,17 @@ class BoutAdvancer
                 'status' => Bout::STATUS_COMPLETED,
                 'is_bye' => false,
                 'frozen_snapshot' => $this->snapshot($bout, $winnerAthleteId),
+                // What the clock read at the deciding moment, frozen. The live
+                // column keeps moving until the mat stops it, so it says what
+                // the clock is doing rather than what it said when the contest
+                // ended — and the round-robin tie-break on match time needs the
+                // latter. Null where there was no clock behind the result: a
+                // walkover, or a scoreboard that posted a winner and nothing
+                // else. Null is the honest answer there, and the tie-break
+                // stands down on it rather than reading it as zero.
+                'decided_seconds_remaining' => $bout->clock_updated_at === null
+                    ? null
+                    : $bout->secondsRemaining(app(KurashScore::class)->boutSeconds($bout)),
             ]);
 
             BoutEvent::create([
@@ -124,8 +135,11 @@ class BoutAdvancer
                 'status' => Bout::STATUS_ON_COURT,
                 // The snapshot froze who these athletes were when the result
                 // was recorded. There is no result now, so there is nothing for
-                // it to be evidence of.
+                // it to be evidence of — and the same goes for the reading the
+                // clock stopped at, which belonged to a result that has been
+                // taken back.
                 'frozen_snapshot' => null,
+                'decided_seconds_remaining' => null,
             ]);
 
             BoutEvent::createInSequence([

@@ -29,7 +29,7 @@ use RuntimeException;
 class BracketGenerator
 {
     /**
-     * @return array{bouts:int, byes:int, rounds:int, size:int}
+     * @return array{bouts:int, byes:int, rounds:int, size:int, athletes:int}
      */
     public function generate(WeightCategory $category, bool $discardResults = false, bool $replacePublished = false): array
     {
@@ -46,6 +46,21 @@ class BracketGenerator
             throw new DrawIsProtectedException(
                 "The draw for {$category->label} is published. Withdraw it before drawing again."
             );
+        }
+
+        // The scale. DrawGenerator asks this too, under its lock, and asking
+        // again here costs one query and closes the door to a caller that
+        // reached this generator directly — a command, a test, a screen
+        // written later. Refused rather than filtered: quietly seating a
+        // smaller bracket than the numbers describe is how somebody discovers
+        // at the mat that they are not in the draw.
+        $ineligible = $category->ineligibleNumberedAthletes()->get();
+
+        if ($ineligible->isNotEmpty()) {
+            throw new DrawEligibilityException(app(DrawEligibility::class)->refusal(
+                $ineligible,
+                __('The bracket for :class cannot be drawn.', ['class' => $category->label]),
+            ));
         }
 
         $athletes = $category->drawnAthletes()->get();

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Championship;
 use App\Models\WeightCategory;
 use App\Services\MedalTable;
+use App\Services\RoundRobinStandings;
 use App\Support\DisplayCache;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -104,6 +105,27 @@ class DisplayController extends Controller
 
                 $totalRounds = (int) ($bouts->max('round') ?? 0);
                 $rounds = $bouts->groupBy('round');
+
+                /*
+                 | Dispatched on what the class was drawn as.
+                 |
+                 | A round robin rendered through the bracket view would draw a
+                 | tree whose branches nobody walks: every athlete would appear
+                 | in several unconnected boxes and the hall would read it as a
+                 | draw that had gone wrong. It gets a fixture list and a table,
+                 | which is what a round robin is.
+                 */
+                if ($weightCategory->isRoundRobin()) {
+                    $standings = app(RoundRobinStandings::class)->forCategory($weightCategory);
+
+                    return view('display.round-robin', compact(
+                        'weightCategory', 'championship', 'rounds', 'standings'
+                    ))->render();
+                }
+
+                if ($weightCategory->isPlacement()) {
+                    return view('display.placement', compact('weightCategory', 'championship'))->render();
+                }
 
                 return view('display.bracket', compact('weightCategory', 'championship', 'rounds', 'totalRounds'))->render();
             }

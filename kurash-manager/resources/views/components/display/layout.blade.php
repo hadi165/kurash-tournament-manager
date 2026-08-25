@@ -109,6 +109,11 @@
             display: grid; place-items: center; font-size: 0.7rem; font-weight: 700;
         }
     </style>
+
+    {{-- A page with geometry of its own — the bracket tree — puts it here
+         rather than in the body: these screens load no stylesheet, so a page
+         that needs rules has nowhere else to keep them. --}}
+    {{ $styles ?? '' }}
 </head>
 <body>
     @php

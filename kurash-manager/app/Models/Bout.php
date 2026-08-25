@@ -22,13 +22,20 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $clock_updated_at
  * @property Carbon|null $jazzo_called_at
  * @property Carbon|null $jazzo_resumed_at
+ * @property int|null $decided_seconds_remaining
  */
 class Bout extends Model
 {
-    // Deliberately no HasFactory. A bout only ever comes from BracketGenerator,
-    // which is what guarantees the forward links and seeding are consistent.
-    // Manufacturing one in isolation would produce a bout that is not part of
-    // any bracket.
+    // Deliberately no HasFactory. A bout only ever comes from one of the draw
+    // generators — BracketGenerator for a knockout, RoundRobinGenerator for a
+    // small field — because that is what guarantees a contest belongs to a
+    // draw: the bracket's forward links and seeding in one case, and every
+    // pairing exactly once in the other. Manufacturing one in isolation would
+    // produce a contest that is part of neither.
+    //
+    // Which of the two wrote a row is not stored here. It is the weight
+    // class's draw_format, recorded when the draw was generated, so a contest
+    // cannot disagree with the draw it belongs to.
 
     public const STATUS_PENDING = 'pending';
 
@@ -46,7 +53,7 @@ class Bout extends Model
         'score_a', 'score_b', 'win_type', 'winner_athlete_id',
         'status', 'is_bye', 'frozen_snapshot', 'scoreboard_synced_at',
         'clock_seconds_left', 'clock_running', 'clock_updated_at',
-        'jazzo_called_at', 'jazzo_resumed_at',
+        'jazzo_called_at', 'jazzo_resumed_at', 'decided_seconds_remaining',
     ];
 
     protected function casts(): array

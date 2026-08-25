@@ -13,11 +13,18 @@ use Illuminate\Support\Collection;
  *
  * Gold   — winner of the final
  * Silver — loser of the final
- * Bronze — losers of the semi-finals (two, in a bracket that has semis)
+ * Bronze — losers of the semi-finals (two, in a bracket that has semis),
+ *          the champion's beaten semi-finalist first
  *
  * Same rule the original medal-helpers.php used, but reading forward links
  * instead of MAX(roundnumber) with a bare non-aggregated column in HAVING,
- * which SQLite tolerated and MySQL rejects outright.
+ * which SQLite tolerated and MySQL rejects outright. *
+ * That is the knockout's podium. A class drawn as a round robin has no final
+ * to win and no semi-finals to lose, so its podium is the standings table's to
+ * derive and this class asks RoundRobinStandings for it — one podium shape
+ * either way, so every screen and export that already renders one renders the
+ * other. A class of one athlete has a podium only once an administrator has
+ * placed them: being unopposed is not a result, and nothing here infers one.
  */
 class MedalTable
 {
@@ -29,9 +36,24 @@ class MedalTable
      */
     public function forCategory(WeightCategory $category): array
     {
-        $bouts = $category->bouts()->with(['athleteA', 'athleteB', 'winner'])->get();
-
         $empty = ['decided' => false, 'gold' => null, 'silver' => null, 'bronze' => []];
+
+        // Dispatched on what the class was drawn as, never on what its athlete
+        // count would suggest today — a class that has grown since it was drawn
+        // still has the podium its own draw produced.
+        if ($category->isRoundRobin()) {
+            return app(RoundRobinStandings::class)->podiumFor($category);
+        }
+
+        if ($category->isPlacement()) {
+            $placed = $category->placedAthlete;
+
+            return $placed === null
+                ? $empty
+                : ['decided' => true, 'gold' => $placed, 'silver' => null, 'bronze' => []];
+        }
+
+        $bouts = $category->bouts()->with(['athleteA', 'athleteB', 'winner'])->get();
 
         if ($bouts->isEmpty()) {
             return $empty;
@@ -49,10 +71,18 @@ class MedalTable
             ->filter()
             ->firstWhere('id', $id);
 
+        // The two bronzes are not interchangeable on a results sheet: the
+        // first is whoever the champion put out, the second whoever the
+        // runner-up did. Left in the order the rows came back, the same
+        // podium printed twice could list them either way round.
         $bronze = array_values(
             $bouts
                 ->where('round', $totalRounds - 1)
                 ->filter(fn (Bout $b) => $b->isDecided() && $b->loserId() !== null)
+                ->sortBy(fn (Bout $b) => [
+                    $b->winner_athlete_id === $final->winner_athlete_id ? 0 : 1,
+                    (int) $b->position_in_round,
+                ])
                 ->map(fn (Bout $b) => $byId($b->loserId()))
                 ->filter()
                 ->all()

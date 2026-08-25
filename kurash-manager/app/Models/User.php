@@ -58,6 +58,21 @@ class User extends Authenticatable implements PasskeyUser
 
     public const ROLE_SUPERVISOR = 'supervisor';
 
+    /**
+     * The Chief Referee, as the IKA rules name them.
+     *
+     * An office rather than a rank. Section 25(2) gives this one official the
+     * power to let a 16- or 17-year-old into an adults' competition, and the
+     * point of the rule is that a particular person answers for it — so it is
+     * not folded into the administrator, who can already do everything and
+     * whose approval would therefore say nothing about who decided.
+     *
+     * Reaches the competition screens, because a sanction is granted from the
+     * entry list. Not confined to a mat: this is the office that oversees
+     * refereeing, not a chair on it.
+     */
+    public const ROLE_CHIEF_REFEREE = 'chief_referee';
+
     /** The operator: works a mat and the presentation screens. */
     public const ROLE_OFFICIAL = 'official';
 
@@ -86,7 +101,12 @@ class User extends Authenticatable implements PasskeyUser
      * the request as-is: admin is absent on purpose, so no form post can mint
      * an account that can mint accounts.
      */
-    public const ASSIGNABLE_ROLES = [self::ROLE_OFFICIAL, self::ROLE_REFEREE, self::ROLE_SCOREBOARD_VIEWER];
+    public const ASSIGNABLE_ROLES = [
+        self::ROLE_CHIEF_REFEREE,
+        self::ROLE_OFFICIAL,
+        self::ROLE_REFEREE,
+        self::ROLE_SCOREBOARD_VIEWER,
+    ];
 
     /**
      * Roles that may read a scoreboard.
@@ -98,6 +118,7 @@ class User extends Authenticatable implements PasskeyUser
     public const SCOREBOARD_ROLES = [
         self::ROLE_ADMIN,
         self::ROLE_SUPERVISOR,
+        self::ROLE_CHIEF_REFEREE,
         self::ROLE_OFFICIAL,
         self::ROLE_VIEWER,
         self::ROLE_SCOREBOARD_VIEWER,
@@ -131,6 +152,32 @@ class User extends Authenticatable implements PasskeyUser
     public function canManageCompetition(): bool
     {
         return $this->is_active && in_array($this->role, self::MANAGING_ROLES, true);
+    }
+
+    /**
+     * The administrator, as distinct from everybody who may run a competition.
+     *
+     * Supervisors manage competitions — they draw, publish and delete — but a
+     * decision taken against the IKA rule is narrower than that, and the
+     * account that signs for it is named here rather than inferred from
+     * MANAGING_ROLES.
+     */
+    public function isAdmin(): bool
+    {
+        return $this->is_active && $this->role === self::ROLE_ADMIN;
+    }
+
+    /**
+     * The Chief Referee, as distinct from anybody senior.
+     *
+     * Named exactly, and not widened to include administrators: Section 25(2)
+     * gives the power to an office, and an approval that any senior account
+     * could have granted does not record who decided. Same reasoning as
+     * isAdmin() backing draw.override_format, one step narrower.
+     */
+    public function isChiefReferee(): bool
+    {
+        return $this->is_active && $this->role === self::ROLE_CHIEF_REFEREE;
     }
 
     public function canViewScoreboard(): bool

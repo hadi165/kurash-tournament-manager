@@ -1,6 +1,26 @@
 @php
     $championship = $weightCategory->ageCategory->championship;
 
+    /*
+     | The competition this class is run in, and the entry list scoped to it.
+     |
+     | Taken from the division rather than from the weight class: the entries
+     | screen narrows by age_categories.gender — see ScopesToCompetition — so
+     | asking the weight class instead would build a link that silently fell
+     | back to showing every competition.
+     |
+     | `competition` is a query parameter and not a path segment because the
+     | entry list belongs to the whole championship and a competition is a way
+     | of reading it. Dropping it shows everything, which is why an unconfigured
+     | gender degrades to the full list rather than to an error.
+     */
+    $competition = $weightCategory->ageCategory?->gender;
+
+    $entriesUrl = route('entries.index', array_filter([
+        'championship' => $championship,
+        'competition' => $competition,
+    ]));
+
     $drawn = trans_choice(
         '{0}Nobody drawn yet|{1}:count athlete drawn|[2,*]:count athletes drawn',
         $drawnCount, ['count' => $drawnCount]
@@ -24,6 +44,7 @@
     :breadcrumbs="[
         ['label' => __('Championships'), 'href' => route('championships.index')],
         ['label' => $championship->title, 'href' => route('championships.show', $championship)],
+        ['label' => __('Entries and Draw'), 'href' => $entriesUrl],
         ['label' => $weightCategory->label.' '.__('kg')],
     ]"
 >
@@ -31,6 +52,20 @@
     {{-- The sheet the draw numbers get written onto, and the drawn bracket
          itself. Both are named the way the federation files them. --}}
     <x-slot:aside>
+        {{-- The way back to the class list this screen is opened from, still
+             narrowed to the competition it belongs to: an official working the
+             women's classes should land back among the women's classes, not at
+             the top of the championship.
+
+             The breadcrumb above says the same thing, but a crumb is a small
+             grey label and this is a screen somebody works in for a whole
+             division — they should not have to aim at it. --}}
+        <x-ui.chip :href="$entriesUrl" wire:navigate>
+            {{ __('All :competition weight classes', [
+                'competition' => \App\Support\Gender::label($competition),
+            ]) }}
+        </x-ui.chip>
+
         @if ($weightCategory->isDrawPublished())
             <x-ui.tag variant="brand">{{ __('Published to operators') }}</x-ui.tag>
         @elseif ($bouts->isNotEmpty())
@@ -113,18 +148,41 @@
                 @forelse ($athletes as $athlete)
                     {{-- The athlete is the field's label. Sitting them beside the
                          input squeezed the names down to "Ak…", "asg…", "DDD…". --}}
+                    {{-- An athlete who has not passed the scale cannot hold a
+                         draw number, so the field that would give them one is
+                         closed rather than left open to be refused on save.
+                         The tag says which of the two reasons it is: not
+                         weighed yet is a different thing to weighed and
+                         outside the class, and only one of them is fixed by
+                         waiting. --}}
                     <div class="flex flex-col gap-1.5" wire:key="draw-{{ $athlete->id }}">
                         <label for="draw-{{ $athlete->id }}" class="flex items-center gap-2 text-[13px] font-bold">
-                            <span class="truncate">{{ $athlete->fullname }}</span>
+                            <span class="min-w-0 break-words {{ $athlete->passedWeighIn() ? '' : 'text-ink/45' }}">{{ $athlete->fullname }}</span>
 
-                            @if ($athlete->weighin_status === 'fail')
+                            @if ($athlete->weighin_status === \App\Models\Athlete::WEIGHIN_FAIL)
                                 <x-ui.tag variant="danger" class="ms-auto">{{ __('failed weigh-in') }}</x-ui.tag>
+                            @elseif (! $athlete->passedWeighIn())
+                                <x-ui.tag variant="amber" class="ms-auto">{{ __('not weighed') }}</x-ui.tag>
                             @else
                                 <x-ui.tag variant="outline" class="ms-auto">{{ $athlete->noc_code }}</x-ui.tag>
                             @endif
                         </label>
 
-                        <flux:input id="draw-{{ $athlete->id }}" wire:model="draws.{{ $athlete->id }}" type="number" min="1" />
+                        <flux:input
+                            id="draw-{{ $athlete->id }}"
+                            wire:model="draws.{{ $athlete->id }}"
+                            type="number"
+                            min="1"
+                            :disabled="! $athlete->passedWeighIn()"
+                        />
+
+                        @if (! $athlete->passedWeighIn())
+                            <p class="text-[12px] text-muted">
+                                {{ $athlete->weighin_status === \App\Models\Athlete::WEIGHIN_FAIL
+                                    ? __('Weighed outside this class — cannot be drawn.')
+                                    : __('Not weighed yet — cannot be drawn until they pass the scale.') }}
+                            </p>
+                        @endif
                     </div>
                 @empty
                     <p class="text-sm text-ink/55">{{ __('No athletes registered in this weight class.') }}</p>
@@ -138,10 +196,134 @@
                  the summary and the draw cannot disagree. --}}
             <div class="mb-4 flex flex-wrap items-center gap-x-6 gap-y-1.5 rounded-md border border-line bg-ground px-[18px] py-3.5 text-[13px]">
                 <span><span class="text-muted">{{ __('Registered athletes') }}</span> <b class="tabular-nums">{{ $drawSummary['athletes'] }}</b></span>
-                <span><span class="text-muted">{{ __('Bracket size') }}</span> <b class="tabular-nums">{{ $drawSummary['size'] ?: '—' }}</b></span>
-                <span><span class="text-muted">{{ __('Byes') }}</span> <b class="tabular-nums">{{ $drawSummary['byes'] }}</b></span>
-                <span><span class="text-muted">{{ __('First-round bouts') }}</span> <b class="tabular-nums">{{ $drawSummary['firstRound'] }}</b></span>
+
+                @if ($resolvedFormat === \App\Support\TournamentFormat::RoundRobin)
+                    <span><span class="text-muted">{{ __('Contests') }}</span> <b class="tabular-nums">{{ $drawSummary['contests'] }}</b></span>
+                    <span><span class="text-muted">{{ __('Rounds') }}</span> <b class="tabular-nums">{{ $drawSummary['rounds'] }}</b></span>
+                    <span><span class="text-muted">{{ __('Rest positions') }}</span> <b class="tabular-nums">{{ $drawSummary['athletes'] % 2 === 1 ? __('one per round') : '—' }}</b></span>
+                @else
+                    <span><span class="text-muted">{{ __('Bracket size') }}</span> <b class="tabular-nums">{{ $drawSummary['size'] ?: '—' }}</b></span>
+                    <span><span class="text-muted">{{ __('Byes') }}</span> <b class="tabular-nums">{{ $drawSummary['byes'] }}</b></span>
+                    <span><span class="text-muted">{{ __('First-round bouts') }}</span> <b class="tabular-nums">{{ $drawSummary['firstRound'] }}</b></span>
+                @endif
             </div>
+
+            {{-- The format.
+
+                 Offered only where the rule leaves a choice — a field of two
+                 to five, which the IKA runs as a round robin and which this
+                 system will run as a bracket if a federation has local reasons
+                 to. Six or more has one lawful shape and no selector at all,
+                 so there is nothing on the screen inviting somebody to pick
+                 the wrong one. --}}
+            @if (count($formatChoices) > 1)
+                <div class="mb-4 rounded-md border border-line bg-ground px-[18px] py-3.5">
+                    <div class="kicker mb-2 text-ink/55">{{ __('Tournament format') }}</div>
+
+                    <flux:select wire:model.live="format" size="sm" class="max-w-md">
+                        @foreach ($formatChoices as $choice)
+                            <flux:select.option value="{{ $choice->value }}">
+                                {{ $choice->followsIkaRule($drawSummary['athletes'])
+                                    ? __(':format — IKA default', ['format' => $choice->label()])
+                                    : __(':format — local rules override', ['format' => $choice->label()]) }}
+                            </flux:select.option>
+                        @endforeach
+                    </flux:select>
+
+                    {{-- The non-compliance warning, the reason, and the
+                         confirmation — all three, because a departure from the
+                         rule that nobody signed is one nobody can answer for
+                         when the federation asks about it afterwards. --}}
+                    @if ($confirmingOverride)
+                        <div class="mt-3.5 rounded-md bg-amber-soft px-[18px] py-3.5">
+                            <div class="flex flex-wrap items-center gap-3">
+                                <x-ui.tag variant="amber">{{ __('Not IKA compliant') }}</x-ui.tag>
+                                <span class="text-[13.5px] text-amber-deep">
+                                    {{ __('The IKA rule runs :count athletes as a round robin. A knockout here is a local decision.', [
+                                        'count' => $drawSummary['athletes'],
+                                    ]) }}
+                                </span>
+                            </div>
+
+                            @if ($mayOverride)
+                                <div class="mt-3">
+                                    <flux:input
+                                        wire:model="overrideReason"
+                                        size="sm"
+                                        :label="__('Reason for the override')"
+                                        :placeholder="__('Recorded against your name, with the time.')"
+                                    />
+                                </div>
+                            @else
+                                <p class="mt-2 text-[13px] text-amber-deep">
+                                    {{ __('Only an administrator may authorise this. Choose the round robin, or ask one to draw it.') }}
+                                </p>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            {{-- A class of one has nobody to fight. It is settled by an
+                 administrator placing the athlete, never by the software
+                 noticing they are on their own. --}}
+            @if ($drawnFormat === \App\Support\TournamentFormat::Placement)
+                <div class="mb-4 rounded-md border border-line bg-ground px-[18px] py-3.5">
+                    @if ($weightCategory->draw_placement_athlete_id)
+                        <div class="flex flex-wrap items-center gap-3">
+                            <x-ui.tag variant="brand">{{ __('Placed first') }}</x-ui.tag>
+                            <span class="text-[13.5px]">
+                                <x-athlete :athlete="$weightCategory->placedAthlete" />
+                            </span>
+                            <span class="text-[12.5px] text-muted">
+                                {{ __('Recorded :when', ['when' => $weightCategory->draw_placement_at?->format('j M Y H:i')]) }}
+                            </span>
+                        </div>
+                    @else
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="text-[13.5px]">
+                                {{ __('One athlete is entered. Being unopposed is not a result — place them to settle the class.') }}
+                            </span>
+                            <flux:button size="sm" variant="primary" wire:click="placeSoleAthlete">
+                                {{ __('Place first') }}
+                            </flux:button>
+                        </div>
+                    @endif
+                </div>
+            @endif
+
+            {{-- Somebody holds a draw number the rules do not admit.
+
+                 Only reachable from data this application did not write — a
+                 legacy import, or a row edited underneath it — because a
+                 number is now only ever given to an athlete who passed, and a
+                 pass is not taken back from under a generated draw. Said out
+                 loud rather than silently corrected: the numbers are somebody
+                 else's record and it is not this screen's place to rewrite
+                 them, but generating or publishing over them is refused. --}}
+            @if ($ineligibleNumbered->isNotEmpty() || $ineligibleInDraw->isNotEmpty())
+                <div class="mb-4 rounded-md bg-danger-soft px-[18px] py-3.5">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <x-ui.tag variant="danger">{{ __('Weigh-in') }}</x-ui.tag>
+                        <span class="text-[13.5px] text-danger-deep">
+                            {{ $ineligibleInDraw->isNotEmpty()
+                                ? __('This draw contains athletes who have not passed the weigh-in. It cannot be published until that is resolved.')
+                                : __('These athletes hold a draw number but have not passed the weigh-in. The draw cannot be generated until that is resolved.') }}
+                        </span>
+                    </div>
+
+                    <ul class="mt-2 ps-4 text-[13px] text-danger-deep">
+                        @foreach (($ineligibleInDraw->isNotEmpty() ? $ineligibleInDraw : $ineligibleNumbered) as $athlete)
+                            <li wire:key="ineligible-{{ $athlete->id }}">
+                                {{ $athlete->fullname }} —
+                                {{ $athlete->weighin_status === \App\Models\Athlete::WEIGHIN_FAIL
+                                    ? __('failed weigh-in')
+                                    : __('not weighed') }}
+                            </li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
 
             @if ($weightCategory->drawIsStale())
                 {{-- Informational, and only here: the published table an
@@ -158,6 +340,13 @@
                 </div>
             @endif
 
+            {{-- The button is named after the live selection, not the stored
+                 resolution: the moment an administrator picks the override in
+                 the select, the button that signs for it must say so. --}}
+            @php
+                $chosenFormat = \App\Support\TournamentFormat::tryFromValue($format) ?? $resolvedFormat;
+            @endphp
+
             <div class="flex flex-wrap items-center gap-3">
                 <flux:button
                     variant="primary"
@@ -165,8 +354,10 @@
                     wire:loading.attr="disabled"
                     wire:target="drawAtRandom,generate"
                     x-on:click="$dispatch('draw-started', { mode: 'bracket' })"
-                    :disabled="$drawnCount < 2"
-                >{{ $bouts->isEmpty() ? __('Draw the bracket') : __('Redraw the bracket') }}</flux:button>
+                    :disabled="$drawnCount < 1 || ($confirmingOverride && ! $mayOverride)"
+                >{{ $weightCategory->hasDraw()
+                    ? __('Redraw :format', ['format' => $chosenFormat?->label() ?? __('the draw')])
+                    : __('Draw :format', ['format' => $chosenFormat?->label() ?? __('the draw')]) }}</flux:button>
 
                 @if ($confirmingRegenerate)
                     <flux:button
@@ -250,6 +441,16 @@
             @endif
         @endcan
 
+        @if ($drawnFormat === \App\Support\TournamentFormat::RoundRobin)
+            @include('livewire.competition.partials.round-robin', [
+                'weightCategory' => $weightCategory,
+                'bouts' => $bouts,
+                'standings' => $standings,
+                'courts' => $courts,
+                'editable' => true,
+            ])
+        @else
+
         <x-ui.card flush :title="__('Bracket')">
             <div class="rule-2"></div>
 
@@ -262,10 +463,20 @@
                  slot, one vertical joining each pair, a stub left into the slot
                  they feed — which is why they stay correct at every bracket
                  size from x/2 to x/32 rather than needing a case each. --}}
+            @php
+                // The tree does not stop at the final: the last bout feeds a
+                // node of its own, which is what the champion column is.
+                $finalBout = $rounds->last()?->first();
+                $champion = $finalBout?->winner;
+            @endphp
+
+            {{-- Scrolls rather than squeezing: a bracket of thirty-two is
+                 wider than a laptop, and a column dropped off the right is a
+                 round nobody can see. The width counts the champion. --}}
             <div class="overflow-x-auto px-6 py-5">
-                <div class="bkt" style="min-width: {{ max(1, $totalRounds) * 17 }}rem;">
+                <div class="bkt" style="--bkt-line: var(--color-line); min-width: {{ (max(1, $totalRounds) + 1) * 17 }}rem;">
                     @foreach ($rounds as $round => $roundBouts)
-                        <div @class(['bkt__round', 'bkt__round--last' => $loop->last]) wire:key="round-{{ $round }}">
+                        <div class="bkt__round" wire:key="round-{{ $round }}">
                             <div class="kicker mb-3 text-ink/55">{{ $roundBouts->first()->phase($totalRounds) }}</div>
 
                             <div class="bkt__slots">
@@ -275,6 +486,50 @@
                                     @class(['bkt__match border border-n-300 bg-surface text-sm', 'opacity-60' => $bout->is_bye])
                                     wire:key="bout-{{ $bout->id }}"
                                 >
+                                    {{-- The number the running order gave this
+                                         contest, so the bracket and the sheet a
+                                         mat is working from say the same thing.
+
+                                         Outside every permission check: a
+                                         number is a fact about the schedule,
+                                         not an action anybody takes. A bye has
+                                         no contest to number, and an unscheduled
+                                         one has no number yet — neither leaves a
+                                         bar behind. --}}
+                                    @if (! $bout->is_bye)
+                                        <div class="flex items-center gap-2 border-b border-ink/12 px-3 py-0.5 text-[11px] font-bold tracking-wide text-ink/55">
+                                            @can('manage-competition')
+                                                {{-- Typed by hand, one contest at a time.
+                                                     The whole-championship scheduler is a
+                                                     separate workflow and neither calls the
+                                                     other: nothing on this screen numbers
+                                                     anything by itself. --}}
+                                                <label for="fight-{{ $bout->id }}">{{ __('No.') }}</label>
+
+                                                <input
+                                                    id="fight-{{ $bout->id }}"
+                                                    type="number"
+                                                    min="1"
+                                                    max="{{ \App\Livewire\Competition\Bracket::MAX_FIGHT_NUMBER }}"
+                                                    step="1"
+                                                    inputmode="numeric"
+                                                    class="w-14 rounded border border-line bg-ground px-1.5 py-0 text-[11px] font-bold tabular-nums text-ink"
+                                                    {{-- Written out as well as bound: the
+                                                         server's render has to say what the
+                                                         saved number is, not wait for the
+                                                         browser to fill it in. --}}
+                                                    value="{{ $fightNumbers[$bout->id] ?? '' }}"
+                                                    wire:model="fightNumbers.{{ $bout->id }}"
+                                                    wire:blur="setFightNumber({{ $bout->id }})"
+                                                    wire:keydown.enter="setFightNumber({{ $bout->id }})"
+                                                    aria-label="{{ __('Fight number') }}"
+                                                >
+                                            @elseif ($bout->fight_number)
+                                                <span>{{ __('No. :n', ['n' => $bout->fight_number]) }}</span>
+                                            @endcan
+                                        </div>
+                                    @endif
+
                                     @foreach (['a', 'b'] as $side)
                                         @php
                                             $athlete = $side === 'a' ? $bout->athleteA : $bout->athleteB;
@@ -337,96 +592,42 @@
                             </div>
                         </div>
                     @endforeach
+
+                    {{-- The champion: a node the final connects to, drawn the
+                         same way every other node is, so the connector into it
+                         comes from the same three rules as the rest of the
+                         tree rather than from a case of its own. --}}
+                    <div class="bkt__round bkt__round--last bkt__round--champion">
+                        <div class="kicker mb-3 text-ink/55">{{ __('Champion') }}</div>
+
+                        <div class="bkt__slots">
+                            <div class="bkt__slot">
+                                <div @class([
+                                    'bkt__match border bg-surface px-3 py-2 text-sm',
+                                    'border-brand-500 bg-brand-500/10' => $champion !== null,
+                                    'border-n-300' => $champion === null,
+                                ])>
+                                    <div class="kicker text-ink/55">{{ __('Winner') }}</div>
+
+                                    <div class="mt-1 font-bold">
+                                        @if ($champion)
+                                            <x-athlete :athlete="$champion" />
+                                        @else
+                                            <span class="text-ink/45">{{ __('To be decided') }}</span>
+                                        @endif
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </x-ui.card>
 
-        <style>
-            /* The bracket is drawn by alignment, not by arithmetic. Each round
-               is a column; each slot in it takes an equal share of the column's
-               height. Round two therefore has half as many slots at twice the
-               height, and each one's centre falls exactly on the midpoint of
-               the pair below it — which is the point every connector is hung
-               from. */
-            .bkt {
-                display: flex;
-                align-items: stretch;
-            }
-
-            .bkt__round {
-                display: flex;
-                flex: 1 1 0;
-                min-width: 15rem;
-                flex-direction: column;
-                /* The gutter the connectors are drawn in. The last round has
-                   no next round to reach, so it has no gutter. */
-                padding-right: 2.5rem;
-            }
-
-            .bkt__round--last { padding-right: 0; }
-
-            .bkt__slots {
-                display: flex;
-                flex: 1;
-                flex-direction: column;
-            }
-
-            .bkt__slot {
-                position: relative;
-                display: flex;
-                flex: 1 1 0;
-                align-items: center;
-                padding: 0.375rem 0;
-            }
-
-            .bkt__match { width: 100%; position: relative; }
-
-            /* Three connectors, three separate elements — a slot in the
-               middle of the tree is both a target and a source, and two
-               pseudo-elements cannot carry three lines.
-
-                 slot::after   out of this slot into the gutter
-                 slot::before  the vertical this pair hangs on
-                 match::before in from the gutter, for every round after the
-                               first
-            */
-            .bkt__slot::after,
-            .bkt__slot::before,
-            .bkt__match::before {
-                content: '';
-                position: absolute;
-                background: var(--color-line);
-            }
-
-            /* Out of every slot, half the gutter, stopping at the vertical. */
-            .bkt__round:not(.bkt__round--last) .bkt__slot::after {
-                left: 100%;
-                top: 50%;
-                width: 1.25rem;
-                height: 2px;
-            }
-
-            /* The vertical, hung on the top slot of each pair and reaching down
-               exactly one slot height — centre to centre, because the slots are
-               equal. */
-            .bkt__round:not(.bkt__round--last) .bkt__slot:nth-child(odd)::before {
-                left: calc(100% + 1.25rem);
-                top: 50%;
-                width: 2px;
-                height: 100%;
-            }
-
-            /* In from the gutter, for every round after the first. Hung on the
-               match rather than the slot so it cannot collide with the vertical
-               above. */
-            .bkt__round:not(:first-child) .bkt__match::before {
-                right: 100%;
-                top: 50%;
-                width: 1.25rem;
-                height: 2px;
-            }
-
-        </style>
+        {{-- The geometry is shared with the venue bracket rather than
+             written twice: see the partial for why. --}}
+        <style>@include('partials.bracket-geometry')</style>
+        @endif
     @endif
     <x-draw.ceremony :names="$ceremonyNames" :pairs="$ceremonyPairs" />
 </x-page>

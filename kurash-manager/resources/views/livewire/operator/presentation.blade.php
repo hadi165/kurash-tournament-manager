@@ -28,13 +28,34 @@
         </div>
     @endif
 
-    <x-ui.stats grid :items="[
-        ['value' => $category->draw_athlete_count ?? 0, 'label' => __('Athletes drawn'), 'hue' => 'info'],
-        ['value' => $category->draw_bucket_size ?? 0, 'label' => __('Bracket size'), 'hue' => 'brand'],
-        ['value' => $category->draw_bye_count ?? 0, 'label' => __('Byes'), 'hue' => 'amber'],
-        ['value' => $bouts->count(), 'label' => __('Bouts')],
-        ['value' => $firstRoundBouts, 'label' => __('First-round bouts')],
-    ]" />
+    {{-- The figures each format actually has.
+
+         A round robin has no bracket to be sized and nobody sits out of one,
+         so quoting a bracket size, a bye count and a first-round total over it
+         would be four numbers describing a competition that is not being
+         held — three of them zero and the fourth misleading. --}}
+    @if ($drawnFormat === \App\Support\TournamentFormat::RoundRobin)
+        <x-ui.stats grid :items="[
+            ['value' => __('Round Robin'), 'label' => __('Format'), 'hue' => 'brand'],
+            ['value' => $category->draw_athlete_count ?? 0, 'label' => __('Athletes drawn'), 'hue' => 'info'],
+            ['value' => $rounds->count(), 'label' => __('Rounds')],
+            ['value' => $bouts->count(), 'label' => __('Contests')],
+            ['value' => $bouts->whereNotNull('fight_number')->count(), 'label' => __('Scheduled fights')],
+        ]" />
+    @elseif ($drawnFormat === \App\Support\TournamentFormat::Placement)
+        <x-ui.stats grid :items="[
+            ['value' => __('Placement'), 'label' => __('Format'), 'hue' => 'brand'],
+            ['value' => $category->draw_athlete_count ?? 0, 'label' => __('Athletes drawn'), 'hue' => 'info'],
+        ]" />
+    @else
+        <x-ui.stats grid :items="[
+            ['value' => $category->draw_athlete_count ?? 0, 'label' => __('Athletes drawn'), 'hue' => 'info'],
+            ['value' => $category->draw_bucket_size ?? 0, 'label' => __('Bracket size'), 'hue' => 'brand'],
+            ['value' => $category->draw_bye_count ?? 0, 'label' => __('Byes'), 'hue' => 'amber'],
+            ['value' => $bouts->count(), 'label' => __('Bouts')],
+            ['value' => $firstRoundBouts, 'label' => __('First-round bouts')],
+        ]" />
+    @endif
 
     {{-- The reveal is presentation state and lives only in the browser: no
          method on this component writes, so nothing here can touch the draw.
@@ -88,7 +109,16 @@
         </x-ui.card>
 
         @foreach ($rounds as $round => $roundBouts)
-            <x-ui.card :title="$phaseName($round)" wire:key="round-{{ $round }}">
+            {{-- A round robin's rounds are groupings of the schedule, not
+                 stages of a knockout: calling round two "Semi Final" would
+                 tell the hall that losing it puts somebody out, which it does
+                 not. --}}
+            <x-ui.card
+                :title="$drawnFormat === \App\Support\TournamentFormat::RoundRobin
+                    ? __('Round :n', ['n' => $round])
+                    : $phaseName($round)"
+                wire:key="round-{{ $round }}"
+            >
                 <div class="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(280px,1fr))]">
                     @foreach ($roundBouts as $bout)
                         @php $index = $reveal->search(fn ($b) => $b->id === $bout->id); @endphp
@@ -130,5 +160,43 @@
                 </div>
             </x-ui.card>
         @endforeach
+
+        {{-- The table the fixtures add up to. Shown once every pairing has
+             been revealed, because a standings table beside a draw still being
+             presented gives the room the answer before the reveal reaches
+             it. --}}
+        @if ($standings)
+            <x-ui.card :title="__('Standings')" x-show="revealed >= total" x-cloak>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-[13.5px]">
+                        <thead>
+                            <tr class="border-b border-line text-left text-[12px] uppercase tracking-wider text-ink/55">
+                                <th class="py-2.5 pe-4">{{ __('Rank') }}</th>
+                                <th class="py-2.5 pe-4">{{ __('Athlete') }}</th>
+                                <th class="py-2.5 pe-4">{{ __('NOC') }}</th>
+                                <th class="py-2.5 pe-4 text-right">{{ __('Played') }}</th>
+                                <th class="py-2.5 pe-4 text-right">{{ __('Won') }}</th>
+                                <th class="py-2.5 pe-4 text-right">{{ __('Lost') }}</th>
+                                <th class="py-2.5 text-right">{{ __('Points') }}</th>
+                            </tr>
+                        </thead>
+
+                        <tbody>
+                            @foreach ($standings['rows'] as $row)
+                                <tr class="border-b border-line/60 last:border-0" wire:key="stand-{{ $row['athlete']->id }}">
+                                    <td class="py-2.5 pe-4 font-bold tabular-nums">{{ $row['rank'] }}</td>
+                                    <td class="py-2.5 pe-4"><x-athlete :athlete="$row['athlete']" /></td>
+                                    <td class="py-2.5 pe-4 font-bold text-muted">{{ $row['noc'] }}</td>
+                                    <td class="py-2.5 pe-4 text-right tabular-nums">{{ $row['played'] }}</td>
+                                    <td class="py-2.5 pe-4 text-right font-bold tabular-nums">{{ $row['wins'] }}</td>
+                                    <td class="py-2.5 pe-4 text-right tabular-nums">{{ $row['losses'] }}</td>
+                                    <td class="py-2.5 text-right font-bold tabular-nums">{{ $row['points'] }}</td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </x-ui.card>
+        @endif
     </div>
 </x-page>

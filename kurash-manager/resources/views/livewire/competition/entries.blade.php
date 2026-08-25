@@ -60,16 +60,24 @@
                                     </x-ui.chip>
 
                                     @if ($row['drawn'])
-                                        <x-ui.chip :href="route('exports.draw', ['weightCategory' => $category, 'format' => 'pdf'])">
-                                            {{ __('Draw') }}
+                                        {{-- The saved bracket as a tree, on paper and on a
+                                             worksheet. Opening either reads the draw; neither
+                                             makes one. --}}
+                                        <x-ui.chip :href="route('exports.bracket-sheet', ['weightCategory' => $category, 'format' => 'pdf'])">
+                                            {{ __('Bracket') }}
                                         </x-ui.chip>
 
-                                        {{-- What the draw gave each athlete, in draw order.
-                                             The weigh-in list is the sheet the numbers are
-                                             written onto and leaves the column blank; this is
-                                             what came back off it. --}}
+                                        <x-ui.chip
+                                            :href="route('exports.bracket-sheet', ['weightCategory' => $category, 'format' => 'xlsx'])"
+                                            :title="__('Bracket as a spreadsheet')"
+                                        >{{ __('XLSX') }}</x-ui.chip>
+
+                                        {{-- The register, carrying the number each athlete
+                                             holds. The weigh-in list is the sheet the numbers
+                                             are written onto and leaves the column blank; this
+                                             is what came back off it. --}}
                                         <x-ui.chip :href="route('exports.draw-numbers', ['weightCategory' => $category, 'format' => 'pdf'])">
-                                            {{ __('Numbers') }}
+                                            {{ __('Draw No.') }}
                                         </x-ui.chip>
                                     @endif
                                 </div>

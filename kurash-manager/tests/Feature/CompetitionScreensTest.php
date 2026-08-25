@@ -223,6 +223,7 @@ describe('registration', function () {
         ])
             ->set('fullname', 'Ghader Nasb')
             ->set('noc_code', 'afg')
+            ->set('date_of_birth', dobFor())
             ->set('gender', 'M')
             ->set('weight_category_id', $category->id)
             ->call('save')
@@ -251,6 +252,7 @@ describe('registration', function () {
         ])
             ->set('fullname', 'Intruder')
             ->set('noc_code', 'UZB')
+            ->set('date_of_birth', dobFor())
             ->set('weight_category_id', $theirs->id)
             ->call('save')
             ->assertHasErrors('weight_category_id');
@@ -334,16 +336,45 @@ describe('weigh-in', function () {
 describe('bracket screen', function () {
     beforeEach(fn () => $this->actingAs($this->admin));
 
+    /**
+     * A screen somebody works in for a whole division needs a way out of it
+     * that is not a breadcrumb: the class list is where every one of these is
+     * opened from, and going back to it is the commonest thing anybody does
+     * here.
+     */
+    it('offers a way back to the weight classes of its own competition', function (string $gender, string $label) {
+        [$category] = categoryWithAthletes(4, '-back-'.$gender);
+        $category->ageCategory->forceFill(['gender' => $gender])->save();
+
+        $html = Livewire::test(Bracket::class, ['weightCategory' => $category->refresh()])->html();
+
+        $expected = route('entries.index', [
+            'championship' => $category->ageCategory->championship,
+            'competition' => $gender,
+        ]);
+
+        // The entry list, narrowed the way the official was working: whoever
+        // came in from the women's classes goes back to the women's classes.
+        expect($html)->toContain(e($expected))
+            ->and($html)->toContain(__('All :competition weight classes', ['competition' => $label]));
+    })->with([
+        'men' => ['M', 'Men'],
+        'women' => ['F', 'Women'],
+    ]);
+
     it('draws a bracket and records a result through to the podium', function () {
-        [$category, $athletes] = categoryWithAthletes(4);
+        // Eight, because that is a field the IKA rule draws as a bracket. A
+        // smaller one is a round robin now and would be testing the other
+        // format — see TournamentFormatTest.
+        [$category, $athletes] = categoryWithAthletes(8);
 
         $component = Livewire::test(Bracket::class, ['weightCategory' => $category])
             ->call('generate');
 
-        expect($category->bouts()->count())->toBe(3);
+        expect($category->bouts()->count())->toBe(7);
 
         // Lower draw number wins every bout.
-        foreach ([1, 2] as $round) {
+        foreach ([1, 2, 3] as $round) {
             foreach ($category->bouts()->where('round', $round)->get() as $bout) {
                 $bout->refresh();
 
@@ -526,7 +557,7 @@ describe('bracket screen', function () {
     });
 
     it('asks for confirmation before redrawing over results', function () {
-        [$category] = categoryWithAthletes(4);
+        [$category] = categoryWithAthletes(8);
         app(BracketGenerator::class)->generate($category);
         runTournament($category);
 
@@ -534,7 +565,7 @@ describe('bracket screen', function () {
             ->call('generate')
             ->assertSet('confirmingRegenerate', true);
 
-        expect($category->bouts()->whereNotNull('winner_athlete_id')->count())->toBe(3);
+        expect($category->bouts()->whereNotNull('winner_athlete_id')->count())->toBe(7);
     });
 });
 

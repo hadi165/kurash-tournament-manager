@@ -24,6 +24,11 @@ class FightOrder extends Component
     public function mount(Championship $championship): void
     {
         $this->championship = $championship;
+
+        // The configured rest is the starting point; the field on the screen
+        // stays the override for this session. Read in mount because a
+        // property default may not call a function.
+        $this->minimumRest = FightOrderScheduler::configuredRest();
     }
 
     public function schedule(): void
@@ -38,12 +43,26 @@ class FightOrder extends Component
             return;
         }
 
-        session()->flash('status', $result['violations'] === 0
+        $status = $result['violations'] === 0
             ? __(':count bouts scheduled.', ['count' => $result['scheduled']])
             : __(':count bouts scheduled, but :violations have less than the requested rest.', [
                 'count' => $result['scheduled'],
                 'violations' => $result['violations'],
-            ]));
+            ]);
+
+        // The shortfall no order could fix, said out loud: an administrator
+        // reading only the violation count would go looking for a better
+        // order that does not exist.
+        if ($result['unattainable'] > 0) {
+            $status .= ' '.trans_choice(
+                '{1}For :count athlete the requested rest is arithmetically out of reach in a session this size.'
+                .'|[2,*]For :count athletes the requested rest is arithmetically out of reach in a session this size.',
+                $result['unattainable'],
+                ['count' => $result['unattainable']],
+            );
+        }
+
+        session()->flash('status', $status);
     }
 
     public function clear(): void

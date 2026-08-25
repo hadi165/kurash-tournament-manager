@@ -4,11 +4,17 @@ namespace App\Livewire\Competition;
 
 use App\Models\AgeCategory;
 use App\Models\Athlete;
+use App\Models\AthleteAgeSanction;
 use App\Models\Championship;
+use App\Services\AgeEligibilityException;
+use App\Services\AgeEligibilityPolicy;
+use App\Services\AgeSanctions;
 use App\Services\AthleteImporter;
+use App\Support\AgeVerdict;
 use App\Support\Gender;
 use App\Support\Import\AthleteImportPreview;
 use App\Support\Noc;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Gate;
@@ -18,6 +24,7 @@ use Livewire\Component;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class Registration extends Component
 {
@@ -61,6 +68,33 @@ class Registration extends Component
 
     #[Validate('nullable|string|max:255')]
     public string $national_id = '';
+
+    /**
+     * When the athlete was born.
+     *
+     * Required here although the column is nullable, and the two are not in
+     * conflict: the column is nullable because thousands of athletes were
+     * registered before anybody was asked for a date, and a competition that
+     * is half fought must stay readable. Nothing registered from this form
+     * from now on has that excuse.
+     *
+     * A string rather than a date, because it is bound to a date input and the
+     * browser owns it once the page is live. It is parsed on the server, and
+     * the age rules are applied to what the server parsed.
+     */
+    #[Validate('required|date|before:today')]
+    public string $date_of_birth = '';
+
+    /**
+     * The Chief Referee's reason for admitting a youth to an adults'
+     * competition, under Section 25(2).
+     *
+     * Only ever read when the entry actually qualifies for that exception, and
+     * never trusted to decide whether it does — AgeSanctions asks the policy
+     * again on the server, so typing a reason into a hand-edited form does not
+     * make a thirteen-year-old sanctionable.
+     */
+    public string $sanctionReason = '';
 
     public ?int $editingId = null;
 
@@ -150,7 +184,23 @@ class Registration extends Component
 
     public function edit(int $id): void
     {
-        Gate::authorize('manage-competition');
+        /*
+         | Opening an athlete is a read, and two different people need it.
+         |
+         | A registrar opens one to correct it. The Chief Referee opens one to
+         | decide whether to sanction it, which they cannot do without seeing
+         | the date of birth and the division in front of them — and they hold
+         | no competition permission at all, by design.
+         |
+         | Only the opening is shared. save() still asks for
+         | manage-competition, so a Chief Referee who opens an athlete can sign
+         | for their age and cannot change their name, their nation or their
+         | weight class.
+         */
+        abort_unless(
+            Gate::allows('manage-competition') || Gate::allows('athlete.sanction_age'),
+            403,
+        );
 
         $athlete = $this->athleteQuery()->findOrFail($id);
 
@@ -162,13 +212,144 @@ class Registration extends Component
         $this->age_category_id = $athlete->age_category_id;
         $this->weight_category_id = $athlete->weight_category_id;
         $this->national_id = $athlete->national_id ?? '';
+
+        // Blank for the athletes registered before the column existed, which
+        // is what puts the field in front of whoever opens them next.
+        $this->date_of_birth = $athlete->date_of_birth?->toDateString() ?? '';
     }
 
     public function cancelEdit(): void
     {
-        $this->reset('editingId', 'fullname', 'noc_code', 'noc_name', 'national_id', 'weight_category_id');
+        $this->reset('editingId', 'fullname', 'noc_code', 'noc_name', 'national_id', 'weight_category_id', 'date_of_birth', 'sanctionReason');
         $this->resetToDefaultDivision();
         $this->resetValidation();
+    }
+
+    /**
+     * The typed date, or null where it is blank or not a date.
+     *
+     * Never throws. A half-typed date is the normal state of a date field
+     * somebody is still filling in, and the live preview asks this on every
+     * keystroke; what it wants back is "nothing yet", not an exception.
+     */
+    private function parsedDateOfBirth(): ?CarbonImmutable
+    {
+        $value = trim($this->date_of_birth);
+
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::createFromFormat('!Y-m-d', $value) ?: null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * What the age rules say about the form as it stands.
+     *
+     * Recomputed on every render rather than stored, so the answer on screen
+     * is always about the division and the date currently in the form — the
+     * two things a registrar changes while deciding where somebody goes.
+     */
+    public function ageVerdict(): AgeVerdict
+    {
+        $division = $this->chosenDivision();
+        $athlete = $this->editingId === null ? null : $this->athleteQuery()->find($this->editingId);
+
+        // No division chosen yet is the first state of an empty form. It asks
+        // the policy anyway, with an age group of nothing, so the panel says
+        // "not checked" rather than the screen having a second opinion about
+        // when a rule applies.
+        $sanctioned = $athlete !== null
+            && $division !== null
+            && app(AgeSanctions::class)->isSanctioned($athlete, $division->id);
+
+        return app(AgeEligibilityPolicy::class)->check(
+            dateOfBirth: $this->parsedDateOfBirth(),
+            gender: $this->gender,
+            ageGroup: $division === null ? '' : (string) $division->age_group,
+            competitionYear: $this->championship->competitionYear(),
+            sanctioned: $sanctioned,
+            version: app(AgeEligibilityPolicy::class)->versionForChampionship($this->championship),
+        );
+    }
+
+    /**
+     * Everything the Chief Referee has decided about the athlete on screen.
+     *
+     * Empty while registering somebody new, because nothing has been decided
+     * about a person who does not exist yet.
+     *
+     * @return Collection<int, AthleteAgeSanction>
+     */
+    private function sanctionHistory(): Collection
+    {
+        $athlete = $this->editingId === null ? null : $this->athleteQuery()->find($this->editingId);
+
+        return $athlete === null
+            ? new Collection
+            : app(AgeSanctions::class)->historyFor($athlete);
+    }
+
+    /**
+     * Sign the athlete being edited into an adults' competition.
+     *
+     * Only reachable while editing somebody: a sanction is recorded against an
+     * athlete, so there has to be an athlete. Registering a youth into the
+     * seniors is therefore two steps — register them, then sanction them —
+     * which is the right shape, because the two decisions are taken by two
+     * different people.
+     */
+    public function grantAgeSanction(): void
+    {
+        Gate::authorize('athlete.sanction_age');
+
+        if ($this->editingId === null) {
+            session()->flash('error', __('Open the athlete first, then record the sanction.'));
+
+            return;
+        }
+
+        $athlete = $this->athleteQuery()->findOrFail($this->editingId);
+
+        try {
+            app(AgeSanctions::class)->grant($athlete, auth()->user(), $this->sanctionReason);
+        } catch (AgeEligibilityException $e) {
+            $this->addError('sanctionReason', $e->getMessage());
+
+            return;
+        }
+
+        $this->sanctionReason = '';
+
+        session()->flash('status', __('Sanction recorded for :name under Section 25(2).', ['name' => $athlete->fullname]));
+    }
+
+    /** Withdraw a sanction, which appends to the log rather than erasing it. */
+    public function revokeAgeSanction(): void
+    {
+        Gate::authorize('athlete.sanction_age');
+
+        if ($this->editingId === null) {
+            return;
+        }
+
+        $athlete = $this->athleteQuery()->findOrFail($this->editingId);
+
+        try {
+            app(AgeSanctions::class)->revoke($athlete, auth()->user(), $this->sanctionReason);
+        } catch (AgeEligibilityException $e) {
+            $this->addError('sanctionReason', $e->getMessage());
+
+            return;
+        }
+
+        $this->sanctionReason = '';
+
+        session()->flash('status', __('Sanction withdrawn for :name.', ['name' => $athlete->fullname]));
     }
 
     /** Changing age group changes which weight classes exist. */
@@ -237,6 +418,36 @@ class Registration extends Component
             return;
         }
 
+        /*
+         | The age group, against the athlete's year of birth.
+         |
+         | Checked here and not only where the date is typed, because the same
+         | date can become wrong without being touched: moving an athlete from
+         | the juniors to the seniors is a change of age group, and it is this
+         | method that makes it. The sanction is read from the log rather than
+         | from the form, so an entry already signed for stays signed for when
+         | somebody edits the athlete's club.
+         */
+        $dateOfBirth = $this->parsedDateOfBirth();
+
+        $verdict = app(AgeEligibilityPolicy::class)->check(
+            dateOfBirth: $dateOfBirth,
+            gender: $this->gender,
+            ageGroup: (string) ($division->age_group ?? ''),
+            competitionYear: $this->championship->competitionYear(),
+            sanctioned: $this->editingId !== null && app(AgeSanctions::class)->isSanctioned(
+                $this->athleteQuery()->findOrFail($this->editingId),
+                $division->id,
+            ),
+            version: app(AgeEligibilityPolicy::class)->versionForChampionship($this->championship),
+        );
+
+        if (! $verdict->eligible) {
+            $this->addError('age_category_id', (string) $verdict->reason);
+
+            return;
+        }
+
         $attributes = [
             'age_category_id' => $division->id,
             'fullname' => $this->fullname,
@@ -244,6 +455,7 @@ class Registration extends Component
             'noc_name' => $this->noc_name ?: null,
             'gender' => $this->gender,
             'national_id' => $this->national_id ?: null,
+            'date_of_birth' => $dateOfBirth?->toDateString(),
             'weight_category_id' => $weightCategory->id,
         ];
 
@@ -414,8 +626,11 @@ class Registration extends Component
 
         $athlete = $this->athleteQuery()->findOrFail($id);
 
-        if ($athlete->weightCategory?->bouts()->exists()) {
-            session()->flash('error', __('Cannot remove: a bracket has already been drawn for :class. Delete that bracket on its draw screen first, then remove the athlete and draw again.', [
+        // hasDraw(), not bouts()->exists(): a class of one is drawn by an
+        // administrative placement and has no bouts at all, and removing its
+        // athlete would silently unmake a decided, published class.
+        if ($athlete->weightCategory?->hasDraw()) {
+            session()->flash('error', __('Cannot remove: a draw already exists for :class. Delete that draw on its draw screen first, then remove the athlete and draw again.', [
                 'class' => $athlete->weightCategory->label,
             ]));
 
@@ -483,6 +698,14 @@ class Registration extends Component
             // keystroke would be slower than the answer.
             'nations' => Noc::all(),
             'weightCategories' => $this->chosenDivision()?->weightCategories()->get() ?? collect(),
+
+            // What the age rules make of the form as it stands, recomputed
+            // each render so the panel describes the division and the date
+            // currently chosen rather than the ones chosen a moment ago.
+            'ageVerdict' => $this->ageVerdict(),
+            'competitionYear' => $this->championship->competitionYear(),
+            'maySanction' => Gate::allows('athlete.sanction_age'),
+            'sanctionHistory' => $this->sanctionHistory(),
         ]);
     }
 }

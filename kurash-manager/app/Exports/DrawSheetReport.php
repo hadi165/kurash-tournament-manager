@@ -99,6 +99,6 @@ class DrawSheetReport implements Report
     /** Bracket size the draw was built for, for the caller's heading. */
     public function bracketTitle(): string
     {
-        return BracketSeeding::phaseName($this->category->drawnAthletes()->count());
+        return BracketSeeding::phaseName($this->category->numberedAthletes()->count());
     }
 }

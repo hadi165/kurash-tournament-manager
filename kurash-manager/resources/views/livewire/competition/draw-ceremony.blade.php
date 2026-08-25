@@ -75,14 +75,20 @@
             @if ($ceremony)
                 <a class="dc-home"
                    href="{{ route('entries.index', $championship) }}"
-                   title="{{ __('Back to the classes waiting to be drawn') }}"
-                   wire:navigate>
+                   title="{{ __('Back to the classes waiting to be drawn') }}">
                     <span aria-hidden="true">←</span>
-                    {{ __('All classes') }}
+                    {{ __('All Weights') }}
                 </a>
             @endif
 
-            @if ($hasBrandLogo)
+            {{-- The mark, on the board only.
+
+                 A wall in a hall is where branding belongs. The operator's own
+                 copy is a working screen with a way out of it, and the logo
+                 there did nothing but flash as the page was navigated away
+                 from — an image with no reserved box, repainting while the
+                 next screen was still being fetched. --}}
+            @if ($hasBrandLogo && ! $ceremony)
                 <span class="dc-logo">
                     <img src="{{ asset($brandLogo) }}" alt="{{ config('branding.short_name') }}">
                 </span>
@@ -97,7 +103,18 @@
         <div class="dc-chips">
             <span class="dc-chip">{{ $weightCategory->ageCategory->name }} · {{ $weightCategory->label }} {{ __('kg') }}</span>
 
-            @if ($size > 0)
+            {{-- What this class is, in its own words. A round robin has no
+                 bracket to be "of" and nobody sits out of one, so it counts the
+                 things it actually has: rounds and contests. --}}
+            @if ($format === \App\Support\TournamentFormat::RoundRobin)
+                <span class="dc-chip dc-chip-format">{{ __('Round Robin') }}</span>
+                <span class="dc-chip">{{ trans_choice('{1}:count athlete|[2,*]:count athletes', $total, ['count' => $total]) }}</span>
+                <span class="dc-chip">{{ trans_choice('{1}:count round|[2,*]:count rounds', $roundCount, ['count' => $roundCount]) }}</span>
+                <span class="dc-chip">{{ trans_choice('{1}:count contest|[2,*]:count contests', $contests, ['count' => $contests]) }}</span>
+            @elseif ($format === \App\Support\TournamentFormat::Placement)
+                <span class="dc-chip dc-chip-format">{{ __('Administrative placement') }}</span>
+                <span class="dc-chip">{{ trans_choice('{1}:count athlete|[2,*]:count athletes', $total, ['count' => $total]) }}</span>
+            @elseif ($size > 0)
                 <span class="dc-chip">{{ __('Bracket of :size', ['size' => $size]) }}</span>
                 {{-- Counted separately, because they are different numbers: the
                      bracket has sixteen seats, the draw has twelve athletes. --}}
@@ -140,9 +157,21 @@
                     </div>
                 </div>
             @else
+                @php $spotlightIso = $spotlight ? \App\Support\Noc::iso($spotlight->noc_code) : null; @endphp
+
                 <div class="dc-panel dc-now" wire:key="now-{{ $revealed }}">
                     <div class="dc-now-noc">
-                        <span x-show="! anticipating">{{ $spotlight ? \App\Support\Noc::normalise($spotlight->noc_code) : '—' }}</span>
+                        <span x-show="! anticipating">
+                            {{-- The nation the hall is about to hear, beside the
+                                 code. A delegation with no artwork keeps the
+                                 code and shows no broken image. --}}
+                            @if ($spotlightIso)
+                                <img class="dc-now-flag"
+                                     src="{{ asset('flags/'.$spotlightIso.'.svg') }}"
+                                     alt="{{ $spotlight->noc_name ?? \App\Support\Noc::normalise($spotlight->noc_code) }}">
+                            @endif
+                            {{ $spotlight ? \App\Support\Noc::normalise($spotlight->noc_code) : '—' }}
+                        </span>
                         <span x-show="anticipating" x-cloak>{{ __('Drawing') }}</span>
                     </div>
 
@@ -190,17 +219,28 @@
                     @if ($saved)
                         <div class="dc-save-done">{{ __('Draw saved') }}</div>
 
-                        <div class="dc-save-links">
-                            <a class="dc-button"
-                               href="{{ route('exports.bracket-sheet', ['weightCategory' => $weightCategory, 'format' => 'pdf', 'fights' => 0]) }}">
-                                {{ __('Bracket PDF') }}
-                            </a>
+                        {{-- The one export endpoint, which routes itself on the
+                             stored format. Only the labels differ, because a
+                             round robin filed as "Bracket PDF" is a document
+                             nobody can find again.
 
-                            <a class="dc-button"
-                               href="{{ route('exports.bracket-sheet', ['weightCategory' => $weightCategory, 'format' => 'xlsx', 'fights' => 0]) }}">
-                                {{ __('Bracket Excel') }}
-                            </a>
-                        </div>
+                             Offered only for a format that has contests: the
+                             endpoint refuses a placement with a 404 on
+                             purpose, and a link to a refusal is not a
+                             download. --}}
+                        @if ($format?->hasContests())
+                            <div class="dc-save-links">
+                                <a class="dc-button"
+                                   href="{{ route('exports.bracket-sheet', ['weightCategory' => $weightCategory, 'format' => 'pdf', 'fights' => 0]) }}">
+                                    {{ $format === \App\Support\TournamentFormat::RoundRobin ? __('Round Robin PDF') : __('Bracket PDF') }}
+                                </a>
+
+                                <a class="dc-button"
+                                   href="{{ route('exports.bracket-sheet', ['weightCategory' => $weightCategory, 'format' => 'xlsx', 'fights' => 0]) }}">
+                                    {{ $format === \App\Support\TournamentFormat::RoundRobin ? __('Round Robin Excel') : __('Bracket Excel') }}
+                                </a>
+                            </div>
+                        @endif
                     @else
                         <button type="button" class="dc-button dc-button-primary" wire:click="saveDraw">
                             {{ __('Save draw') }}
@@ -255,7 +295,18 @@
         </aside>
 
         <main class="dc-board">
-            @if ($size > 0)
+            {{-- The round robin's own board.
+
+                 Not a tree with the connectors switched off: there is nothing
+                 to advance along. What a hall wants from a round robin is the
+                 fixtures it produced, grouped by the round they are fought in,
+                 and each one appears as soon as both of its athletes have been
+                 drawn. --}}
+            @if ($format === \App\Support\TournamentFormat::RoundRobin)
+                @include('livewire.competition.partials.ceremony-round-robin')
+            @elseif ($format === \App\Support\TournamentFormat::Placement)
+                @include('livewire.competition.partials.ceremony-placement')
+            @elseif ($size > 0)
                 <div class="dc-heads" style="grid-template-columns: {{ $columns }}">
                     <div class="dc-head-col">{{ __('Draw') }}</div>
 
@@ -337,7 +388,13 @@
         </div>
 
         <div class="dc-foot-group">
-            <span class="dc-legend"><span class="dc-legend-dot"></span>{{ __('Champion path') }}</span>
+            {{-- The legend explains the tree's gold line, and only a knockout
+                 has one: a round robin advances nobody along a path, and a
+                 board that mentions a champion's route through a competition
+                 with no routes is describing the wrong competition. --}}
+            @if ($format === \App\Support\TournamentFormat::Knockout)
+                <span class="dc-legend"><span class="dc-legend-dot"></span>{{ __('Champion path') }}</span>
+            @endif
             <span class="dc-legend">
                 {{ $championship->location }}@if ($championship->starts_on) · {{ $championship->starts_on->format('j M Y') }} @endif
             </span>

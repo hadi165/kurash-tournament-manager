@@ -18,6 +18,8 @@ use App\Exports\PdfDocument;
 use App\Exports\PdfWriter;
 use App\Exports\Report;
 use App\Exports\ResultsReport;
+use App\Exports\RoundRobinSheet;
+use App\Exports\RoundRobinSheetWriter;
 use App\Exports\WeighInFormReport;
 use App\Exports\XlsxWriter;
 use App\Models\AgeCategory;
@@ -91,6 +93,15 @@ class ExportController extends Controller
     {
         $cards = AccreditationCards::forAthlete($athlete->load('championship'));
 
+        // A credential admits somebody to the venue, and the age rules decide
+        // who is admitted to the competition. Saying which athlete and why is
+        // more use to an accreditation desk than an empty sheet of card.
+        abort_if(
+            $cards->isEmpty(),
+            404,
+            (string) ($athlete->ageVerdict()->reason ?? __('This athlete\'s age has not been verified.')),
+        );
+
         return $this->document->download('exports.accreditation', $cards->data(), $cards->filename());
     }
 
@@ -113,13 +124,37 @@ class ExportController extends Controller
      */
     public function bracketSheet(WeightCategory $weightCategory, string $format, Request $request): Response|StreamedResponse
     {
-        // ?fights=0 for the bracket saved off a draw ceremony: positions, no
+        $weightCategory->load('ageCategory.championship');
+
+        // ?fights=0 for the sheet saved off a draw ceremony: positions, no
         // running order. Numbers are the default, because everywhere else asks
-        // for the bracket after the schedule is made.
-        $sheet = new BracketSheet(
-            $weightCategory->load('ageCategory.championship'),
-            fightNumbers: ! in_array($request->query('fights'), ['0', 'false', 'no'], true),
+        // for the draw after the schedule is made.
+        $withNumbers = ! in_array($request->query('fights'), ['0', 'false', 'no'], true);
+
+        /*
+         | Routed on what the class was drawn as.
+         |
+         | A round robin sent through BracketSheet to reuse its layout would
+         | print a tree of a competition that is not being held — so it has a
+         | sheet and a writer of its own, and this is the fork. The knockout
+         | path below is untouched.
+         */
+        if ($weightCategory->isRoundRobin()) {
+            $roundRobin = new RoundRobinSheet($weightCategory, fightNumbers: $withNumbers);
+            $writer = app(RoundRobinSheetWriter::class);
+
+            return $format === 'xlsx' ? $writer->xlsx($roundRobin) : $writer->pdf($roundRobin);
+        }
+
+        // A class of one has no contests to print at all. Saying so is more
+        // use than an empty tree.
+        abort_if(
+            $weightCategory->isPlacement(),
+            404,
+            __('This weight class has a single entrant and no contests to print.'),
         );
+
+        $sheet = new BracketSheet($weightCategory, fightNumbers: $withNumbers);
 
         // Drawable is not drawn: a class whose athletes hold numbers but whose
         // bracket has never been generated has no tree to print.

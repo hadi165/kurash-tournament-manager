@@ -469,6 +469,17 @@
 
 .dc-now-meta { font-size: 13px; color: var(--dc-muted); margin-top: 8px; }
 
+/* Beside the code, on the line the code sits on. */
+.dc-now-flag {
+    width: 21px;
+    height: 14px;
+    object-fit: cover;
+    border-radius: 2px;
+    vertical-align: -2px;
+    margin-right: 6px;
+    box-shadow: 0 0 0 1px var(--dc-line);
+}
+
 .dc-pool-row {
     display: flex;
     align-items: center;
@@ -955,3 +966,140 @@
 @media (prefers-reduced-motion: reduce) {
     .dc-now-drawing { animation: none; opacity: 1; }
 }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   The round-robin board
+
+   A round robin has no tree, so it has no grid of seats and spans: it has
+   fixtures, grouped by the round they are fought in. The columns flow and wrap
+   rather than being pinned to a bracket's arithmetic — a class of two is one
+   fixture and must not be laid out as though a bracket of two were missing its
+   other half.
+
+   Everything reuses the board's own palette and type scale, so the two formats
+   read as the same production rather than as two applications.
+   ────────────────────────────────────────────────────────────────────────── */
+.dc-rr {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    gap: 20px;
+    width: 100%;
+    overflow-y: auto;
+}
+
+.dc-rr-round {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-width: 380px;
+    flex: 0 1 auto;
+}
+
+.dc-rr-head {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.dc-rr-fixture {
+    border: 1px solid var(--dc-line);
+    border-radius: 10px;
+    background: var(--dc-panel);
+    overflow: hidden;
+}
+
+/* A fixture whose athletes have not both been drawn yet. Present, so the hall
+   can see how many are still to come, but plainly not yet told. */
+.dc-rr-fixture--waiting { opacity: 0.5; }
+
+.dc-rr-fixture--done { border-color: var(--dc-gold); }
+
+.dc-rr-no {
+    padding: 4px 14px;
+    border-bottom: 1px solid var(--dc-line);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--dc-muted);
+}
+
+.dc-rr-side {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    font-size: 21px;
+}
+
+.dc-rr-side + .dc-rr-side { border-top: 1px solid var(--dc-line); }
+
+.dc-rr-side--won { color: var(--dc-gold); font-weight: 700; }
+
+/* The draw number. Deliberately not styled as the bracket's seat chip: it is
+   the number the draw handed out, not a position in an elimination order. */
+.dc-rr-draw {
+    flex: 0 0 auto;
+    min-width: 34px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    background: var(--dc-line);
+    font-size: 15px;
+    font-weight: 700;
+    text-align: center;
+    color: var(--dc-muted);
+}
+
+.dc-rr-draw--empty { background: transparent; }
+
+.dc-rr-flag {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 25px;
+    object-fit: cover;
+    border-radius: 3px;
+}
+
+.dc-rr-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+
+.dc-rr-noc {
+    flex: 0 0 auto;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--dc-muted);
+}
+
+.dc-rr-standings { min-width: 460px; }
+
+.dc-rr-table { width: 100%; border-collapse: collapse; font-size: 17px; }
+
+.dc-rr-table th {
+    text-align: left;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--dc-line);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dc-muted);
+}
+
+.dc-rr-table td { padding: 7px 10px; border-bottom: 1px solid var(--dc-line); }
+.dc-rr-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.dc-rr-table tbody tr:first-child td { color: var(--dc-gold); font-weight: 700; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   The single entrant
+
+   Nothing to draw and nobody to draw against, so the board holds one panel
+   rather than an empty grid of one seat.
+   ────────────────────────────────────────────────────────────────────────── */
+.dc-solo { display: flex; align-items: flex-start; width: 100%; }
+
+.dc-solo-panel { max-width: 640px; padding: 28px 32px; }
+
+.dc-solo-name { margin-top: 12px; font-size: 34px; font-weight: 700; }
+
+.dc-solo-noc { margin-top: 6px; font-size: 18px; color: var(--dc-muted); }

@@ -2,10 +2,16 @@
 
 namespace App\Models;
 
+use App\Services\AgeEligibilityPolicy;
+use App\Support\AgeVerdict;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\AthleteFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -18,17 +24,42 @@ use Illuminate\Support\Facades\DB;
  * analysis reads the migration and sees a string, so the shape is declared here.
  *
  * @property-read WeightCategory|null $weightCategory
+ * @property-read AgeCategory|null $ageCategory
+ * @property-read Championship|null $championship
  * @property array<int, int|string>|null $accreditation_areas
+ * @property CarbonImmutable|null $date_of_birth
+ * @property CarbonInterface|null $date_of_birth_verified_at
+ * @property int|null $date_of_birth_verified_by
  */
 class Athlete extends Model
 {
     /** @use HasFactory<AthleteFactory> */
     use HasFactory;
 
+    /*
+     |--------------------------------------------------------------------------
+     | The scale
+     |--------------------------------------------------------------------------
+     |
+     | The three states of weighin_status, named once. The strings are the
+     | values in the enum column and are read back for the life of a
+     | championship, so they are part of the schema and are not renamed.
+     */
+
+    /** Registered, not yet weighed. Not admitted to competition. */
+    public const WEIGHIN_PENDING = 'pending';
+
+    /** Weighed, inside the class. The only state that competes. */
+    public const WEIGHIN_PASS = 'pass';
+
+    /** Weighed, outside the class. Not admitted to competition. */
+    public const WEIGHIN_FAIL = 'fail';
+
     protected $fillable = [
         'ika_id', 'championship_id', 'age_category_id', 'weight_category_id',
         'fullname', 'gender', 'noc_code', 'noc_name', 'national_id', 'club', 'photo_url',
         'position_title', 'accreditation_areas',
+        'date_of_birth', 'date_of_birth_verified_at', 'date_of_birth_verified_by',
         'weighin_kg', 'weighin_status', 'weighin_at',
         'draw_number', 'draw_number_source',
     ];
@@ -36,10 +67,136 @@ class Athlete extends Model
     protected function casts(): array
     {
         return [
+            // A date and not a datetime: a birthday has no time of day, and
+            // one carried through a timezone conversion can arrive a day early.
+            'date_of_birth' => 'immutable_date',
+            'date_of_birth_verified_at' => 'datetime',
             'weighin_kg' => 'decimal:2',
             'weighin_at' => 'datetime',
             'accreditation_areas' => 'array',
         ];
+    }
+
+    /*
+     |--------------------------------------------------------------------------
+     | Admission to competition
+     |--------------------------------------------------------------------------
+     |
+     | The IKA rule is short: an athlete who has not been weighed must not be
+     | admitted to competition, and one who was weighed outside their class is
+     | not in that class. Both are the single condition below —
+     | weighin_status = 'pass' — and it is written here once so that the draw
+     | screen, the generators, the format policy and the tests cannot each
+     | arrive at a slightly different reading of it.
+     |
+     | "Not fail" is NOT that condition, and was the bug this replaces: an
+     | athlete nobody has weighed is pending, not passed, and pending is
+     | exactly who the rule keeps off the mat.
+     |
+     | https://kurash-ika.org/2022/08/20/kurash-rules/
+     */
+
+    /** Has this athlete been weighed and admitted to their class? */
+    public function passedWeighIn(): bool
+    {
+        return $this->weighin_status === self::WEIGHIN_PASS;
+    }
+
+    /**
+     * Narrow a query to the athletes who may compete.
+     *
+     * @param  Builder<Athlete>  $query
+     * @return Builder<Athlete>
+     */
+    public function scopePassedWeighIn(Builder $query): Builder
+    {
+        return $query->where('weighin_status', self::WEIGHIN_PASS);
+    }
+
+    /**
+     * Narrow a query to the athletes who may NOT compete.
+     *
+     * The complement of the scope above rather than a list of the other two
+     * states, so a fourth state added to the enum later is refused admission
+     * by default instead of being quietly let through.
+     *
+     * @param  Builder<Athlete>  $query
+     * @return Builder<Athlete>
+     */
+    public function scopeFailedOrPendingWeighIn(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q) {
+            $q->where('weighin_status', '!=', self::WEIGHIN_PASS)
+                ->orWhereNull('weighin_status');
+        });
+    }
+
+    /*
+     |--------------------------------------------------------------------------
+     | Age
+     |--------------------------------------------------------------------------
+     |
+     | The IKA states age eligibility in birth years, so what an athlete "is"
+     | depends on the year the competition is held in and not on today's date.
+     | Nothing here works out an age on its own: the year comes from the
+     | championship and the rule from App\Services\AgeEligibilityPolicy, which
+     | is the one place that turns the two into a decision.
+     */
+
+    /** Do we know when this athlete was born? */
+    public function hasDateOfBirth(): bool
+    {
+        return $this->date_of_birth !== null;
+    }
+
+    /**
+     * Has somebody checked the date against a document?
+     *
+     * Different from having one. A date can arrive in a spreadsheet from a
+     * delegation; verifying it is an act by a named person at an accreditation
+     * desk, and only that makes it evidence.
+     */
+    public function dateOfBirthVerified(): bool
+    {
+        return $this->date_of_birth !== null && $this->date_of_birth_verified_at !== null;
+    }
+
+    /**
+     * How old this athlete is for competition purposes, in a given year.
+     *
+     * Competition year minus birth year, which is what a birth-year rule means
+     * and is why nobody's eligibility changes on their birthday. Null where
+     * there is no date to work from.
+     */
+    public function competitionAge(int $competitionYear): ?int
+    {
+        return $this->date_of_birth === null ? null : $competitionYear - (int) $this->date_of_birth->year;
+    }
+
+    /** What the age rules say about where this athlete is entered. */
+    public function ageVerdict(): AgeVerdict
+    {
+        return app(AgeEligibilityPolicy::class)->checkAthlete($this);
+    }
+
+    /** @return HasMany<AthleteAgeSanction, $this> */
+    public function ageSanctions(): HasMany
+    {
+        return $this->hasMany(AthleteAgeSanction::class)->orderByDesc('id');
+    }
+
+    /**
+     * Narrow a query to athletes nobody has recorded a birth date for.
+     *
+     * The accreditation desk's worklist: these are the entries that cannot be
+     * checked against the age rules and cannot be given a credential.
+     *
+     * @param  Builder<Athlete>  $query
+     * @return Builder<Athlete>
+     */
+    public function scopeMissingDateOfBirth(Builder $query): Builder
+    {
+        return $query->whereNull('date_of_birth');
     }
 
     /** @return BelongsTo<Championship, $this> */
@@ -112,5 +269,35 @@ class Athlete extends Model
     public function label(): string
     {
         return "{$this->fullname} ({$this->noc_code})";
+    }
+
+    /**
+     * Where this athlete sits when an entry list is read.
+     *
+     * By accreditation number, which is the number on the card at the door and
+     * the one an official reads down a list looking for somebody. Never by draw
+     * number: a draw number says where an athlete stands in the bracket, and
+     * sorting the list by it turns a register into a running order.
+     *
+     * IKA001 through IKA999 sort correctly as text; a thousandth athlete would
+     * not, so the digits are compared as a number. Somebody with no number yet
+     * goes to the foot, then by name and then by id, so the same list read
+     * twice comes back in the same order.
+     *
+     * One comparator for the screen, the PDF and the workbook — a list that
+     * disagrees with its own export is worse than either.
+     *
+     * @return array{int, int, string, int}
+     */
+    public function entryOrder(): array
+    {
+        $number = preg_replace('/\D+/', '', (string) $this->ika_id);
+
+        return [
+            $number === '' ? 1 : 0,
+            $number === '' ? 0 : (int) $number,
+            mb_strtolower((string) $this->fullname),
+            (int) $this->id,
+        ];
     }
 }
