@@ -93,6 +93,15 @@ class ExportController extends Controller
     {
         $cards = AccreditationCards::forAthlete($athlete->load('championship'));
 
+        // A credential admits somebody to the venue, and the age rules decide
+        // who is admitted to the competition. Saying which athlete and why is
+        // more use to an accreditation desk than an empty sheet of card.
+        abort_if(
+            $cards->isEmpty(),
+            404,
+            (string) ($athlete->ageVerdict()->reason ?? __('This athlete\'s age has not been verified.')),
+        );
+
         return $this->document->download('exports.accreditation', $cards->data(), $cards->filename());
     }
 

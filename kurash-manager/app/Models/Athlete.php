@@ -2,11 +2,16 @@
 
 namespace App\Models;
 
+use App\Services\AgeEligibilityPolicy;
+use App\Support\AgeVerdict;
+use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Database\Factories\AthleteFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -19,7 +24,12 @@ use Illuminate\Support\Facades\DB;
  * analysis reads the migration and sees a string, so the shape is declared here.
  *
  * @property-read WeightCategory|null $weightCategory
+ * @property-read AgeCategory|null $ageCategory
+ * @property-read Championship|null $championship
  * @property array<int, int|string>|null $accreditation_areas
+ * @property CarbonImmutable|null $date_of_birth
+ * @property CarbonInterface|null $date_of_birth_verified_at
+ * @property int|null $date_of_birth_verified_by
  */
 class Athlete extends Model
 {
@@ -49,6 +59,7 @@ class Athlete extends Model
         'ika_id', 'championship_id', 'age_category_id', 'weight_category_id',
         'fullname', 'gender', 'noc_code', 'noc_name', 'national_id', 'club', 'photo_url',
         'position_title', 'accreditation_areas',
+        'date_of_birth', 'date_of_birth_verified_at', 'date_of_birth_verified_by',
         'weighin_kg', 'weighin_status', 'weighin_at',
         'draw_number', 'draw_number_source',
     ];
@@ -56,6 +67,10 @@ class Athlete extends Model
     protected function casts(): array
     {
         return [
+            // A date and not a datetime: a birthday has no time of day, and
+            // one carried through a timezone conversion can arrive a day early.
+            'date_of_birth' => 'immutable_date',
+            'date_of_birth_verified_at' => 'datetime',
             'weighin_kg' => 'decimal:2',
             'weighin_at' => 'datetime',
             'accreditation_areas' => 'array',
@@ -114,6 +129,74 @@ class Athlete extends Model
             $q->where('weighin_status', '!=', self::WEIGHIN_PASS)
                 ->orWhereNull('weighin_status');
         });
+    }
+
+    /*
+     |--------------------------------------------------------------------------
+     | Age
+     |--------------------------------------------------------------------------
+     |
+     | The IKA states age eligibility in birth years, so what an athlete "is"
+     | depends on the year the competition is held in and not on today's date.
+     | Nothing here works out an age on its own: the year comes from the
+     | championship and the rule from App\Services\AgeEligibilityPolicy, which
+     | is the one place that turns the two into a decision.
+     */
+
+    /** Do we know when this athlete was born? */
+    public function hasDateOfBirth(): bool
+    {
+        return $this->date_of_birth !== null;
+    }
+
+    /**
+     * Has somebody checked the date against a document?
+     *
+     * Different from having one. A date can arrive in a spreadsheet from a
+     * delegation; verifying it is an act by a named person at an accreditation
+     * desk, and only that makes it evidence.
+     */
+    public function dateOfBirthVerified(): bool
+    {
+        return $this->date_of_birth !== null && $this->date_of_birth_verified_at !== null;
+    }
+
+    /**
+     * How old this athlete is for competition purposes, in a given year.
+     *
+     * Competition year minus birth year, which is what a birth-year rule means
+     * and is why nobody's eligibility changes on their birthday. Null where
+     * there is no date to work from.
+     */
+    public function competitionAge(int $competitionYear): ?int
+    {
+        return $this->date_of_birth === null ? null : $competitionYear - (int) $this->date_of_birth->year;
+    }
+
+    /** What the age rules say about where this athlete is entered. */
+    public function ageVerdict(): AgeVerdict
+    {
+        return app(AgeEligibilityPolicy::class)->checkAthlete($this);
+    }
+
+    /** @return HasMany<AthleteAgeSanction, $this> */
+    public function ageSanctions(): HasMany
+    {
+        return $this->hasMany(AthleteAgeSanction::class)->orderByDesc('id');
+    }
+
+    /**
+     * Narrow a query to athletes nobody has recorded a birth date for.
+     *
+     * The accreditation desk's worklist: these are the entries that cannot be
+     * checked against the age rules and cannot be given a credential.
+     *
+     * @param  Builder<Athlete>  $query
+     * @return Builder<Athlete>
+     */
+    public function scopeMissingDateOfBirth(Builder $query): Builder
+    {
+        return $query->whereNull('date_of_birth');
     }
 
     /** @return BelongsTo<Championship, $this> */

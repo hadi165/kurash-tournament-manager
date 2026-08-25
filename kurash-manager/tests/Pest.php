@@ -207,3 +207,28 @@ function championshipWithBrackets(array $classes): Championship
 
     return $ageCategory->championship->refresh();
 }
+
+/**
+ * A date of birth that puts an athlete squarely inside an age group.
+ *
+ * The IKA states its bands in birth years relative to the competition year, so
+ * a fixed date would drift out of the band it was chosen for as the seasons
+ * pass. This works back from the year the championship is held in and lands in
+ * the middle of the band rather than on its edge — the boundaries themselves
+ * are asserted deliberately in AgeEligibilityTest, and a test about something
+ * else should not be sitting on one by accident.
+ */
+function dobFor(string $ageGroup = 'Senior', ?int $competitionYear = null): string
+{
+    $competitionYear ??= (int) now()->year;
+
+    $age = match ($ageGroup) {
+        'Cadet' => 15,
+        'Junior' => 16,
+        'Veteran' => 40,
+        // Clear of the 16-17 window that needs the Chief Referee's signature.
+        default => 25,
+    };
+
+    return ($competitionYear - $age).'-06-15';
+}

@@ -56,7 +56,14 @@
         </x-ui.card>
     @endcan
 
-    @can('manage-competition')
+    {{-- The entry form, and the age panel inside it.
+
+         Open to the Chief Referee as well as to a registrar: the sanction
+         under Section 25(2) is decided from this panel, and it cannot be
+         decided by somebody who cannot see the date of birth and the division.
+         What they may actually change is settled inside — the save button and
+         the import are a registrar's, the sanction is theirs. --}}
+    @if (auth()->user()?->can('manage-competition') || auth()->user()?->can('athlete.sanction_age'))
         <x-ui.card :title="$editingId ? __('Edit athlete') : __('Register athlete')">
             <form wire:submit="save">
                 <div class="grid gap-[18px] md:grid-cols-3">
@@ -188,12 +195,143 @@
                         <flux:input id="reg-passport" wire:model="national_id" />
                         <p class="text-xs text-muted">{{ __('Optional') }}</p>
                     </div>
+
+                    {{-- The date of birth, and what it makes of the chosen age
+                         group. Bound live because the answer beneath it is the
+                         whole reason the field is here: a registrar picking a
+                         division wants to be told before they submit, not
+                         after. --}}
+                    <div class="flex flex-col gap-[7px]">
+                        <label for="reg-dob" class="text-[12.5px] font-semibold text-muted">{{ __('Date of birth') }}</label>
+                        <flux:input id="reg-dob" type="date" wire:model.live="date_of_birth" />
+                        @error('date_of_birth')
+                            <span class="text-[12.5px] text-danger">{{ $message }}</span>
+                        @enderror
+                    </div>
                 </div>
 
+                {{-- The eligibility panel.
+
+                     Always shown once there is a date, because "this is fine"
+                     is information too: it tells the registrar the birth year
+                     was read the way they meant it. The age quoted is the
+                     competition age — the year minus the birth year — which is
+                     the only age the IKA's bands are stated in. --}}
+                @if ($ageVerdict->state !== \App\Support\AgeVerdict::NO_DATE)
+                    <div @class([
+                        'mt-4 rounded-md px-[18px] py-3.5',
+                        'bg-brand-soft' => $ageVerdict->eligible && $ageVerdict->judged,
+                        'bg-amber-soft' => ! $ageVerdict->eligible && $ageVerdict->sanctionable,
+                        'bg-danger-soft' => ! $ageVerdict->eligible && ! $ageVerdict->sanctionable,
+                        'bg-ground border border-line' => $ageVerdict->eligible && ! $ageVerdict->judged,
+                    ])>
+                        <div class="flex flex-wrap items-center gap-3">
+                            @if ($ageVerdict->eligible && $ageVerdict->judged)
+                                <x-ui.tag variant="brand">{{ __('Age checked') }}</x-ui.tag>
+                            @elseif ($ageVerdict->sanctionable)
+                                <x-ui.tag variant="amber">{{ __('Chief Referee') }}</x-ui.tag>
+                            @elseif (! $ageVerdict->judged)
+                                <x-ui.tag variant="muted">{{ __('Not checked') }}</x-ui.tag>
+                            @else
+                                <x-ui.tag variant="danger">{{ __('Wrong age group') }}</x-ui.tag>
+                            @endif
+
+                            @if ($ageVerdict->birthYear !== null)
+                                <span class="text-[13.5px]">
+                                    {{ __('Born :year — :age in :competitionYear.', [
+                                        'year' => $ageVerdict->birthYear,
+                                        'age' => $ageVerdict->competitionAge,
+                                        'competitionYear' => $competitionYear,
+                                    ]) }}
+                                    @if ($ageVerdict->belongsIn)
+                                        {{ __('That is the :group band (:band).', [
+                                            'group' => $ageVerdict->belongsIn->ageGroup,
+                                            'band' => $ageVerdict->belongsIn->ageLabel(),
+                                        ]) }}
+                                    @endif
+                                </span>
+                            @endif
+                        </div>
+
+                        @if ($ageVerdict->reason)
+                            <p class="mt-2 text-[13px]">{{ $ageVerdict->reason }}</p>
+                        @endif
+
+                        {{-- The sanction, and only where the rules actually
+                             offer one. Section 25(2) is an exception for 16-
+                             and 17-year-olds entering an adults' competition;
+                             every other refusal is a refusal, so no control
+                             appears for it and there is nothing to press. --}}
+                        @if ($ageVerdict->sanctionable && $editingId)
+                            @if ($maySanction)
+                                <div class="mt-3 flex flex-wrap items-end gap-3">
+                                    <div class="flex min-w-[260px] flex-1 flex-col gap-[7px]">
+                                        <label for="reg-sanction" class="text-[12.5px] font-semibold text-amber-deep">
+                                            {{ $ageVerdict->needsSanction()
+                                                ? __('Reason for the sanction')
+                                                : __('Reason for withdrawing it') }}
+                                        </label>
+                                        <flux:input id="reg-sanction" wire:model="sanctionReason"
+                                                    :placeholder="__('Recorded against your name, with the time.')" />
+                                    </div>
+
+                                    @if ($ageVerdict->needsSanction())
+                                        <flux:button size="sm" variant="primary" wire:click="grantAgeSanction" type="button">
+                                            {{ __('Sanction under 25(2)') }}
+                                        </flux:button>
+                                    @else
+                                        <flux:button size="sm" variant="danger" wire:click="revokeAgeSanction" type="button">
+                                            {{ __('Withdraw sanction') }}
+                                        </flux:button>
+                                    @endif
+                                </div>
+
+                                @error('sanctionReason')
+                                    <p class="mt-2 text-[12.5px] text-danger">{{ $message }}</p>
+                                @enderror
+                            @else
+                                <p class="mt-2 text-[13px] text-amber-deep">
+                                    {{ __('Only the Chief Referee may sanction this entry. Enter the athlete in :group instead, or ask them.', [
+                                        'group' => $ageVerdict->belongsIn?->ageGroup ?? __('their own age group'),
+                                    ]) }}
+                                </p>
+                            @endif
+                        @elseif ($ageVerdict->sanctionable && ! $editingId)
+                            <p class="mt-2 text-[13px] text-amber-deep">
+                                {{ __('Register the athlete in their own age group first. The Chief Referee can then sanction the move.') }}
+                            </p>
+                        @endif
+
+                        {{-- What was decided, and by whom. Appended to rather
+                             than overwritten, so a withdrawal does not erase
+                             the fact that a sanction was once in force. --}}
+                        @if ($sanctionHistory->isNotEmpty())
+                            <ul class="mt-3 space-y-1 text-[12.5px] text-muted">
+                                @foreach ($sanctionHistory as $entry)
+                                    <li wire:key="sanction-{{ $entry->id }}">
+                                        <b>{{ $entry->grants() ? __('Sanctioned') : __('Withdrawn') }}</b>
+                                        {{ __('by :who on :when', [
+                                            'who' => $entry->actedBy?->name ?? __('a closed account'),
+                                            'when' => $entry->created_at?->format('j M Y H:i'),
+                                        ]) }}
+                                        — {{ $entry->reason }}
+                                    </li>
+                                @endforeach
+                            </ul>
+                        @endif
+                    </div>
+                @endif
+
                 <div class="mt-[22px] flex flex-wrap items-center gap-2.5">
-                    <flux:button type="submit" variant="primary">
-                        {{ $editingId ? __('Save changes') : __('Register athlete') }}
-                    </flux:button>
+                    {{-- Saving is the registrar's act. A Chief Referee reached
+                         this form to sign for an age and has no business
+                         changing a nation or a weight class, so the button is
+                         not theirs — and save() refuses them anyway. --}}
+                    @can('manage-competition')
+                        <flux:button type="submit" variant="primary">
+                            {{ $editingId ? __('Save changes') : __('Register athlete') }}
+                        </flux:button>
+                    @endcan
 
                     @if ($editingId)
                         <flux:button type="button" variant="ghost" wire:click="cancelEdit">{{ __('Cancel') }}</flux:button>
@@ -344,7 +482,7 @@
                 @endif
             </x-ui.card>
         @endif
-    @endcan
+    @endif
 
     <x-ui.card
         flush
@@ -401,16 +539,19 @@
                                 @endif
                             </td>
                             <td>
-                                @can('manage-competition')
-                                    <div class="flex justify-end gap-1.5">
-                                        <x-ui.chip variant="ghost" wire:click="edit({{ $athlete->id }})">{{ __('Edit') }}</x-ui.chip>
+                                <div class="flex justify-end gap-1.5">
+                                    @if (auth()->user()?->can('manage-competition') || auth()->user()?->can('athlete.sanction_age'))
+                                        <x-ui.chip variant="ghost" wire:click="edit({{ $athlete->id }})">{{ __('Open') }}</x-ui.chip>
+                                    @endif
+
+                                    @can('manage-competition')
                                         <x-ui.chip
                                             variant="danger"
                                             wire:click="delete({{ $athlete->id }})"
                                             wire:confirm="{{ __('Remove this athlete?') }}"
                                         >{{ __('Remove') }}</x-ui.chip>
-                                    </div>
-                                @endcan
+                                    @endcan
+                                </div>
                             </td>
                         </tr>
                     @empty

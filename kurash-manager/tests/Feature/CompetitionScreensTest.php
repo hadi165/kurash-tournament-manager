@@ -223,6 +223,7 @@ describe('registration', function () {
         ])
             ->set('fullname', 'Ghader Nasb')
             ->set('noc_code', 'afg')
+            ->set('date_of_birth', dobFor())
             ->set('gender', 'M')
             ->set('weight_category_id', $category->id)
             ->call('save')
@@ -251,6 +252,7 @@ describe('registration', function () {
         ])
             ->set('fullname', 'Intruder')
             ->set('noc_code', 'UZB')
+            ->set('date_of_birth', dobFor())
             ->set('weight_category_id', $theirs->id)
             ->call('save')
             ->assertHasErrors('weight_category_id');

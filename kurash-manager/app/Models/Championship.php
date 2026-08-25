@@ -29,7 +29,7 @@ class Championship extends Model
     /** @use HasFactory<ChampionshipFactory> */
     use HasFactory;
 
-    protected $fillable = ['title', 'location', 'starts_on', 'ends_on', 'genders', 'age_groups', 'archived_at', 'archived_by'];
+    protected $fillable = ['title', 'location', 'starts_on', 'ends_on', 'genders', 'age_groups', 'age_policy_version', 'archived_at', 'archived_by'];
 
     /**
      * Deliberately not fillable: athletes_numbered is how many accreditation
@@ -83,6 +83,33 @@ class Championship extends Model
      * @var list<string>
      */
     public const AGE_GROUPS = ['Senior', 'Junior', 'Cadet', 'Veteran'];
+
+    /**
+     * The year this championship counts as being held in.
+     *
+     * The IKA states age eligibility in birth years — "Cadets (14-15 years,
+     * born in 2012-2011 years)" — so every age decision needs one year to
+     * subtract from, and it has to be the same year for the whole event. An
+     * athlete must not change age group because a class ran past midnight on
+     * New Year's Eve, and a spreadsheet imported in January must be judged by
+     * the same year as the entries typed in December.
+     *
+     * Taken from the start date, which is the date organizers actually fill
+     * in; ends_on exists on the row but no screen writes it. A championship
+     * with no dates at all falls back to when the record was made, and then to
+     * this year — both are guesses, but they are guesses about an event that
+     * has not been given a date rather than about the rules.
+     */
+    public function competitionYear(): int
+    {
+        foreach ([$this->starts_on, $this->ends_on, $this->created_at] as $date) {
+            if ($date !== null) {
+                return (int) $date->year;
+            }
+        }
+
+        return (int) now()->year;
+    }
 
     /** @return list<string> */
     public function configuredAgeGroups(): array

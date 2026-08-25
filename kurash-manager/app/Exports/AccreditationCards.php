@@ -51,20 +51,95 @@ class AccreditationCards
 
     public static function forAthlete(Athlete $athlete): self
     {
+        $athlete->load(['weightCategory', 'ageCategory', 'championship']);
+
+        // One card, and the same rule as a batch: an athlete whose age has not
+        // been established is not credentialled. Here it empties the run, and
+        // the controller answers with the reason rather than handing over a
+        // blank page.
         return new self(
             $athlete->championship,
-            collect([$athlete->load('weightCategory')]),
+            self::credentialled($athlete) ? collect([$athlete]) : collect(),
             $athlete->fullname,
         );
     }
 
+    /** Is there anything to print? */
+    public function isEmpty(): bool
+    {
+        return $this->athletes->isEmpty();
+    }
+
     /**
+     * May this athlete be given a credential?
+     *
+     * Two conditions, and the second is not implied by the first. The entry
+     * must not break the age rules — and there must be a date of birth behind
+     * that answer at all.
+     *
+     * The second is what stops "no rule covers this" being mistaken for
+     * "checked and fine". A championship held before the earliest policy on
+     * file, or run in an age group an organizer named themselves, comes back
+     * from the policy as allowed-but-unjudged; those entries still print,
+     * because there is no rule they fail. An athlete nobody has recorded a
+     * birth date for does not, whatever year it is, because a card is the
+     * document that says the organisers established who this person is.
+     */
+    private static function credentialled(Athlete $athlete): bool
+    {
+        return $athlete->hasDateOfBirth() && $athlete->ageVerdict()->eligible;
+    }
+
+    /**
+     * The athletes a batch of cards is printed for.
+     *
+     * Athletes whose age has not been established are left out. A credential
+     * is the document that admits somebody to the venue, and the IKA rule is
+     * that an athlete who does not meet the age requirements is not admitted
+     * to competition — so a card printed for an entry nobody has checked
+     * asserts something the organisers have not established.
+     *
+     * Left out rather than refused for the whole batch, because these are
+     * printed in hundreds the day before an event: stopping the entire run
+     * over one incomplete entry would mean nobody gets a card. Who was left
+     * out is reported by excluded(), and the registration screen marks the
+     * same athletes so the desk can fix them before printing again.
+     *
      * @param  HasMany<Athlete, *>  $relation
      * @return Collection<int, Athlete>
      */
     private static function query($relation): Collection
     {
-        return $relation->with('weightCategory')->orderBy('noc_code')->orderBy('fullname')->get();
+        return $relation->with(['weightCategory', 'ageCategory', 'championship'])
+            ->orderBy('noc_code')
+            ->orderBy('fullname')
+            ->get()
+            ->filter(fn (Athlete $athlete) => self::credentialled($athlete))
+            ->values();
+    }
+
+    /**
+     * Whoever this batch could not print a card for, and why.
+     *
+     * @return Collection<int, array{athlete: Athlete, reason: string}>
+     */
+    public function excluded(): Collection
+    {
+        $printed = $this->athletes->pluck('id')->all();
+
+        return $this->championship->athletes()
+            ->with(['ageCategory', 'championship'])
+            ->when($this->athletes->isNotEmpty(), fn ($query) => $query->whereNotIn('id', $printed))
+            ->orderBy('noc_code')
+            ->orderBy('fullname')
+            ->get()
+            ->map(fn (Athlete $athlete) => ['athlete' => $athlete, 'verdict' => $athlete->ageVerdict()])
+            ->filter(fn (array $row) => ! self::credentialled($row['athlete']))
+            ->map(fn (array $row) => [
+                'athlete' => $row['athlete'],
+                'reason' => (string) ($row['verdict']->reason ?? __('Age not verified.')),
+            ])
+            ->values();
     }
 
     public function filename(): string

@@ -116,6 +116,7 @@ describe('the registration form', function () {
         ])
             ->set('fullname', 'Nowhere Man')
             ->set('noc_code', 'ZZZ')
+            ->set('date_of_birth', dobFor())
             ->set('weight_category_id', $this->class->id)
             ->call('save')
             ->assertHasErrors('noc_code');
@@ -131,6 +132,7 @@ describe('the registration form', function () {
         ])
             ->set('fullname', 'Nowhere Man')
             ->set('noc_code', 'zzz')
+            ->set('date_of_birth', dobFor())
             ->set('weight_category_id', $this->class->id)
             ->call('save')
             ->assertHasErrors('noc_code');
@@ -146,6 +148,7 @@ describe('the registration form', function () {
         ])
             ->set('fullname', 'Correctly Entered')
             ->set('noc_code', 'iri')
+            ->set('date_of_birth', dobFor())
             ->set('weight_category_id', $this->class->id)
             ->call('save')
             ->assertHasNoErrors();

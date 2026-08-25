@@ -151,6 +151,22 @@ class AppServiceProvider extends ServiceProvider
          */
         Gate::define('draw.override_format', fn (User $user): bool => $user->isAdmin());
 
+        /*
+         | Signing a youth into an adults' competition.
+         |
+         | Section 25(2) of the IKA rules: "With the sanction of the Chief
+         | Referee, youths (16-17 years) may also participate in adults'
+         | competitions." The clause names one office, and this gate names the
+         | same one — deliberately not `$user->isAdmin() || ...`, because an
+         | approval that any senior account could have given does not record
+         | who decided, which is the whole point of the rule naming somebody.
+         |
+         | Narrower than manage-competition on purpose: a supervisor runs the
+         | entry list, and admitting a minor to an adults' competition is not
+         | part of running an entry list.
+         */
+        Gate::define('athlete.sanction_age', fn (User $user): bool => $user->isChiefReferee());
+
         Gate::define('scoreboard.view', fn (User $user): bool => $user->canViewScoreboard());
 
         /*

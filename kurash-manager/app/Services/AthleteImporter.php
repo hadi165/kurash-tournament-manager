@@ -9,6 +9,7 @@ use App\Support\Gender;
 use App\Support\Import\AthleteImportPreview;
 use App\Support\Import\AthleteImportRow;
 use App\Support\Noc;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\IOFactory;
@@ -52,11 +53,12 @@ class AthleteImporter
         'weight' => ['weightcategory', 'weightclass', 'weight', 'category', 'class', 'kg'],
         'national_id' => ['nationalid', 'idnumber', 'passport', 'passportno', 'passportnumber', 'documentno'],
         'club' => ['club', 'team', 'society'],
+        'date_of_birth' => ['dateofbirth', 'dob', 'birthdate', 'birthday', 'born', 'dateofbirthddmmyyyy', 'birth'],
     ];
 
     /** The headings a downloaded template carries, in order. */
     public const TEMPLATE_HEADINGS = [
-        "Athlete's Name", 'NOC', 'Country', 'Gender', 'Weight Category', 'National ID', 'Club',
+        "Athlete's Name", 'NOC', 'Country', 'Gender', 'Weight Category', 'National ID', 'Club', 'Date of Birth',
     ];
 
     /**
@@ -222,6 +224,52 @@ class AthleteImporter
             ]));
         }
 
+        /*
+         | The date of birth, and the age group it puts the athlete in.
+         |
+         | Judged here rather than after the write, because a workbook is how a
+         | whole delegation arrives and an age-group mistake in one is
+         | systematic — a federation sends its juniors in the cadets' file and
+         | every row is wrong the same way. Caught at parse time, the official
+         | sees it before anything is registered.
+         |
+         | An unreadable date fails the row. A missing one does not: the column
+         | is new, files prepared before it existed have no such column at all,
+         | and refusing those outright would make the importer useless to
+         | anybody mid-season. The athlete registers without a date and shows
+         | as "Age not verified" until somebody records one, which is the same
+         | position every athlete already in the database is in.
+         */
+        $dateOfBirth = null;
+
+        if ($raw['date_of_birth'] !== '') {
+            $dateOfBirth = $this->readDateOfBirth($raw['date_of_birth']);
+
+            if ($dateOfBirth === null) {
+                $row->fail(__('":value" is not a date this importer can read. Use YYYY-MM-DD.', [
+                    'value' => $raw['date_of_birth'],
+                ]));
+            }
+        }
+
+        if ($dateOfBirth !== null && $gender !== null) {
+            $verdict = app(AgeEligibilityPolicy::class)->check(
+                dateOfBirth: $dateOfBirth,
+                gender: $gender,
+                ageGroup: (string) ($ageCategory->age_group ?? ''),
+                competitionYear: $ageCategory->championship->competitionYear(),
+                version: app(AgeEligibilityPolicy::class)->versionForChampionship($ageCategory->championship),
+            );
+
+            // A sanction is a decision taken by a named official about one
+            // athlete. It cannot arrive in a spreadsheet, so a row that would
+            // need one is refused here and the Chief Referee grants it on the
+            // entry list afterwards.
+            if (! $verdict->eligible) {
+                $row->fail((string) $verdict->reason);
+            }
+        }
+
         if (! $row->isReady()) {
             return $row;
         }
@@ -253,10 +301,77 @@ class AthleteImporter
             'noc_name' => $raw['noc_name'] !== '' ? $raw['noc_name'] : null,
             'national_id' => $raw['national_id'] !== '' ? $raw['national_id'] : null,
             'club' => $raw['club'] !== '' ? $raw['club'] : null,
+            'date_of_birth' => $dateOfBirth?->toDateString(),
             'weight_category_id' => $class?->id,
         ];
 
         return $row;
+    }
+
+    /**
+     * One cell, turned into a date of birth or into nothing.
+     *
+     * Spreadsheets are where dates go wrong. Three shapes arrive in practice
+     * and all three are accepted:
+     *
+     *   a real Excel date cell, which reads as a serial number of days
+     *   an ISO string, which is what this system's own export writes
+     *   a written date, which is what somebody typing into a cell produces
+     *
+     * Ambiguous numeric forms are deliberately NOT guessed at: 03/04/2009 is
+     * March in one country and April in another, and an importer that picks
+     * one silently will eventually put an athlete in the wrong age group over
+     * a slash. Those fail the row and ask for YYYY-MM-DD.
+     */
+    private function readDateOfBirth(string $value): ?CarbonImmutable
+    {
+        $value = trim($value);
+
+        if ($value === '') {
+            return null;
+        }
+
+        // An Excel date cell read as a raw value: days since 1899-12-30.
+        if (preg_match('/^\d+(\.\d+)?$/', $value) === 1) {
+            $serial = (float) $value;
+
+            // A four-digit number is a year somebody typed, not a serial —
+            // 2009 as a serial would be 1905. Years are accepted on their own
+            // because birth-year rules are what the age groups are stated in.
+            if ($serial >= 1900 && $serial <= 2200) {
+                return CarbonImmutable::create((int) $serial, 1, 1) ?: null;
+            }
+
+            if ($serial < 1 || $serial > 100000) {
+                return null;
+            }
+
+            return CarbonImmutable::create(1899, 12, 30)?->addDays((int) $serial);
+        }
+
+        // Unambiguous only. Anything with slashes or dots is refused above by
+        // falling through to the parse, which is why the accepted list is
+        // explicit rather than left to a general date parser.
+        foreach (['Y-m-d', 'd M Y', 'j M Y', 'd F Y', 'j F Y', 'Y/m/d'] as $format) {
+            try {
+                $parsed = CarbonImmutable::createFromFormat('!'.$format, $value);
+            } catch (Throwable) {
+                // Carbon throws on a value that does not fit the format rather
+                // than returning false. Caught per format, because "does not
+                // match this one" is the normal case for five of the six and
+                // must not end the search — or the import.
+                continue;
+            }
+
+            // The round trip is what does the rejecting: Carbon will happily
+            // read 2009-13-45 and roll it forward, and a date that does not
+            // print back exactly as it arrived was not the date it claimed.
+            if ($parsed !== null && $parsed->format($format) === $value) {
+                return $parsed;
+            }
+        }
+
+        return null;
     }
 
     /**

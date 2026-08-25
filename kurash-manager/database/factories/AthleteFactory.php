@@ -25,6 +25,11 @@ class AthleteFactory extends Factory
             'gender' => 'M',
             'noc_code' => fake()->randomElement(['UZB', 'KAZ', 'IRI', 'TJK', 'TKM', 'IND']),
             'noc_name' => 'Testland',
+            // A senior in any competition year the tests run in: the bands are
+            // stated in competition age, so a fixed offset from the current
+            // year keeps a factory athlete eligible as the years pass. Tests
+            // about a particular band set the date themselves.
+            'date_of_birth' => now()->subYears(25)->startOfYear()->toDateString(),
             'weighin_status' => 'pass',
         ];
     }
