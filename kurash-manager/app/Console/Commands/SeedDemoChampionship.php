@@ -11,9 +11,10 @@ use App\Models\User;
 use App\Models\WeightCategory;
 use App\Services\BoutAdvancer;
 use App\Services\BoutScorer;
-use App\Services\BracketGenerator;
+use App\Services\DrawGenerator;
 use App\Services\FightOrderScheduler;
 use App\Support\DemoRoster;
+use App\Support\TournamentFormat;
 use Illuminate\Console\Command;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -40,7 +41,10 @@ class SeedDemoChampionship extends Command
                             {--per-class=14 : Athletes entered in each weight class}
                             {--mats=4 : How many mats}
                             {--stage=running : registered, weighed, drawn, running or finished}
-                            {--fresh : Delete any existing championship with this title first}';
+                            {--fresh : Delete any existing championship with this title first}
+                            {--fresh-all : Delete every championship in the database first}
+                            {--small-classes=3 : Weight classes given a field of 2-5, which the IKA rule runs as a round robin}
+                            {--reject-rate=8 : One athlete in this many is entered wrongly, on age or on weight}';
 
     protected $description = 'Fill a championship with demonstration data';
 
@@ -65,7 +69,9 @@ class SeedDemoChampionship extends Command
         $title = (string) $this->option('title');
         $perClass = max(2, (int) $this->option('per-class'));
 
-        if ($this->option('fresh')) {
+        if ($this->option('fresh-all')) {
+            $this->deleteAll();
+        } elseif ($this->option('fresh')) {
             $this->deleteExisting($title);
         }
 
@@ -89,8 +95,10 @@ class SeedDemoChampionship extends Command
         $categories = $this->buildCategories($championship);
         $this->line(sprintf('  %d weight classes', $categories->count()));
 
-        $athletes = $this->register($championship, $categories, $perClass);
-        $this->line(sprintf('  %d athletes registered', $athletes));
+        $entry = $this->register($championship, $categories, $perClass);
+        $this->line(sprintf('  %d athletes registered', $entry['entered']));
+        $this->line(sprintf('  %d class(es) given a round-robin field of 2-5', $entry['small']));
+        $this->line(sprintf('  %d entered in the wrong age group', $entry['mis_aged']));
 
         $mats = $this->buildMats($championship, max(1, (int) $this->option('mats')));
         $this->line(sprintf('  %d mats', $mats->count()));
@@ -101,8 +109,9 @@ class SeedDemoChampionship extends Command
         }
 
         if (in_array($stage, ['drawn', 'running', 'finished'], true)) {
-            $drawn = $this->drawAndGenerate($categories);
-            $this->line(sprintf('  %d brackets drawn', $drawn));
+            $draw = $this->drawAndGenerate($categories);
+            $this->line(sprintf('  %d classes drawn — %d as a round robin, %d as a bracket', $draw['drawn'], $draw['round_robin'], $draw['drawn'] - $draw['round_robin']));
+            $this->line(sprintf('  %d athlete(s) left out of the draw on age or weight', $draw['excluded']));
 
             $order = app(FightOrderScheduler::class)->schedule($championship);
             $this->line(sprintf('  fight order built: %d contests', $order['scheduled']));
@@ -130,23 +139,43 @@ class SeedDemoChampionship extends Command
         return self::SUCCESS;
     }
 
+    /**
+     * Clear the database of championships entirely.
+     *
+     * Separate from --fresh, which replaces one by name. This is the "start
+     * again" switch for a development machine, and it is deliberately not the
+     * default: a demonstration set is usually built alongside real work, not
+     * on top of it.
+     */
+    private function deleteAll(): void
+    {
+        $all = Championship::query()->get();
+
+        $all->each(fn (Championship $existing) => $this->purge($existing));
+
+        $this->line(sprintf('  %d existing championship(s) removed', $all->count()));
+    }
+
     private function deleteExisting(string $title): void
     {
-        Championship::where('title', $title)->get()->each(function (Championship $existing) {
-            // Reopen first: the archive guard refuses to delete anything under
-            // a closed championship, which includes a demo one closed by hand.
-            if ($existing->isArchived()) {
-                $existing->reopen(null, 'Replaced by a fresh demonstration set');
-            }
+        Championship::where('title', $title)->get()->each(fn (Championship $existing) => $this->purge($existing));
+    }
 
-            $existing->bouts()->delete();
-            $existing->athletes()->delete();
-            $existing->courts()->delete();
-            $existing->ageCategories()->each(fn (AgeCategory $c) => $c->weightCategories()->delete());
-            $existing->ageCategories()->delete();
-            $existing->events()->delete();
-            $existing->delete();
-        });
+    private function purge(Championship $existing): void
+    {
+        // Reopen first: the archive guard refuses to delete anything under
+        // a closed championship, which includes a demo one closed by hand.
+        if ($existing->isArchived()) {
+            $existing->reopen(null, 'Replaced by a fresh demonstration set');
+        }
+
+        $existing->bouts()->delete();
+        $existing->athletes()->delete();
+        $existing->courts()->delete();
+        $existing->ageCategories()->each(fn (AgeCategory $c) => $c->weightCategories()->delete());
+        $existing->ageCategories()->delete();
+        $existing->events()->delete();
+        $existing->delete();
     }
 
     /** @return Collection<int, WeightCategory> */
@@ -188,12 +217,43 @@ class SeedDemoChampionship extends Command
         return $categories;
     }
 
-    /** @param  Collection<int, WeightCategory>  $categories */
-    private function register(Championship $championship, Collection $categories, int $perClass): int
+    /**
+     * Enter the athletes, most of them correctly.
+     *
+     * Two things here are deliberately uneven, because a demonstration where
+     * everything is uniform hides the two screens an official most needs to
+     * recognise.
+     *
+     * A handful of classes are given a field of two to five. The IKA rule runs
+     * those as a round robin rather than a bracket, so the draw screen, the
+     * ceremony board, the standings table and the round-robin sheet all have
+     * something real to render — and the rest of the championship is still a
+     * bracket beside them.
+     *
+     * And roughly one athlete in `--reject-rate` is entered wrongly on their
+     * age: born too early or too late for the division they are in. They
+     * register — the seeder writes rows directly, as a federation's own
+     * spreadsheet import would — and the age check then refuses them at the
+     * draw, which is where an official actually meets the problem.
+     *
+     * @param  Collection<int, WeightCategory>  $categories
+     * @return array{entered:int, small:int, mis_aged:int}
+     */
+    private function register(Championship $championship, Collection $categories, int $perClass): array
     {
         $nocs = DemoRoster::nocs();
         $taken = [];
-        $count = 0;
+        $entered = 0;
+        $misAged = 0;
+
+        $rejectRate = max(2, (int) $this->option('reject-rate'));
+        $year = $championship->competitionYear();
+
+        // Which classes run as a round robin. Taken from the front of a
+        // shuffled list so the small fields are scattered across both
+        // competitions rather than landing on the heaviest few.
+        $smallCount = max(0, (int) $this->option('small-classes'));
+        $small = $categories->shuffle()->take($smallCount)->pluck('id')->flip();
 
         $bar = $this->output->createProgressBar($categories->count());
         $bar->start();
@@ -204,9 +264,22 @@ class SeedDemoChampionship extends Command
             // table worth looking at.
             shuffle($nocs);
 
-            DB::transaction(function () use ($category, $championship, $perClass, $nocs, &$taken, &$count) {
-                foreach (range(1, $perClass) as $i) {
+            $size = $small->has($category->id) ? random_int(2, 5) : $perClass;
+
+            DB::transaction(function () use ($category, $championship, $size, $nocs, $year, $rejectRate, &$taken, &$entered, &$misAged) {
+                foreach (range(1, $size) as $i) {
                     $noc = $nocs[$i % count($nocs)];
+
+                    // Senior is 17-35 in competition age, so a birth year
+                    // between 18 and 34 years back is comfortably inside it.
+                    $wrongAge = random_int(1, $rejectRate) === 1;
+                    $age = $wrongAge
+                        ? (random_int(0, 1) === 1 ? random_int(14, 16) : random_int(37, 44))
+                        : random_int(18, 34);
+
+                    if ($wrongAge) {
+                        $misAged++;
+                    }
 
                     Athlete::register([
                         'championship_id' => $championship->id,
@@ -218,9 +291,10 @@ class SeedDemoChampionship extends Command
                         'noc_name' => DemoRoster::countryName($noc),
                         'club' => DemoRoster::club($noc),
                         'position_title' => 'Athlete',
+                        'date_of_birth' => sprintf('%d-%02d-%02d', $year - $age, random_int(1, 12), random_int(1, 28)),
                     ]);
 
-                    $count++;
+                    $entered++;
                 }
             });
 
@@ -230,7 +304,7 @@ class SeedDemoChampionship extends Command
         $bar->finish();
         $this->newLine();
 
-        return $count;
+        return ['entered' => $entered, 'small' => $smallCount, 'mis_aged' => $misAged];
     }
 
     /** @return Collection<int, Court> */
@@ -272,13 +346,45 @@ class SeedDemoChampionship extends Command
         }
     }
 
-    /** @param  Collection<int, WeightCategory>  $categories */
-    private function drawAndGenerate(Collection $categories): int
+    /**
+     * Draw every class that has a field left to draw.
+     *
+     * Through DrawGenerator rather than BracketGenerator, which is what makes
+     * a class of two to five come out as the round robin the IKA rule asks
+     * for. Asking the bracket generator directly would draw a tree for every
+     * class and refuse the small ones outright.
+     *
+     * Only athletes who pass *both* gates are given a number: the scale, and
+     * the age rules. That is the same order an accreditation desk works in,
+     * and it is what leaves the wrongly-entered athletes sitting in the entry
+     * list with a reason against them instead of seeded into a bracket.
+     *
+     * @param  Collection<int, WeightCategory>  $categories
+     * @return array{drawn:int, round_robin:int, excluded:int}
+     */
+    private function drawAndGenerate(Collection $categories): array
     {
         $drawn = 0;
+        $roundRobin = 0;
+        $excluded = 0;
 
         foreach ($categories as $category) {
-            $eligible = $category->athletes()->where('weighin_status', 'pass')->pluck('id')->shuffle();
+            $category->refresh();
+
+            $eligible = $category->athletes()
+                ->passedWeighIn()
+                ->get()
+                ->filter(function (Athlete $athlete) use (&$excluded) {
+                    if ($athlete->ageVerdict()->eligible) {
+                        return true;
+                    }
+
+                    $excluded++;
+
+                    return false;
+                })
+                ->pluck('id')
+                ->shuffle();
 
             if ($eligible->count() < 2) {
                 continue;
@@ -295,11 +401,16 @@ class SeedDemoChampionship extends Command
                 }
             });
 
-            app(BracketGenerator::class)->generate($category->refresh());
+            $result = app(DrawGenerator::class)->generate($category->refresh());
+
+            if ($result['format'] === TournamentFormat::RoundRobin) {
+                $roundRobin++;
+            }
+
             $drawn++;
         }
 
-        return $drawn;
+        return ['drawn' => $drawn, 'round_robin' => $roundRobin, 'excluded' => $excluded];
     }
 
     /**
