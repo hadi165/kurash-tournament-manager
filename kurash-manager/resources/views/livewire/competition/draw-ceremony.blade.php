@@ -75,8 +75,7 @@
             @if ($ceremony)
                 <a class="dc-home"
                    href="{{ route('entries.index', $championship) }}"
-                   title="{{ __('Back to the classes waiting to be drawn') }}"
-                   wire:navigate>
+                   title="{{ __('Back to the classes waiting to be drawn') }}">
                     <span aria-hidden="true">←</span>
                     {{ __('All Weights') }}
                 </a>

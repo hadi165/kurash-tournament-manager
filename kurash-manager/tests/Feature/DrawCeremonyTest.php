@@ -665,10 +665,18 @@ describe('finding the next class', function () {
         $championship = $this->category->ageCategory->championship;
 
         foreach ([User::factory()->official()->create(), User::factory()->create(['role' => 'admin'])] as $user) {
-            Livewire::actingAs($user)
+            $html = Livewire::actingAs($user)
                 ->test(DrawCeremony::class, ['weightCategory' => $this->category, 'ceremony' => true])
                 ->assertSee('All Weights')
-                ->assertSee(route('entries.index', $championship), false);
+                ->assertSee(route('entries.index', $championship), false)
+                ->html();
+
+            // This link crosses from the polling scoreboard document into the
+            // normal admin document. An SPA visit keeps the old Livewire poll
+            // and Alpine timers alive during that layout swap, leaving a blank
+            // page that only a refresh repairs. Exiting the board must replace
+            // the whole document.
+            expect($html)->not->toMatch('/class="dc-home"[^>]*wire:navigate/');
         }
     });
 
