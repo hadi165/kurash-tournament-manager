@@ -381,7 +381,10 @@ class MatControl extends Component
     }
 
     /**
-     * Jazzo — half the contest gone and neither athlete has scored.
+     * Jazzo — half the contest gone with nothing on the board at all.
+     *
+     * Nothing means no score AND no penalty. An athlete carrying a tanbeh or a
+     * madichal is in a contest that has had something happen in it.
      *
      * The browser notices, because the browser holds the clock, but it does not
      * decide: the halfway mark and the empty board are both checked again here
@@ -852,7 +855,10 @@ class MatControl extends Component
             // on the server when it does.
             'jazzoAt' => $bout !== null ? $scorer->jazzoAt($bout) : 0,
             'inJazzo' => (bool) $bout?->isInJazzo(),
-            'anyScore' => $tally['a']->hasScored() || $tally['b']->hasScored(),
+            // The domain rule, minus the clock the browser holds. This used to
+            // be `anyScore`, a score-only test the view combined itself — a
+            // second, weaker copy of a rule that lives in KurashScore.
+            'jazzoBoardIsClear' => $bout !== null && $scorer->jazzoBoardIsClear($bout, $tally),
             // Read once here rather than per render pass in the view, where it
             // would be a query sitting inside the markup.
             'totalRounds' => $bout === null

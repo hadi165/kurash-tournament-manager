@@ -53,7 +53,11 @@
              but it does not decide: the server checks the reading and the empty
              board again before it stops anything. --}}
         offerJazzo() {
-            if (@js($anyScore) || @js($inJazzo)) return
+            // The rule is the server's — jazzoBoardIsClear() is
+            // KurashScore's answer, not a score check repeated here. All this
+            // adds is the clock, which is the only thing the browser holds,
+            // and callJazzo() checks that again anyway.
+            if (! @js($jazzoBoardIsClear)) return
             if (this.left > this.jazzoAt) return
             this.stop()
             $wire.callJazzo(this.left)

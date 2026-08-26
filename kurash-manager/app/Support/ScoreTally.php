@@ -232,10 +232,32 @@ final readonly class ScoreTally
      | audit trail. It is no longer consulted by anything that ranks athletes.
      */
 
-    /** Any score at all on the board for this athlete — what jazzo asks about. */
+    /** Any score at all on the board for this athlete. */
     public function hasScored(): bool
     {
         return $this->khalol > 0 || $this->yonbosh > 0 || $this->chala > 0;
+    }
+
+    /**
+     * Anything at all against or for this athlete — what jazzo asks about.
+     *
+     * Scores AND penalties. Jazzo stops a contest in which nothing has
+     * happened, and a tanbeh is something happening: an athlete already
+     * carrying one has a contest with a record in it, whether or not that
+     * record put a number on the board.
+     *
+     * hasScored() alone was the test until 2026-08-26, which let jazzo be
+     * offered over a board showing a madichal — a penalty that transfers
+     * nothing, so it reached the halfway mark looking like an empty contest.
+     * Girrom and dakki were only hidden from the same bug because they end the
+     * contest or hand over a score on their way.
+     *
+     * Reads the folded tally, so annulled and superseded calls are already
+     * absent: KurashScore::liveCalls() never yields them.
+     */
+    public function hasAnyActiveCall(): bool
+    {
+        return $this->hasScored() || $this->penalties() > 0;
     }
 
     /** Total penalties of every grade, for the mat screen's summary line. */

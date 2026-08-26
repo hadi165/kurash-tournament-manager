@@ -482,6 +482,33 @@ class KurashScore
     }
 
     /**
+     * Is the board clear enough for jazzo — everything except the clock?
+     *
+     * Split from jazzoIsDue() so the mat screen can ask the same question the
+     * server will ask. The browser holds the clock and nothing else; it used to
+     * hold a second, weaker copy of this rule that looked only at scores, so
+     * the two could disagree about whether to offer the button.
+     *
+     * Nothing on the board means nothing at all: no score, and no penalty. An
+     * athlete carrying a tanbeh or a madichal is in a contest that has had
+     * something happen in it, and jazzo is for one that has not.
+     *
+     * Annulled, superseded and voided calls are already gone — the tally is
+     * folded from liveCalls(), which never yields them — so a contest whose
+     * only record was taken back is blank again and may be stopped.
+     *
+     * @param  array{a: ScoreTally, b: ScoreTally}  $tally
+     */
+    public function jazzoBoardIsClear(Bout $bout, array $tally): bool
+    {
+        if ($bout->jazzo_called_at !== null || $bout->isDecided()) {
+            return false;
+        }
+
+        return ! $tally['a']->hasAnyActiveCall() && ! $tally['b']->hasAnyActiveCall();
+    }
+
+    /**
      * Is this contest at the halfway mark with nothing on the board?
      *
      * Both halves are checked here rather than trusted from the browser: the
@@ -493,14 +520,7 @@ class KurashScore
      */
     public function jazzoIsDue(Bout $bout, array $tally, int $secondsLeft): bool
     {
-        if ($bout->jazzo_called_at !== null || $bout->isDecided()) {
-            return false;
-        }
-
-        if ($tally['a']->hasScored() || $tally['b']->hasScored()) {
-            return false;
-        }
-
-        return $secondsLeft <= $this->jazzoAt($bout);
+        return $this->jazzoBoardIsClear($bout, $tally)
+            && $secondsLeft <= $this->jazzoAt($bout);
     }
 }
