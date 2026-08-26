@@ -6,6 +6,7 @@ use App\Models\Athlete;
 use App\Models\Bout;
 use App\Models\BoutEvent;
 use App\Models\User;
+use App\Support\BoutDecision;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -30,6 +31,15 @@ class BoutAdvancer
         string $winType = 'khalol',
         ?User $user = null,
         string $source = 'operator',
+        /**
+         * The verdict that produced this winner, filed with the result.
+         *
+         * Null for the paths that do not go through the decision policy — a
+         * bye, a scoreboard webhook naming its own win type, a manual referee
+         * call. Those record what they know and the snapshot says so, rather
+         * than inventing a policy edition they never applied.
+         */
+        ?BoutDecision $decision = null,
     ): Bout {
         if (! in_array($winnerAthleteId, [$bout->athlete_a_id, $bout->athlete_b_id], true)) {
             throw new InvalidArgumentException(
@@ -52,7 +62,7 @@ class BoutAdvancer
             return $bout;
         }
 
-        return DB::transaction(function () use ($bout, $winnerAthleteId, $scores, $winType, $user, $source) {
+        return DB::transaction(function () use ($bout, $winnerAthleteId, $scores, $winType, $user, $source, $decision) {
             $before = $bout->only([
                 'winner_athlete_id', 'score_a', 'score_b', 'win_type', 'status',
             ]);
@@ -72,7 +82,7 @@ class BoutAdvancer
                 'win_type' => $winType,
                 'status' => Bout::STATUS_COMPLETED,
                 'is_bye' => false,
-                'frozen_snapshot' => $this->snapshot($bout, $winnerAthleteId),
+                'frozen_snapshot' => $this->snapshot($bout, $winnerAthleteId, $decision),
                 // What the clock read at the deciding moment, frozen. The live
                 // column keeps moving until the mat stops it, so it says what
                 // the clock is doing rather than what it said when the contest
@@ -278,7 +288,25 @@ class BoutAdvancer
      *
      * @return array<string, mixed>
      */
-    private function snapshot(Bout $bout, int $winnerAthleteId): array
+    /**
+     * The immutable record of a completed contest.
+     *
+     * The decision block is what makes a result defensible a year later: which
+     * edition of the rules was applied, which clause separated the athletes,
+     * and off which call. Without it, viewing a historical bout means
+     * re-deciding it under whatever policy ships today — and the tie-break has
+     * already changed once, on 2026-08-26, when an undocumented criterion was
+     * removed and the caution rule was corrected. A bout completed before that
+     * must keep reading as what it was decided by.
+     *
+     * Written into frozen_snapshot rather than into new columns because the
+     * column already exists, is already the immutable record, and is already
+     * cleared by the correction path — so a corrected bout cannot keep a
+     * decision that no longer describes it.
+     *
+     * @return array<string, mixed>
+     */
+    private function snapshot(Bout $bout, int $winnerAthleteId, ?BoutDecision $decision = null): array
     {
         $describe = fn (?Athlete $a) => $a === null ? null : [
             'id' => $a->id,
@@ -287,11 +315,12 @@ class BoutAdvancer
             'noc_code' => $a->noc_code,
         ];
 
-        return [
+        return array_filter([
             'recorded_at' => now()->toIso8601String(),
             'athlete_a' => $describe($bout->athleteA),
             'athlete_b' => $describe($bout->athleteB),
             'winner_athlete_id' => $winnerAthleteId,
-        ];
+            'decision' => $decision?->toArray(),
+        ], fn ($value) => $value !== null);
     }
 }

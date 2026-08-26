@@ -155,23 +155,34 @@ describe('the tie-break at time', function () {
      * handed theirs when blue was penalised. No counter on the board separates
      * them, which is exactly why origin is recorded.
      */
-    it('prefers the side that earned its scores', function () {
+    /**
+     * A Yonbosh thrown for beats a Yonbosh handed over by the opponent's Dakki.
+     *
+     * The federation's ruling. Origin ranks below count and above recency, so
+     * green's later automatic Yonbosh does not defeat blue's earlier thrown
+     * one — the last-appraisal rule is never reached.
+     */
+    it('prefers a technique-earned score over a later automatic one', function () {
         [$court, $bout] = boutOnMat();
 
         Livewire::test(MatControl::class, ['court' => $court])
             ->call('score', 'yonbosh', 'a', 200)  // blue throws for one
-            ->call('score', 'dakki', 'a', 180)    // blue penalised: green given one
+            ->call('score', 'dakki', 'a', 180)    // blue penalised: green given one, later
             ->call('finishOnTime');
 
         $bout->refresh();
+        $tally = app(KurashScore::class)->tally($bout, $bout->events()->get());
 
-        expect($bout->winner_athlete_id)->toBe($bout->athlete_a_id)
-            ->and($bout->win_type)->toBe('technique');
+        expect($tally['a']->earnedYonbosh)->toBe(1)
+            ->and($tally['b']->earnedYonbosh)->toBe(0)
+            // Blue threw for theirs, so blue wins despite green's coming last.
+            ->and($bout->winner_athlete_id)->toBe($bout->athlete_a_id)
+            ->and($bout->win_type)->toBe('technique_origin');
     });
 
     /**
-     * Level on scores and on how they were earned. Whoever was warned most
-     * recently loses.
+     * Level on appraisals with one warning each: the athlete holding the most
+     * recent warning loses. Blue was warned first, green last, so green loses.
      */
     it('falls to the latest warning when everything else is level', function () {
         [$court, $bout] = boutOnMat();
@@ -184,24 +195,29 @@ describe('the tie-break at time', function () {
         $bout->refresh();
 
         expect($bout->winner_athlete_id)->toBe($bout->athlete_a_id)
-            ->and($bout->win_type)->toBe('warnings');
+            ->and($bout->win_type)->toBe('latest_warning');
     });
 
-    it('prefers an unwarned athlete over one warned early', function () {
+    /**
+     * An unwarned athlete beats a warned one: with lastPenaltyAt zero, the
+     * warned athlete necessarily holds the most recent warning.
+     */
+    it('gives it to the unwarned athlete', function () {
         [$court, $bout] = boutOnMat();
 
         Livewire::test(MatControl::class, ['court' => $court])
             ->call('score', 'madichal', 'b', 230)
             ->call('finishOnTime');
 
-        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id);
+        expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id)
+            ->and($bout->win_type)->toBe('latest_warning');
     });
 
     /**
-     * Equal on the count and on how both were earned, so the contest goes to
-     * whoever scored last.
+     * Equal on value and on count, so clause (b) decides it: victory follows
+     * the last appraisal. Origin is not consulted.
      */
-    it('falls to the latest score when the counts and origins are level', function () {
+    it('falls to the last appraisal when the counts are level', function () {
         [$court, $bout] = boutOnMat();
 
         Livewire::test(MatControl::class, ['court' => $court])
@@ -210,7 +226,7 @@ describe('the tie-break at time', function () {
             ->call('finishOnTime');
 
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
-            ->and($bout->win_type)->toBe('latest_score');
+            ->and($bout->win_type)->toBe('last_appraisal');
     });
 
     /**
@@ -226,7 +242,7 @@ describe('the tie-break at time', function () {
             ->call('finishOnTime');
 
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id)
-            ->and($bout->win_type)->toBe('yonbosh');
+            ->and($bout->win_type)->toBe('higher_appraisal');
     });
 
     /**
@@ -596,15 +612,16 @@ describe('the worked examples from the rules', function () {
     });
 
     /**
-     * §10.4. Both hold one chala, but blue threw for theirs and green's exists
-     * only because blue was warned. Blue wins — despite carrying the warning.
+     * §10.4. Both hold one Chala; blue threw for theirs and green's exists only
+     * because blue was warned. Origin ranks, so blue wins — despite carrying
+     * the Tanbeh and despite green's Chala arriving later.
      */
-    it('prefers a technique-earned chala over one conceded through a warning', function () {
+    it('prefers a technique-earned chala over a conceded one', function () {
         [$court, $bout] = boutOnMat();
 
         Livewire::test(MatControl::class, ['court' => $court])
             ->call('score', 'chala', 'a', 210)    // blue throws for one
-            ->call('score', 'tanbeh', 'a', 150)   // and is warned: green given one
+            ->call('score', 'tanbeh', 'a', 150)   // and is warned: green given one, later
             ->call('finishOnTime');
 
         $bout->refresh();
@@ -614,8 +631,10 @@ describe('the worked examples from the rules', function () {
             ->and($tally['b']->chala)->toBe(1)
             ->and($tally['a']->earnedChala)->toBe(1)
             ->and($tally['b']->earnedChala)->toBe(0)
+            // Origin decides it: blue threw for theirs, so green's later
+            // automatic chala does not defeat it.
             ->and($bout->winner_athlete_id)->toBe($bout->athlete_a_id)
-            ->and($bout->win_type)->toBe('technique');
+            ->and($bout->win_type)->toBe('technique_origin');
     });
 });
 
@@ -637,7 +656,7 @@ describe('the priority table', function () {
             ->call('finishOnTime');
 
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
-            ->and($bout->win_type)->toBe('chala');
+            ->and($bout->win_type)->toBe('higher_appraisal');
     });
 });
 

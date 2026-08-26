@@ -23,13 +23,14 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $archived_at
  * @property array<int, mixed>|null $genders
  * @property array<int, mixed>|null $age_groups
+ * @property int|null $decision_policy_version
  */
 class Championship extends Model
 {
     /** @use HasFactory<ChampionshipFactory> */
     use HasFactory;
 
-    protected $fillable = ['title', 'location', 'starts_on', 'ends_on', 'genders', 'age_groups', 'age_policy_version', 'archived_at', 'archived_by'];
+    protected $fillable = ['title', 'location', 'starts_on', 'ends_on', 'genders', 'age_groups', 'age_policy_version', 'decision_policy_version', 'archived_at', 'archived_by'];
 
     /**
      * Deliberately not fillable: athletes_numbered is how many accreditation
