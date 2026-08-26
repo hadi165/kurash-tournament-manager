@@ -19,9 +19,10 @@ to see how a screen used to behave.
 | Match rules: khalol, yonbosh, chala, tanbeh, dakki, girrom, madichal, jazzo | Done |
 | Referee role, scoped to a mat and a board | Done |
 | Fight-order scheduling across mats | Done |
-| PDF and Excel exports | Not started |
+| PDF, CSV and Excel exports | Done — draw sheets, entry lists, results, certificates |
+| Dashboard | Done — one championship, live mats, blockers, medal leaders |
 
-1358 tests passing.
+1403 tests passing.
 
 ## Running it
 
