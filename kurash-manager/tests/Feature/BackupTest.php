@@ -1,5 +1,6 @@
 <?php
 
+use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\File;
 
 beforeEach(function () {
@@ -81,30 +82,44 @@ it('strips path separators out of a label', function () {
         ->and(basename($files[0]))->toContain('etcpasswd');
 })->skip(fn () => ! hasMysqldump(), 'mysqldump is not installed');
 
-it('keeps only the most recent backups', function () {
+/**
+ * The command used to prune to --keep=30. It does not any more, and this is the
+ * test that used to assert the opposite.
+ *
+ * Automatic deletion of backups was tidiness dressed as housekeeping. The three
+ * times the Kurash database has been emptied, what saved it was an older backup
+ * nobody had planned to need — and a retention window is exactly what would
+ * have thrown that away. Backups are now removed by a person who has decided to
+ * remove them.
+ */
+it('never deletes an existing backup', function () {
     foreach (range(1, 4) as $i) {
         $this->artisan('kurash:backup', [
             '--path' => $this->backupPath,
-            '--keep' => 2,
             '--label' => "run{$i}",
         ])->assertExitCode(0);
 
-        // Age each file once it exists, so the run just made is always the
-        // newest and "oldest" is unambiguous. Backing the timestamps into the
-        // past rather than the future is what makes that true.
         $created = File::glob($this->backupPath."/*run{$i}*");
         expect($created)->toHaveCount(1);
+
+        // Age each file so any retention rule would have something to discard.
         touch($created[0], time() - (100 - $i * 10));
     }
 
-    $remaining = File::glob($this->backupPath.'/kurash-*.sql.gz');
+    $remaining = array_map('basename', File::glob($this->backupPath.'/kurash-*.sql.gz'));
+    sort($remaining);
 
-    expect($remaining)->toHaveCount(2);
+    expect($remaining)->toHaveCount(4);
 
-    // …and they are the two most recent, not an arbitrary pair.
-    $names = array_map('basename', $remaining);
-    sort($names);
-
-    expect($names[0])->toContain('run3')
-        ->and($names[1])->toContain('run4');
+    foreach (range(1, 4) as $i) {
+        expect(implode(' ', $remaining))->toContain("run{$i}");
+    }
 })->skip(fn () => ! hasMysqldump(), 'mysqldump is not installed');
+
+/** And there is no option left that could be asked to delete one. */
+it('offers no retention option at all', function () {
+    $definition = $this->app->make(Kernel::class)
+        ->all()['kurash:backup']->getDefinition();
+
+    expect($definition->hasOption('keep'))->toBeFalse();
+});

@@ -17,12 +17,17 @@ use Symfony\Component\Process\Process;
  *
  * Run it before and after each competition session:
  *   php artisan kurash:backup --label=before-session-2
+ *
+ * Nothing here deletes a backup. There was a --keep=30 that pruned older files,
+ * and it was a liability dressed as tidiness: the three times this database has
+ * been emptied, the thing that saved it was an old backup nobody had planned to
+ * need. Disk is cheaper than a competition's weigh-ins. Old backups are removed
+ * by a person who has decided to remove them.
  */
 class BackupDatabase extends Command
 {
     protected $signature = 'kurash:backup
                             {--label= : Added to the filename, e.g. before-session-2}
-                            {--keep=30 : How many backups to retain}
                             {--path= : Where to write (defaults to storage/app/backups)}';
 
     protected $description = 'Dump the database to a compressed, timestamped file';
@@ -70,8 +75,6 @@ class BackupDatabase extends Command
 
         $this->info("Backed up to {$target} (".number_format($size / 1024, 1).' KiB)');
 
-        $this->prune($directory, (int) $this->option('keep'));
-
         return self::SUCCESS;
     }
 
@@ -108,26 +111,5 @@ class BackupDatabase extends Command
         }
 
         return true;
-    }
-
-    private function prune(string $directory, int $keep): void
-    {
-        if ($keep < 1) {
-            return;
-        }
-
-        $backups = collect(File::glob(rtrim($directory, '/').'/kurash-*.sql.gz'))
-            ->sortByDesc(fn (string $path) => File::lastModified($path))
-            ->values();
-
-        $stale = $backups->slice($keep);
-
-        foreach ($stale as $path) {
-            File::delete($path);
-        }
-
-        if ($stale->isNotEmpty()) {
-            $this->line("Removed {$stale->count()} backup(s) beyond the most recent {$keep}.");
-        }
     }
 }

@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "Bash(php artisan migrate:fresh *)",
+      "Bash(php artisan migrate:refresh *)",
+      "Bash(php artisan migrate:reset *)",
+      "Bash(php artisan migrate:rollback *)",
+      "Bash(php artisan db:wipe *)",
+      "Bash(php artisan db:seed *)",
+      "Bash(artisan migrate:fresh *)",
+      "Bash(artisan migrate:refresh *)",
+      "Bash(artisan migrate:reset *)",
+      "Bash(artisan migrate:rollback *)",
+      "Bash(artisan db:wipe *)",
+      "Bash(./dev.sh reset *)",
+      "Bash(dev.sh reset *)",
+      "Bash(mysql *)",
+      "Bash(mariadb *)",
+      "Bash(mysqladmin *)",
+      "Bash(docker exec *)",
+      "Bash(docker-compose exec *)",
+      "Bash(docker compose exec *)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/block-destructive-db.sh\"",
+            "timeout": 10,
+            "statusMessage": "Checking for destructive database commands"
+          }
+        ]
+      }
+    ]
+  }
+}

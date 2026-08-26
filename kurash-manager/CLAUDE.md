@@ -22,6 +22,89 @@ root, along with its SQLite export in `data/`, its acceptance scripts in
 together with the `kurash:import-legacy` command that read the export. Recover
 any of it from git history if you ever need to know what an old column meant.
 
+## Database safety — absolute
+
+The competition database has been emptied three times. Twice by a
+`migrate:fresh` aimed at what somebody believed was a scratch database, once by
+an automated agent running a script it believed was harmless. Each time the
+`users` table went with it: referees, officials, the administrator. Nothing
+regenerates those — they are typed in by hand and their passwords survive only
+as hashes. Each time the only thing that saved the event was a backup that
+happened to exist.
+
+These are rules, not preferences:
+
+- **Never run a destructive database command.** `migrate:fresh`,
+  `migrate:refresh`, `migrate:reset`, `migrate:rollback`, `db:wipe`, `db:seed`,
+  `DROP`, `TRUNCATE`, `DELETE FROM`. Plain `migrate` is fine and is the only
+  schema command you need.
+- **Never point the test configuration at the application database.** Not to
+  reproduce something, not "just this once", not with `--filter` limiting it to
+  one test. The suite drops and re-migrates on every test.
+- **Never delete, truncate, recreate or reseed the `users` table.**
+- **Never treat local or development data as disposable.** `APP_ENV=local` on
+  this project is the machine that runs the competition, with the day's
+  weigh-ins in it.
+- **Ask before any database reset, even when a backup exists.** A backup makes
+  a reset recoverable, not correct.
+- **Never run a destructive command against `kurash` to test a safeguard.**
+  Name a database that does not exist instead, so a broken guard fails to
+  connect rather than succeeding.
+
+Rebuilding a local database, when that is genuinely wanted, has exactly one
+path: `./scripts/reset-local-database.sh`. It backs up, exports the accounts
+separately, verifies both, requires a person to type the database name at a
+terminal, rebuilds, restores the accounts and checks the count came back. It
+refuses when stdin is not a TTY, so no agent and no CI job can run it, and it
+has no `--force`. `./dev.sh reset` now refuses and points at it.
+
+**None of the above is what stops you.** Instructions in this file are
+supplementary; three incidents happened with a model that had read them. The
+enforcement is technical and is in four places:
+
+| Layer | Where | Stops |
+|---|---|---|
+| Deny rules | `.claude/settings.json` | the named commands, typed directly |
+| Command hook | `.claude/hooks/block-destructive-db.sh` | destructive SQL *anywhere* in a Bash command — inside `docker exec`, `bash -c`, a heredoc |
+| Runtime guard | `App\Support\DatabaseGuard` | any destructive Artisan command, and the whole test suite, unless `APP_ENV=testing` **and** the resolved database ends in `_test` |
+| Credentials | separate grants, see `.env.example` | the test credential reaching `kurash` at all |
+
+`DatabaseGuard` reads Laravel's **resolved** configuration, never `getenv()`.
+PHPUnit's `<env>` elements do not overwrite a variable already set in the
+process environment, so a stray exported `DB_DATABASE` gives you a suite that
+reads `kurash_test` in `phpunit.xml` while connecting to `kurash`. Asking the
+config for the name the PDO connection will actually use is what closes that;
+asking the environment reproduces it.
+
+Backups live in `kurash-manager/storage/app/backups`, on the host filesystem —
+not in `/tmp`, not inside the Docker container. **Nothing deletes them
+automatically**; `kurash:backup` used to prune to 30 and no longer does.
+
+To recover the accounts from a backup (this procedure has been used, and works):
+
+```sh
+# 1. Load the backup into a scratch database — never over the live one.
+docker exec kurash-mariadb mariadb -uroot -p<root> \
+    -e "DROP DATABASE IF EXISTS kurash_rescue; CREATE DATABASE kurash_rescue;"
+zcat storage/app/backups/<file>.sql.gz \
+    | docker exec -i kurash-mariadb mariadb -uroot -p<root> kurash_rescue
+
+# 2. Look at what is in there before trusting it.
+docker exec kurash-mariadb mariadb -uroot -p<root> kurash_rescue \
+    -e "SELECT id,name,email,role FROM users ORDER BY id;"
+
+# 3. Copy the accounts across. UPDATE row 1 in place rather than deleting it:
+#    bout_events.user_id is ON DELETE SET NULL, and bout_events is append-only,
+#    so a delete silently orphans every recorded result.
+docker exec kurash-mariadb mariadb -uroot -p<root> -e "
+  SET FOREIGN_KEY_CHECKS=0;
+  INSERT INTO kurash.users SELECT * FROM kurash_rescue.users;
+  UPDATE kurash.users SET scoreboard_championship_id = NULL;
+  SET FOREIGN_KEY_CHECKS=1;"
+
+# 4. Check the count, then drop the scratch database.
+```
+
 ## Checks before committing
 
 ```
