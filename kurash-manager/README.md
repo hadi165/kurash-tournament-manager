@@ -1,7 +1,8 @@
 # Kurash Competition Manager — Laravel
 
-The rebuild of the PHP MVP in `../app`. That folder stays running and is the
-functional reference: every screen ported here is checked against it.
+The rebuild of the flat-PHP MVP this system replaces. That application has
+been removed from the repository; recover it from git history if you ever need
+to see how a screen used to behave.
 
 **Stack:** Laravel 13 · Livewire 4 · Flux UI · Tailwind 4 · MariaDB 10.11 · Pest 4
 
@@ -12,7 +13,6 @@ functional reference: every screen ported here is checked against it.
 | Auth, sessions, CSRF | Done — from the Livewire starter kit |
 | Schema and models | Done |
 | Bracket engine | Done |
-| Legacy import | Done, verified against the real database |
 | Screens: championships, categories, registration, weigh-in, draw, bracket, medals | Done |
 | Roles and the manage-competition gate | Done |
 | Scoreboard integration | Done — push, result webhook, mats screen |
@@ -21,7 +21,7 @@ functional reference: every screen ported here is checked against it.
 | Fight-order scheduling across mats | Done |
 | PDF and Excel exports | Not started |
 
-661 tests passing.
+1358 tests passing.
 
 ## Running it
 
@@ -35,7 +35,7 @@ migrations, creates an administrator if none exists, and serves the app on
 
 ```sh
 ./dev.sh stop      # stop the app and the database
-./dev.sh reset     # wipe the database and re-import the legacy data
+./dev.sh reset     # back up, wipe, refill with demo data (accounts are kept)
 ```
 
 The database runs in Docker so it matches the MariaDB on the DirectAdmin host;
@@ -59,11 +59,6 @@ php artisan serve
 ```
 </details>
 
-The host PHP has `pdo_mysql` but no `pdo_sqlite`, and the stock `php:8.3-cli`
-image has the reverse, so a dev container with both lives in
-`../tools/Dockerfile.dev`. Only the legacy import needs it —
-`sudo apt install php8.3-sqlite3` removes the need entirely.
-
 Tests need a second database, created once:
 
 ```sh
@@ -77,22 +72,18 @@ Tests run against MariaDB rather than sqlite on purpose. The schema leans on
 CHECK constraints and foreign keys, and sqlite does not enforce them — passing
 tests there would prove less than they appear to.
 
-## Importing the old data
+## Demonstration data
 
 ```sh
-docker build -t kurash-dev:php83 -f ../tools/Dockerfile.dev ../tools
-
-docker run --rm --network host -v "$PWD/..":/proj -w /proj/kurash-manager \
-    -u "$(id -u):$(id -g)" -e HOME=/tmp \
-    -e DB_HOST=127.0.0.1 -e DB_PORT=3307 -e DB_DATABASE=kurash \
-    -e DB_USERNAME=kurash -e DB_PASSWORD=devpass \
-    kurash-dev:php83 php artisan kurash:import-legacy /proj/data/kurash.db --fresh
+php artisan kurash:demo --fresh-all
 ```
 
-Add `--dry-run` to see the counts without writing. Bouts are deliberately not
-imported — the old match rows had no reliable forward links, so importing them
-would carry the broken bracket across. Regenerate brackets from the drawn
-athletes instead.
+Builds a whole championship to look at: every weight class entered, weighed,
+drawn and part-fought, with a contest live on each mat so the mat screen and
+the venue displays have something to show. `--stage` stops it earlier
+(`registered`, `weighed`, `drawn`, `running`, `finished`), and `--per-class`
+sets the size of each field. Nothing in the Pest suite depends on it — it
+exists to be demonstrated and thrown away.
 
 ## The bracket engine
 

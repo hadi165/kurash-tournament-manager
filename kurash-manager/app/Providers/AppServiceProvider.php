@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\WeightCategory;
 use App\Observers\ArchivedChampionshipGuard;
 use App\Observers\BoutObserver;
+use App\Observers\DisplayContentObserver;
 use App\Services\Scoreboard\FakeScoreboardDriver;
 use App\Services\Scoreboard\HttpScoreboardDriver;
 use App\Services\Scoreboard\NullScoreboardDriver;
@@ -37,6 +38,14 @@ class AppServiceProvider extends ServiceProvider
         // Every write to a bout invalidates the display screens for its
         // championship, whatever caused it.
         Bout::observe(BoutObserver::class);
+
+        // And so does every write that changes what those screens say without
+        // touching a bout: a mat renamed or taken out of service, an athlete's
+        // name or NOC corrected, a weight class relabelled, the single athlete
+        // in a one-entry class placed.
+        foreach ([Athlete::class, Court::class, WeightCategory::class] as $model) {
+            $model::observe(DisplayContentObserver::class);
+        }
 
         // An archived championship is read-only. Enforced here rather than in
         // each screen, so a mutation path added later inherits the guard

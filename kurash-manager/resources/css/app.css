@@ -88,7 +88,13 @@
     --ground: #f6f8f7;
     --surface: #ffffff;
     --ink: #16211d;
-    --muted: #6b7a74;
+
+    /* Measured against `ground`, not `surface`. The old #6b7a74 cleared 4.5:1
+       on white by 0.01 and then failed at 4.22:1 the moment the same text sat
+       in a tile — which is where most muted text actually sits: stat labels,
+       mat tiles, table headings. This clears AA on both (4.71:1 on ground,
+       5.03:1 on surface) and is the smallest step that does. */
+    --muted: #65726c;
 
     /* Two line weights, and only two: `line` draws a border, `line-soft`
        separates rows and fills a hover. */

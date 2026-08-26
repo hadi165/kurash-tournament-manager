@@ -1,5 +1,5 @@
-# Live data. The database lives outside the web root — never commit it.
-data/
+# Local database files. This project runs on MariaDB, but Laravel's composer
+# scripts still touch database/database.sqlite on install.
 *.db
 *.db-wal
 *.db-shm

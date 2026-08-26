@@ -2,176 +2,147 @@
 
 namespace App\Livewire\Competition;
 
-use App\Models\Athlete;
 use App\Models\Championship;
-use App\Models\WeightCategory;
+use App\Services\DashboardSnapshot;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 /**
- * The first screen after signing in.
+ * The first screen after signing in, and the desk's command centre.
  *
- * Written to answer one question — what needs doing next — rather than to
- * display totals. Running an event is a sequence (register, weigh in, draw,
- * schedule, fight), and the common failure is not knowing which step a weight
- * class is stuck on. So each championship reports its blockers, and the
- * numbers are there to support them.
+ * One championship at a time. The screen this replaced summarised every
+ * championship ever run, which meant the competition happening in the hall
+ * appeared somewhere down a list, and each of the others cost the same handful
+ * of queries to render something nobody was going to read.
+ *
+ * It answers, in this order: what needs attention, what is on each mat, what is
+ * called next, how far registration and the competition have got, what has been
+ * decided, and which screen to put on the projector. The full tables stay on
+ * their own screens — this page is what an operator glances at between
+ * contests, not somewhere to work from.
  */
 class Dashboard extends Component
 {
+    /**
+     * Which championship is on screen, carried in the URL.
+     *
+     * In the URL so the desk can keep the right competition on a bookmark and
+     * a second screen, and so a link to "the dashboard for this championship"
+     * exists at all. Browser-owned like every Livewire property, so it is
+     * resolved through Championship::open() and never trusted as a key.
+     */
+    #[Url(as: 'championship', except: null)]
+    public ?int $selected = null;
+
     public function render(): View
     {
-        $championships = Championship::query()
-            ->withCount('athletes')
-            ->orderByDesc('starts_on')
-            ->orderByDesc('id')
-            ->get()
-            ->map(fn (Championship $c) => $this->summarise($c));
+        $open = $this->openChampionships();
+        $championship = $this->currentChampionship($open);
+
+        if ($championship === null) {
+            return view('livewire.competition.dashboard', [
+                'championship' => null,
+                'openChampionships' => $open,
+            ])->title(__('Dashboard'));
+        }
+
+        $snapshot = app(DashboardSnapshot::class);
 
         return view('livewire.competition.dashboard', [
-            'championships' => $championships,
+            'championship' => $championship,
+            'openChampionships' => $open,
+            'status' => $snapshot->status($championship),
+            'attention' => $snapshot->attention($championship),
+            'comingUp' => $snapshot->comingUp($championship),
+            'hasRunningOrder' => $snapshot->hasRunningOrder($championship),
+            'workflow' => $snapshot->athleteWorkflow($championship),
+            'progress' => $snapshot->boutProgress($championship),
+            'medals' => $snapshot->medalSnapshot($championship),
+            'counts' => $snapshot->counts($championship),
         ])->title(__('Dashboard'));
     }
 
     /**
-     * @return array<string, mixed>
+     * Every championship still being run.
+     *
+     * Archived ones are excluded throughout. An archive is a finished record
+     * that nothing may write to — see ArchivedChampionshipGuard — so a screen
+     * whose whole purpose is "what do I do next" has nothing to say about one.
+     *
+     * @return Collection<int, Championship>
      */
-    private function summarise(Championship $championship): array
+    private function openChampionships(): Collection
     {
-        $categories = WeightCategory::query()
-            ->whereHas('ageCategory', fn ($q) => $q->where('championship_id', $championship->id))
-            ->withCount([
-                'athletes',
-                'bouts',
-            ])
+        return Championship::open()
+            ->orderByDesc('starts_on')
+            ->orderByDesc('id')
             ->get();
-
-        $passed = Athlete::query()
-            ->where('championship_id', $championship->id)
-            ->where('weighin_status', 'pass')
-            ->count();
-
-        $awaitingScale = Athlete::query()
-            ->where('championship_id', $championship->id)
-            ->where('weighin_status', 'pending')
-            ->count();
-
-        $bouts = $championship->bouts();
-
-        $total = (clone $bouts)->where('is_bye', false)->count();
-        $decided = (clone $bouts)->where('is_bye', false)->whereNotNull('winner_athlete_id')->count();
-        $onMat = (clone $bouts)->whereNotNull('court_id')->whereNull('winner_athlete_id')->count();
-        $unscheduled = (clone $bouts)->where('is_bye', false)->whereNull('fight_number')->count();
-
-        // A class with athletes but no bracket is the single most common thing
-        // to be stuck on, and the one the fight order cannot work around.
-        $undrawn = $categories->filter(fn (WeightCategory $c) => $c->athletes_count > 0 && $c->bouts_count === 0);
-
-        return [
-            'model' => $championship,
-            'athletes' => $championship->athletes_count,
-            'classes' => $categories->count(),
-            'passed' => $passed,
-            'awaiting_scale' => $awaitingScale,
-            'bouts' => $total,
-            'decided' => $decided,
-            'on_mat' => $onMat,
-            'progress' => $total > 0 ? (int) round($decided / $total * 100) : 0,
-            'mats' => $championship->courts()->where('is_active', true)->count(),
-            'next_steps' => $this->nextSteps($championship, $categories, $undrawn, $unscheduled, $awaitingScale),
-        ];
     }
 
     /**
-     * The blockers, in the order an event actually hits them.
+     * The championship to show: the chosen one if it is a real open
+     * championship, otherwise the one the desk most likely means.
      *
-     * @param  Collection<int, WeightCategory>  $categories
-     * @param  Collection<int, WeightCategory>  $undrawn
-     * @return list<array{text: string, route: ?string, params: array<string, mixed>, label: ?string}>
+     * @param  Collection<int, Championship>  $open
      */
-    private function nextSteps(
-        Championship $championship,
-        Collection $categories,
-        Collection $undrawn,
-        int $unscheduled,
-        int $awaitingScale,
-    ): array {
-        $steps = [];
+    private function currentChampionship(Collection $open): ?Championship
+    {
+        if ($this->selected !== null) {
+            $chosen = $open->firstWhere('id', $this->selected);
 
-        if ($categories->isEmpty()) {
-            $steps[] = [
-                'text' => __('No weight classes yet.'),
-                'route' => 'championships.show',
-                'params' => ['championship' => $championship],
-                'label' => __('Set up categories'),
-            ];
+            if ($chosen !== null) {
+                return $chosen;
+            }
 
-            return $steps;
+            // Archived since the link was made, deleted, or simply never
+            // existed. Falling back beats an error page: the operator asked for
+            // the dashboard, not for that particular championship.
+            $this->selected = null;
         }
 
-        if ($championship->athletes_count === 0) {
-            $steps[] = [
-                'text' => __('Nobody is registered yet.'),
-                'route' => 'championships.show',
-                'params' => ['championship' => $championship],
-                'label' => __('Register athletes'),
-            ];
+        return $this->mostRelevant();
+    }
 
-            return $steps;
+    /**
+     * The championship a desk opening this screen cold almost certainly wants.
+     *
+     * Running today first, because that is the one in the hall. Then the most
+     * recently started, which is the one whose medals are still being printed.
+     * Only then the nearest upcoming, and finally anything at all, so a
+     * championship created without dates is still reachable rather than
+     * stranding the screen on an empty state that says there are none.
+     */
+    private function mostRelevant(): ?Championship
+    {
+        $today = today();
+
+        $running = Championship::open()
+            ->whereDate('starts_on', '<=', $today)
+            ->where(fn (Builder $q) => $q->whereNull('ends_on')->orWhereDate('ends_on', '>=', $today))
+            ->orderByDesc('starts_on')
+            ->first();
+
+        if ($running !== null) {
+            return $running;
         }
 
-        if ($awaitingScale > 0) {
-            $steps[] = [
-                'text' => trans_choice(
-                    '{1}:count athlete has not been weighed in.|[2,*]:count athletes have not been weighed in.',
-                    $awaitingScale,
-                    ['count' => $awaitingScale]
-                ),
-                'route' => null, 'params' => [], 'label' => null,
-            ];
+        $recent = Championship::open()
+            ->whereDate('starts_on', '<=', $today)
+            ->orderByDesc('starts_on')
+            ->first();
+
+        if ($recent !== null) {
+            return $recent;
         }
 
-        // Drawing a bracket is an action, not a report: it is only offered to
-        // somebody who could carry it out.
-        if ($undrawn->isNotEmpty() && Gate::allows('manage-competition')) {
-            $first = $undrawn->first();
+        $upcoming = Championship::open()
+            ->whereDate('starts_on', '>', $today)
+            ->orderBy('starts_on')
+            ->first();
 
-            $steps[] = [
-                'text' => trans_choice(
-                    '{1}:count weight class has athletes but no bracket.|[2,*]:count weight classes have athletes but no bracket.',
-                    $undrawn->count(),
-                    ['count' => $undrawn->count()]
-                ),
-                'route' => 'bracket.show',
-                'params' => ['weightCategory' => $first],
-                'label' => __('Draw :label kg', ['label' => $first->label]),
-            ];
-        }
-
-        if ($unscheduled > 0) {
-            $steps[] = [
-                'text' => trans_choice(
-                    '{1}:count bout has no fight number.|[2,*]:count bouts have no fight number.',
-                    $unscheduled,
-                    ['count' => $unscheduled]
-                ),
-                'route' => 'fight-order.index',
-                'params' => ['championship' => $championship],
-                'label' => __('Build the running order'),
-            ];
-        }
-
-        if ($championship->courts()->where('is_active', true)->count() === 0) {
-            $steps[] = [
-                'text' => __('No mats are set up, so nothing can be sent to a scoreboard.'),
-                'route' => 'courts.index',
-                'params' => ['championship' => $championship],
-                'label' => __('Add a mat'),
-            ];
-        }
-
-        return $steps;
+        return $upcoming ?? Championship::open()->orderByDesc('id')->first();
     }
 }

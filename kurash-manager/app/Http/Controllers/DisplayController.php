@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Championship;
 use App\Models\WeightCategory;
+use App\Services\DashboardSnapshot;
 use App\Services\MedalTable;
 use App\Services\RoundRobinStandings;
 use App\Support\DisplayCache;
@@ -24,7 +25,10 @@ use Illuminate\Http\Response;
  */
 class DisplayController extends Controller
 {
-    public function __construct(private readonly MedalTable $medals) {}
+    public function __construct(
+        private readonly MedalTable $medals,
+        private readonly DashboardSnapshot $snapshot,
+    ) {}
 
     /** What is happening right now, mat by mat. */
     public function mats(Request $request, Championship $championship): Response
@@ -32,12 +36,12 @@ class DisplayController extends Controller
         return $this->render($request, 'mats', $championship, function () use ($championship) {
             $championship->load('courts');
 
-            $live = $championship->bouts()
-                ->whereNotNull('court_id')
-                ->whereNull('winner_athlete_id')
-                ->with(['athleteA', 'athleteB', 'weightCategory', 'court'])
-                ->get()
-                ->keyBy('court_id');
+            // Whether a contest is live is one question with one answer, so it
+            // is asked in one place. This screen used to call every undecided
+            // bout holding a court_id live, which announced contests that had
+            // been assigned to a mat but not started — the hall reads this as
+            // the contest being under way and athletes were being called early.
+            $live = $this->snapshot->liveBouts($championship);
 
             $next = $championship->bouts()
                 ->readyToFight()

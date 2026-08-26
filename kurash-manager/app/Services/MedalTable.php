@@ -53,7 +53,13 @@ class MedalTable
                 : ['decided' => true, 'gold' => $placed, 'silver' => null, 'bronze' => []];
         }
 
-        $bouts = $category->bouts()->with(['athleteA', 'athleteB', 'winner'])->get();
+        // Uses what the caller loaded, if it did. summary() walks every class in
+        // a championship, and asking the database for each one's contests
+        // separately is the difference between four queries and fifty on a
+        // screen that shows the standings beside everything else.
+        $bouts = $category->relationLoaded('bouts')
+            ? $category->bouts
+            : $category->bouts()->with(['athleteA', 'athleteB', 'winner'])->get();
 
         if ($bouts->isEmpty()) {
             return $empty;
@@ -107,13 +113,42 @@ class MedalTable
      */
     public function standings(int $championshipId, ?string $competition = null): Collection
     {
+        return $this->summary($championshipId, $competition)['standings'];
+    }
+
+    /**
+     * The standings and how much of the championship they are drawn from.
+     *
+     * One pass rather than two. Deriving a podium is a query per weight class,
+     * and a caller that wants both the table and "9 of 12 classes decided" —
+     * the dashboard does — would otherwise walk every class twice to learn two
+     * facts that the same loop already has in hand.
+     *
+     * `total` counts every weight class in scope, decided or not, so the pair
+     * reads as progress rather than as a bare number of podiums.
+     *
+     * @param  string|null  $competition  As for standings().
+     * @return array{
+     *     standings: Collection<int, array{noc_code:string, gold:int, silver:int, bronze:int, total:int}>,
+     *     decided: int,
+     *     total: int
+     * }
+     */
+    public function summary(int $championshipId, ?string $competition = null): array
+    {
         $tally = [];
+        $decided = 0;
 
         $categories = WeightCategory::whereHas(
             'ageCategory',
             fn ($q) => $q->where('championship_id', $championshipId)
                 ->when($competition !== null, fn ($division) => $division->where('gender', $competition))
-        )->get();
+        )
+            // Everything forCategory() reads, fetched once for the whole
+            // championship: the contests and the three athletes each one names,
+            // plus the sole athlete a placement's podium consists of.
+            ->with(['bouts.athleteA', 'bouts.athleteB', 'bouts.winner', 'placedAthlete'])
+            ->get();
 
         foreach ($categories as $category) {
             $podium = $this->forCategory($category);
@@ -121,6 +156,8 @@ class MedalTable
             if (! $podium['decided']) {
                 continue;
             }
+
+            $decided++;
 
             foreach (['gold', 'silver'] as $medal) {
                 if ($podium[$medal] !== null) {
@@ -134,7 +171,7 @@ class MedalTable
             }
         }
 
-        return collect($tally)
+        $standings = collect($tally)
             ->map(fn (array $counts, string $noc) => [
                 'noc_code' => $noc,
                 'gold' => $counts['gold'] ?? 0,
@@ -144,6 +181,12 @@ class MedalTable
             ])
             ->sortByDesc(fn ($row) => [$row['gold'], $row['silver'], $row['bronze']])
             ->values();
+
+        return [
+            'standings' => $standings,
+            'decided' => $decided,
+            'total' => $categories->count(),
+        ];
     }
 
     /** Phase label for a bout, e.g. "Semi Final". */

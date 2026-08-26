@@ -6,11 +6,21 @@ cost somebody an afternoon.
 
 ## Where you are
 
+The repository root is `/home/hadi/WorkArea/Projects/Kurash`.
+
 - `kurash-manager/` — the application. Laravel 13, Livewire 4, Pest 4, PHP 8.3,
-  MariaDB. Everything below is about this directory.
-- `app/` (repo root, *not* `kurash-manager/app/`) — the legacy PHP system this
-  one replaces. Flat scripts, no framework. Read it to understand what the old
-  data means; do not extend it.
+  MariaDB. Everything below is about this directory. The Pest suite lives in
+  `kurash-manager/tests/`; there is no other test tree.
+- `dev.sh` — start, stop and reset the local stack. `reset` takes a backup,
+  rebuilds the schema and fills it with `kurash:demo`, which is now the only
+  way to get a populated database — nothing is imported from anywhere. It
+  carries the `users` table across the rebuild; see the trap below.
+
+The legacy PHP application this system replaces used to sit at the repository
+root, along with its SQLite export in `data/`, its acceptance scripts in
+`tests/` and the dual-driver dev image in `tools/`. All of it has been removed,
+together with the `kurash:import-legacy` command that read the export. Recover
+any of it from git history if you ever need to know what an old column meant.
 
 ## Checks before committing
 
@@ -25,6 +35,21 @@ Laravel preset), `composer types:check` (PHPStan level 7 + Larastan),
 **Do not use `php artisan test --parallel`.** The `kurash` database user has no
 grant to create the per-process `kurash_test_test_N` databases, so it fails
 with an access-denied error that looks like a code fault and is not one.
+
+## Commit messages
+
+When creating a commit, include a short summary of the prompt/request that
+led to the change, not just a description of the diff. Format:
+
+<type>: <short summary of the change>
+
+Prompt: <condensed 1-2 sentence version of what was asked>
+
+<optional bullet list of specific changes, only if non-obvious>
+
+
+Keep the prompt line genuinely condensed — do not paste raw conversation
+context or trial-and-error steps, only the final ask.
 
 ## How code is written here
 
@@ -104,6 +129,13 @@ Rules already centralised — go through these, do not re-derive:
   `age_category_id` constraint, and the migration then could not be rolled
   back. Check that another index still leads with the FK column, and always
   test `migrate:rollback` and re-apply.
+- **`migrate:fresh` takes the accounts with it, and nothing regenerates
+  them.** Competition data can be rebuilt from `kurash:demo`; the users cannot
+  — they are typed in by hand and their passwords survive only as hashes.
+  `./dev.sh reset` therefore dumps `users`, rebuilds, and re-inserts it, having
+  taken a full `kurash:backup` first. This is not belt-and-braces: a reset run
+  without it destroyed four live accounts, and the backup was the only reason
+  they came back. Any other path that calls `migrate:fresh` owes the same care.
 - **`ArchivedChampionshipGuard`** blocks every write to an archived
   championship's models. Tests that set up historical data must write *before*
   archiving.
