@@ -59,6 +59,8 @@ architecture makes them separately.
 
 ## Table of contents
 
+- [Presentation](#presentation)
+- [Screenshots](#screenshots)
 - [Requirements](#requirements)
 - [Quick start](#quick-start)
 - [Demonstration data](#demonstration-data)
@@ -78,6 +80,56 @@ architecture makes them separately.
 - [Traps](#traps)
 - [Contributing](#contributing)
 - [Licence and credits](#licence-and-credits)
+
+---
+
+## Presentation
+
+Presenter and designer: **Hadi Khani**.
+
+- [View the presentation as PDF](docs/presentation/kurash-competition-manager.pdf)
+- [Download the PowerPoint deck](docs/presentation/kurash-tournament-manager-deck.pptx)
+
+---
+
+## Screenshots
+
+### Competition dashboard
+
+![Kurash Competition Manager dashboard](docs/screenshots/01-dashboard.png)
+
+### Weigh-in management
+
+![Athlete weigh-in management](docs/screenshots/02-weigh-in.png)
+
+### Live mat control
+
+![Live mat control and scoring](docs/screenshots/05-mat-control.png)
+
+### Venue scoreboard
+
+![Venue mat scoreboard](docs/screenshots/06-mat-scoreboard.png)
+
+<details>
+<summary><b>More competition screens</b></summary>
+
+### Bracket display
+
+![Tournament bracket display](docs/screenshots/03-bracket-display.png)
+
+### Fight order
+
+![Competition fight order](docs/screenshots/04-fight-order.png)
+
+### Mats board
+
+![Active mats and upcoming fights](docs/screenshots/07-mats-board.png)
+
+### Medals board
+
+![Medal standings and podium results](docs/screenshots/08-medals-board.png)
+
+</details>
 
 ---
 
@@ -1102,6 +1154,8 @@ confirmation rather than picking silently. There are worked examples of this in
 ---
 
 ## Licence and credits
+
+Presenter and designer: **Hadi Khani**.
 
 The rules implemented here are the
 [IKA competition rules](https://kurash-ika.org/2022/08/20/kurash-rules/); this
