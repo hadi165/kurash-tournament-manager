@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Services\TournamentFormatPolicy;
 use App\Services\WeightValidator;
 use App\Support\TournamentFormat;
+use App\Support\WeightLimit;
 use App\Support\WeightRange;
 use Carbon\CarbonImmutable;
 use Database\Factories\WeightCategoryFactory;
@@ -318,5 +319,31 @@ class WeightCategory extends Model
     public function weightRange(float $tolerance = WeightValidator::TOLERANCE_KG): WeightRange
     {
         return app(WeightValidator::class)->rangeFor($this, $tolerance);
+    }
+
+    /**
+     * The figure this class is named for, for putting classes in weight order.
+     *
+     * Not weightRange(): that is the admission rule, it applies a tolerance and
+     * it asks the classes either side of this one where the band starts, which
+     * is a query per class and the wrong question anyway. Ordering wants the
+     * class's own limit and nothing else.
+     *
+     * The label answers it wherever it can, because it is the only column that
+     * is always present and it is what min_kg and max_kg are derived from. The
+     * bounds cover the classes a label cannot describe — "Open", "Absolute" —
+     * where a stored ceiling still says where the class belongs, and an open
+     * class is recognised by having a floor and no ceiling.
+     */
+    public function weightLimit(): WeightLimit
+    {
+        return WeightLimit::fromLabel($this->label) ?? new WeightLimit(
+            kg: match (true) {
+                $this->max_kg !== null => (float) $this->max_kg,
+                $this->min_kg !== null => (float) $this->min_kg,
+                default => null,
+            },
+            open: $this->max_kg === null && $this->min_kg !== null,
+        );
     }
 }

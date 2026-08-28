@@ -359,34 +359,49 @@ describe('two administrators pressing Generate at once', function () {
 describe('the running order', function () {
     /**
      * A knockout gets its rest from the shape of the bracket. A round robin
-     * has to be asked for it, because an athlete appears in almost every round.
+     * cannot: an athlete appears in almost every round, and the turn of the
+     * circle sometimes brings one of them straight back.
+     *
+     * The running order is numbered as drawn anyway — round by round and
+     * fixture by fixture — because it is the order the printed sheet states
+     * and an official has to be able to read the next number off it. What is
+     * owed is that the shortfall is named, not shuffled out of sight.
      */
-    it('keeps an athlete off the mat for as long as the arithmetic allows', function () {
+    it('numbers the circle as it was drawn, and names the rest that costs', function () {
         $category = drawnRoundRobin(5, '-rest');
         $championship = $category->ageCategory->championship;
 
-        $result = app(FightOrderScheduler::class)->schedule($championship, minimumRest: 1);
+        $scheduler = app(FightOrderScheduler::class);
+        $result = $scheduler->schedule($championship, minimumRest: 1);
 
         expect($result['scheduled'])->toBe(10);
 
-        // Nobody fights twice in a row.
         $ordered = $championship->bouts()->whereNotNull('fight_number')->orderBy('fight_number')->get();
-        $previous = null;
 
-        foreach ($ordered as $bout) {
-            if ($previous !== null) {
-                $shared = array_intersect(
-                    [$previous->athlete_a_id, $previous->athlete_b_id],
-                    [$bout->athlete_a_id, $bout->athlete_b_id],
-                );
+        // Numbered in the draw's own order: every round complete before the
+        // next, and each round in the order the circle produced it.
+        $sequence = $ordered->map(fn (Bout $bout) => [$bout->round, $bout->position_in_round])->all();
 
-                expect($shared)->toBeEmpty(
-                    "fights {$previous->fight_number} and {$bout->fight_number} share an athlete"
-                );
+        expect($sequence)->toBe(collect($sequence)->sort()->values()->all());
+
+        // Whoever that brings back to the mat too soon is reported.
+        $backToBack = [];
+
+        foreach ($ordered as $index => $bout) {
+            $previous = $ordered[$index - 1] ?? null;
+
+            if ($previous !== null && array_intersect(
+                [$previous->athlete_a_id, $previous->athlete_b_id],
+                [$bout->athlete_a_id, $bout->athlete_b_id],
+            ) !== []) {
+                $backToBack[] = $bout->fight_number;
             }
-
-            $previous = $bout;
         }
+
+        expect($backToBack)->not->toBeEmpty()
+            ->and($result['violations'])->toBeGreaterThanOrEqual(count($backToBack))
+            ->and($scheduler->restViolations($championship, 1)->pluck('bout.fight_number')->all())
+            ->toContain(...$backToBack);
     });
 
     /**

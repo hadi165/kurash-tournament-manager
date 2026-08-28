@@ -379,6 +379,56 @@
                     >{{ __('Replace the published draw') }}</flux:button>
                 @endif
 
+                {{-- Numbering is offered, not done for you. A draw and a running
+                     order are two decisions, and a class can be drawn days
+                     before anybody knows which mat it runs on. It fills gaps
+                     and appends after the championship's highest number, so it
+                     never moves a contest an operator is already calling by. --}}
+                @can('manage-competition')
+                    @if ($bouts->isNotEmpty() && ! $weightCategory->ageCategory->championship->isArchived())
+                        <flux:button
+                            variant="ghost"
+                            wire:click="numberContests"
+                            wire:loading.attr="disabled"
+                            wire:target="numberContests,saveFightNumbers"
+                            wire:confirm="{{ __('Give every unnumbered contest in this class a fight number? Numbers already set are kept.') }}"
+                        >
+                            <span wire:loading.remove wire:target="numberContests">{{ __('Number the contests') }}</span>
+                            <span wire:loading wire:target="numberContests">{{ __('Numbering…') }}</span>
+                        </flux:button>
+                    @endif
+                @endcan
+
+                {{-- One save for the class, not one per box. A bracket of
+                     thirty-two is thirty-one boxes, and laying out a running
+                     order edits a run of them at once. Each box still reports
+                     its own outcome beside it. --}}
+                @can('manage-competition')
+                    @php
+                        $unsaved = collect($fightNumberState)->where('status', 'unsaved')->count();
+                    @endphp
+
+                    @if ($bouts->isNotEmpty() && ! $weightCategory->ageCategory->championship->isArchived())
+                        <flux:button
+                            variant="primary"
+                            wire:click="saveFightNumbers"
+                            wire:loading.attr="disabled"
+                            wire:target="saveFightNumbers,numberContests"
+                            {{-- :disabled, not @disabled: Flux parses its own
+                                 attributes, and the directive form compiles to
+                                 broken PHP inside a component tag. --}}
+                            :disabled="$unsaved === 0"
+                        >
+                            <span wire:loading.remove wire:target="saveFightNumbers">
+                                {{ $unsaved === 0
+                                    ? __('Save fight numbers')
+                                    : trans_choice('{1}Save :count fight number|[2,*]Save :count fight numbers', $unsaved, ['count' => $unsaved]) }}
+                            </span>
+                            <span wire:loading wire:target="saveFightNumbers">{{ __('Saving…') }}</span>
+                        </flux:button>
+                    @endif
+                @endcan
+
                 @can('draw.publish')
                     @if ($bouts->isNotEmpty())
                         @if ($weightCategory->isDrawPublished())
@@ -506,6 +556,14 @@
                                                      anything by itself. --}}
                                                 <label for="fight-{{ $bout->id }}">{{ __('No.') }}</label>
 
+                                                @php
+                                                    // The bout named in every accessible
+                                                    // label, so a screen reader announces
+                                                    // which contest is being numbered.
+                                                    $boutName = $bout->play_code ?? __('round :r, contest :p', ['r' => $bout->round, 'p' => $bout->position_in_round]);
+                                                    $state = $fightNumberState[$bout->id] ?? null;
+                                                @endphp
+
                                                 <input
                                                     id="fight-{{ $bout->id }}"
                                                     type="number"
@@ -513,17 +571,36 @@
                                                     max="{{ \App\Livewire\Competition\Bracket::MAX_FIGHT_NUMBER }}"
                                                     step="1"
                                                     inputmode="numeric"
-                                                    class="w-14 rounded border border-line bg-ground px-1.5 py-0 text-[11px] font-bold tabular-nums text-ink"
+                                                    class="w-16 rounded border border-line bg-ground px-1.5 py-1 text-[12px] font-bold tabular-nums text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/50"
                                                     {{-- Written out as well as bound: the
                                                          server's render has to say what the
                                                          saved number is, not wait for the
                                                          browser to fill it in. --}}
                                                     value="{{ $fightNumbers[$bout->id] ?? '' }}"
                                                     wire:model="fightNumbers.{{ $bout->id }}"
-                                                    wire:blur="setFightNumber({{ $bout->id }})"
+                                                    {{-- Enter saves. Blur does NOT: tabbing
+                                                         past a box you were reading is not a
+                                                         decision to renumber a contest, and
+                                                         it used to be treated as one. --}}
                                                     wire:keydown.enter="setFightNumber({{ $bout->id }})"
-                                                    aria-label="{{ __('Fight number') }}"
+                                                    wire:loading.attr="disabled"
+                                                    wire:target="saveFightNumbers,numberContests"
+                                                    aria-label="{{ __('Fight number for :bout', ['bout' => $boutName]) }}"
                                                 >
+
+                                                {{-- Per bout, because several can be edited
+                                                     before any is saved and one global flash
+                                                     cannot say which succeeded. Each state
+                                                     carries a word as well as a colour. --}}
+                                                <span role="status" aria-live="polite" class="text-[11px] font-semibold">
+                                                    @if ($state && ($state['status'] ?? '') === 'unsaved')
+                                                        <span class="text-amber-deep">● {{ __('Unsaved') }}</span>
+                                                    @elseif ($state && ($state['status'] ?? '') === 'saved')
+                                                        <span class="text-brand-deep">✓ {{ __('Saved') }}</span>
+                                                    @elseif ($state && ($state['status'] ?? '') === 'error')
+                                                        <span class="text-danger-deep">✕ {{ $state['message'] ?? __('Not saved') }}</span>
+                                                    @endif
+                                                </span>
                                             @elseif ($bout->fight_number)
                                                 <span>{{ __('No. :n', ['n' => $bout->fight_number]) }}</span>
                                             @endcan

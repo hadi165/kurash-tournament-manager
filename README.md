@@ -331,31 +331,55 @@ so an operator whose browser reloads comes back to the ceremony they started.
 
 ### 6. Fight order
 
-`FightOrderScheduler` numbers every contested bout in the championship. Byes take
-no slot — nobody steps onto a mat for a walkover.
+`FightOrderScheduler` numbers every contested bout in the championship as one
+sequence, starting at 1 and with no gaps. Byes take no slot — nobody steps onto a
+mat for a walkover.
 
-The order is **round-major**: every first-round bout across all weight classes,
-then every second round, and so on, interleaving classes within each round. That
-keeps classes progressing together instead of running one to its final while
-another has not started, and it is what naturally separates an athlete's own
-bouts. Classes are ordered lightest first, which is a question about kilograms
-and not about `id` or about string order — sorted as text, `-100` comes before
-`-60` and `+100` before both, which would put the heaviest athletes of the day on
-the first mat of the morning.
+Three rules settle the order:
 
-Two properties are guaranteed and both are tested across several draw shapes:
+- **round by round** — every class's first round is fought before any class's
+  second, so the classes progress together rather than one running to its final
+  while another has not started
+- **lightest class first** within a round — a question about kilograms, and not
+  about `id` (the order somebody happened to type the classes in) nor about the
+  label as text, where `-100` sorts before `-60` and `+100` before both, putting
+  the heaviest athletes of the day on the first mat of the morning.
+  `Support\WeightLimit` reads the figure out of the class's own name and places
+  an open class after the bounded class it shares a figure with
+- **as it was drawn** within a class — contests keep the order the draw gave
+  them, by `position_in_round`
+
+A knockout round and a round-robin round are different things — one stage of a
+bracket, and one matchday on which everybody not sitting out has exactly one
+contest — and a championship running both aligns them by that number, so round 2
+of each is fought in the same part of the day. Classes are not the same depth, so
+a class with nothing to fight in a round simply does not appear in it.
+
+Two properties follow from that order alone, and both are tested across several
+draw shapes:
 
 1. **A bout is always numbered after both bouts that feed it.** The hand-typed
    CSV this replaced had nothing preventing a semi-final being called before its
    quarter-final.
-2. **There is a minimum gap between a bout and each of its feeders** (three by
-   default). This is structural — it depends on bracket position, not on who
-   wins, so it holds whatever the results are.
+2. **Every contest is numbered exactly once.**
 
-Where a draw is too small to give that rest — one weight class, or the closing
-rounds of any championship — the shortfall is **reported rather than hidden**, so
-organisers can schedule a break. Manual reordering swaps neighbours and refuses
-any swap that would put a bout ahead of one that feeds it.
+**Rest is reported, not arranged.** A third property — that whoever advances gets
+a break before their next contest — is deliberately not engineered. The order
+above is the one the competition rules fix and the one an official reads the next
+number off on a printed sheet, so shuffling contests until the shortfall left the
+screen would hide it rather than fix it, and would buy that at the price of a
+running order nobody can predict. Where the order leaves somebody short — and the
+closing rounds always do, because there are too few contests left to sit between
+a semi-final and its final — `restViolations()` names it and the organisers
+schedule a break. `unattainableRest()` is told apart from it on purpose: one is a
+rest the day's order does not leave, and the other is a rest no order at all
+could have delivered, which only a longer session would fix.
+
+Numbers can also be set by hand. The bracket screen numbers one class on request
+— appending after the championship's highest number and filling only the gaps, so
+it never moves a contest an operator is already calling by — and manual
+reordering swaps neighbours, refusing any swap that would put a bout ahead of one
+that feeds it.
 
 ### 7. On the mat
 
