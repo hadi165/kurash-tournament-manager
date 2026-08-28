@@ -2,6 +2,7 @@
 
 use App\Livewire\Competition\FightOrder;
 use App\Livewire\Competition\MatControl;
+use App\Models\AgeCategory;
 use App\Models\Athlete;
 use App\Models\Bout;
 use App\Models\Championship;
@@ -11,6 +12,7 @@ use App\Models\WeightCategory;
 use App\Services\BoutAdvancer;
 use App\Services\BracketGenerator;
 use App\Services\FightOrderScheduler;
+use App\Services\RoundRobinGenerator;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -18,6 +20,51 @@ beforeEach(function () {
     $this->admin = User::factory()->create(['role' => 'admin']);
     $this->viewer = User::factory()->create(['role' => 'viewer']);
 });
+
+/**
+ * The running order as a list of class labels, one entry per numbered contest.
+ *
+ * The label rather than the id, because what the assertions are about is which
+ * class runs before which — and an id says nothing about that on a screen.
+ *
+ * @return list<string>
+ */
+function labelsInOrder(Championship $championship, ?int $round = null): array
+{
+    return $championship->bouts()
+        ->whereNotNull('fight_number')
+        ->when($round !== null, fn ($query) => $query->where('round', $round))
+        ->with('weightCategory')
+        ->orderBy('fight_number')
+        ->get()
+        ->map(fn (Bout $bout) => (string) $bout->weightCategory?->label)
+        ->all();
+}
+
+/**
+ * One more class inside a division that already exists.
+ *
+ * categoryWithAthletes() makes a championship of its own each time, and the
+ * running order is a question about several classes sharing one.
+ */
+function classWithAthletes(AgeCategory $ageCategory, string $label, int $count): WeightCategory
+{
+    $category = WeightCategory::factory()->create([
+        'age_category_id' => $ageCategory->id,
+        'label' => $label,
+    ]);
+
+    foreach (range(1, $count) as $draw) {
+        Athlete::factory()->drawn($draw)->create([
+            'championship_id' => $ageCategory->championship_id,
+            'age_category_id' => $ageCategory->id,
+            'weight_category_id' => $category->id,
+            'fullname' => "{$label} #{$draw}",
+        ]);
+    }
+
+    return $category->refresh();
+}
 
 describe('building the running order', function () {
     it('numbers every contested bout once, with no gaps', function () {
@@ -88,20 +135,122 @@ describe('building the running order', function () {
         expect($firstEight)->toBe([1]);
     });
 
-    it('interleaves the weight classes within a round', function () {
-        $championship = championshipWithBrackets(['-66' => 8, '-73' => 8]);
+    /**
+     * A round is one class at a time, lightest first — not the classes
+     * interleaved. An operator runs a class's round off one draw sheet, and a
+     * mat that alternates between three of them is three sheets on the table.
+     */
+    it('runs one class at a time within a round, lightest first', function () {
+        // Declared heaviest first, so the order they were typed in is the
+        // opposite of the order they must be fought in.
+        $championship = championshipWithBrackets(['-73' => 8, '-66' => 8, '-60' => 8]);
         $this->scheduler->schedule($championship);
 
-        $firstFour = $championship->bouts()
-            ->whereNotNull('fight_number')
-            ->orderBy('fight_number')
-            ->limit(4)
-            ->pluck('weight_category_id')
-            ->all();
+        expect(labelsInOrder($championship, round: 1))->toBe(array_merge(
+            array_fill(0, 4, '-60'),
+            array_fill(0, 4, '-66'),
+            array_fill(0, 4, '-73'),
+        ));
+    });
 
-        // Alternating classes, so no athlete's category runs back to back.
-        expect($firstFour[0])->not->toBe($firstFour[1])
-            ->and($firstFour[1])->not->toBe($firstFour[2]);
+    /**
+     * The three ways of ordering classes that are wrong, in one championship:
+     * by id gives whoever was typed in first, and by label as text puts "-100"
+     * ahead of "-60" and "+100" ahead of both.
+     */
+    it('orders the classes by the weight limit they are named for', function () {
+        $championship = championshipWithBrackets(['+100' => 4, '-100' => 4, '-60' => 4, '-73' => 4]);
+        $this->scheduler->schedule($championship);
+
+        expect(array_values(array_unique(labelsInOrder($championship, round: 1))))
+            // The open class last: "+100" and "-100" name the same figure, and
+            // the open one is the heavier of the two.
+            ->toBe(['-60', '-73', '-100', '+100']);
+    });
+
+    it('reads a limit written the long way, and one written with a comma', function () {
+        $championship = championshipWithBrackets(['+100 kg' => 4, '-60 kg' => 4, '67,5 kg' => 4]);
+        $this->scheduler->schedule($championship);
+
+        expect(array_values(array_unique(labelsInOrder($championship, round: 1))))
+            ->toBe(['-60 kg', '67,5 kg', '+100 kg']);
+    });
+
+    /**
+     * Classes are not the same depth: a class of four is finished in two
+     * rounds while a class of sixteen has four. A round a class has nothing to
+     * fight in is a round it does not appear in — not a gap in the numbering,
+     * and not a reason to hold the deeper class back.
+     */
+    it('skips a class that has no contest in the round', function () {
+        $championship = championshipWithBrackets(['-66' => 16, '-60' => 4]);
+        $this->scheduler->schedule($championship);
+
+        expect(labelsInOrder($championship, round: 1))
+            ->toBe([...array_fill(0, 2, '-60'), ...array_fill(0, 8, '-66')])
+            // The small class's final is a round-2 contest and is numbered
+            // there, in weight order, like any other round-2 contest.
+            ->and(labelsInOrder($championship, round: 2))
+            ->toBe(['-60', ...array_fill(0, 4, '-66')])
+            ->and(labelsInOrder($championship, round: 3))->toBe(['-66', '-66'])
+            ->and(labelsInOrder($championship, round: 4))->toBe(['-66'])
+            ->and($championship->bouts()->whereNotNull('fight_number')->count())->toBe(18);
+    });
+
+    /**
+     * A round of a bracket is a stage of the bracket; a round of a round robin
+     * is a matchday, one contest each for everybody not sitting out. They are
+     * different things and they are run against each other by number, so the
+     * two classes progress through the day together.
+     */
+    it('aligns a round robin matchday with the bracket stage of the same number', function () {
+        $ageCategory = AgeCategory::factory()->create();
+
+        $robin = classWithAthletes($ageCategory, '-60', 4);
+        app(RoundRobinGenerator::class)->generate($robin);
+
+        $bracket = classWithAthletes($ageCategory, '-73', 4);
+        app(BracketGenerator::class)->generate($bracket);
+
+        $championship = $ageCategory->championship->refresh();
+        $this->scheduler->schedule($championship);
+
+        // Six round-robin contests over three matchdays, and a bracket of two
+        // semi-finals and a final.
+        expect(labelsInOrder($championship))->toBe([
+            '-60', '-60', '-73', '-73',     // matchday 1 · the two semi-finals
+            '-60', '-60', '-73',            // matchday 2 · the final
+            '-60', '-60',                   // matchday 3 · the bracket is done
+        ]);
+    });
+
+    /**
+     * The two things a matchday is: everybody in it once at most, and every
+     * pairing in the class across the whole schedule exactly once.
+     */
+    it('numbers a matchday as one contest each and every pairing once', function () {
+        $ageCategory = AgeCategory::factory()->create();
+        app(RoundRobinGenerator::class)->generate(classWithAthletes($ageCategory, '-60', 5));
+
+        $championship = $ageCategory->championship->refresh();
+        $this->scheduler->schedule($championship);
+
+        $ordered = $championship->bouts()->whereNotNull('fight_number')->orderBy('fight_number')->get();
+
+        expect($ordered)->toHaveCount(10);           // every pair of five, once
+
+        foreach ($ordered->groupBy('round') as $round => $matchday) {
+            $competing = $matchday->flatMap(fn (Bout $bout) => [$bout->athlete_a_id, $bout->athlete_b_id]);
+
+            expect($competing->duplicates())->toBeEmpty("round {$round} has somebody fighting twice")
+                // Five athletes, so one of them sits out each matchday — and
+                // that rest is never a numbered contest.
+                ->and($competing)->toHaveCount(4);
+        }
+
+        $pairings = $ordered->map(fn (Bout $bout) => collect([$bout->athlete_a_id, $bout->athlete_b_id])->sort()->implode('-'));
+
+        expect($pairings->duplicates())->toBeEmpty();
     });
 
     it('is safe to rebuild, leaving no stale numbers behind', function () {

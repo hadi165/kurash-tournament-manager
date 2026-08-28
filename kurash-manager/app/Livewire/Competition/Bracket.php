@@ -88,6 +88,17 @@ class Bracket extends Component
     public array $fightNumbers = [];
 
     /**
+     * What each fight-number box is doing, keyed by bout id.
+     *
+     * Per bout and not a flash message, because several boxes can be edited
+     * before any of them is saved and one banner cannot say which contest it
+     * refers to. Shape: ['status' => unsaved|saved|error, 'message' => ?string].
+     *
+     * @var array<int, array{status:string, message:?string}>
+     */
+    public array $fightNumberState = [];
+
+    /**
      * The largest number the column will hold.
      *
      * `fight_number` is an unsigned smallint. A championship never approaches
@@ -769,6 +780,40 @@ class Bracket extends Component
      * scheduler renumbers wholesale and a partial write would trip it, so the
      * guarantee is this check taken under a row lock inside a transaction.
      */
+    /**
+     * Typing in a box makes it dirty, and clears any result shown against it.
+     *
+     * A "Saved" tick left standing beside a number somebody has since changed
+     * is worse than no tick at all — it says the value on screen is the value
+     * in the database when it is not.
+     */
+    public function updatedFightNumbers(mixed $value, string $key): void
+    {
+        $boutId = (int) $key;
+
+        if ($boutId <= 0) {
+            return;
+        }
+
+        $bout = $this->weightCategory->bouts()->find($boutId);
+
+        if ($bout === null) {
+            return;
+        }
+
+        $typed = trim((string) $value);
+        $persisted = $bout->fight_number === null ? '' : (string) $bout->fight_number;
+
+        // Back to the stored value is not a change, so Save goes quiet again.
+        if ($typed === $persisted) {
+            unset($this->fightNumberState[$boutId]);
+
+            return;
+        }
+
+        $this->fightNumberState[$boutId] = ['status' => 'unsaved', 'message' => null];
+    }
+
     public function setFightNumber(int $boutId): void
     {
         Gate::authorize('manage-competition');
@@ -782,8 +827,7 @@ class Bracket extends Component
 
         // A walkover is not a contest, so there is nothing to call.
         if ($bout->is_bye) {
-            session()->flash('error', __('A bye has no contest to number.'));
-            $this->syncFightNumbers();
+            $this->rejectFightNumber($boutId, __('A bye has no contest to number.'));
 
             return;
         }
@@ -800,8 +844,7 @@ class Bracket extends Component
         // ctype_digit and not is_numeric: "3.5", "1e3" and "-2" are all
         // numeric, and none of them is a place in a running order.
         if (! ctype_digit($typed) || (int) $typed < 1 || (int) $typed > self::MAX_FIGHT_NUMBER) {
-            session()->flash('error', __('A fight number is a whole number from 1 to :max.', ['max' => self::MAX_FIGHT_NUMBER]));
-            $this->syncFightNumbers();
+            $this->rejectFightNumber($boutId, __('A fight number is a whole number from 1 to :max.', ['max' => self::MAX_FIGHT_NUMBER]));
 
             return;
         }
@@ -809,6 +852,8 @@ class Bracket extends Component
         $number = (int) $typed;
 
         if ($number === $bout->fight_number) {
+            $this->fightNumberState[$boutId] = ['status' => 'saved', 'message' => null];
+
             return;
         }
 
@@ -821,19 +866,159 @@ class Bracket extends Component
                     ->first();
 
                 if ($taken !== null) {
-                    throw new RuntimeException(__('Fight number :n is already given to another contest.', ['n' => $number]));
+                    // Named, not merely refused: "already taken" leaves an
+                    // operator hunting through a session for the clash.
+                    $taken->loadMissing('weightCategory');
+
+                    throw new RuntimeException(__('Fight number :n is already assigned to :class, :bout.', [
+                        'n' => $number,
+                        'class' => $taken->weightCategory->label,
+                        'bout' => $taken->play_code ?? __('round :r', ['r' => $taken->round]),
+                    ]));
                 }
 
                 $this->writeFightNumber($bout, $number);
             });
         } catch (RuntimeException $e) {
-            session()->flash('error', $e->getMessage());
-            $this->syncFightNumbers();
+            $this->rejectFightNumber($boutId, $e->getMessage());
 
             return;
         }
 
-        session()->flash('status', __('Fight number saved.'));
+        $this->fightNumberState[$boutId] = ['status' => 'saved', 'message' => null];
+    }
+
+    /**
+     * Number every contest in this class, on request.
+     *
+     * Offered beside publication rather than run at draw time. A draw and a
+     * running order are two decisions: a class can be drawn days before anybody
+     * knows which mat it runs on, and numbering it automatically would have
+     * committed the second decision while somebody was still making the first.
+     *
+     * It APPENDS. Numbering starts one past the highest number already in the
+     * championship, so this never moves a contest another class is already
+     * being called by — an operator holding a printed running order would
+     * otherwise find it silently wrong. FightOrderScheduler still owns
+     * interleaving the whole session, and still clears and relays everything
+     * when it runs.
+     *
+     * Round-major within the class, which is the order the contests are fought
+     * in. Byes are skipped: nobody steps onto a mat for a walkover.
+     *
+     * Contests that already hold a number keep it. This fills the gaps rather
+     * than renumbering, so pressing it twice is safe.
+     */
+    public function numberContests(): void
+    {
+        Gate::authorize('manage-competition');
+
+        $championship = $this->weightCategory->ageCategory->championship;
+
+        abort_if($championship->isArchived(), 403);
+
+        $numbered = DB::transaction(function () use ($championship): int {
+            $next = 1 + (int) Bout::where('championship_id', $championship->id)
+                ->lockForUpdate()
+                ->max('fight_number');
+
+            $count = 0;
+
+            $contests = $this->weightCategory->bouts()
+                ->where('is_bye', false)
+                ->whereNull('fight_number')
+                ->orderBy('round')
+                ->orderBy('position_in_round')
+                ->get();
+
+            foreach ($contests as $bout) {
+                $this->writeFightNumber($bout, $next);
+                $next++;
+                $count++;
+            }
+
+            return $count;
+        });
+
+        $this->fightNumberState = [];
+        $this->syncFightNumbers();
+
+        session()->flash('status', $numbered === 0
+            ? __('Every contest in this class already has a number.')
+            : trans_choice('{1}:count contest numbered.|[2,*]:count contests numbered.', $numbered, ['count' => $numbered]));
+    }
+
+    /**
+     * Save every box on this page that has been edited.
+     *
+     * One button for the class rather than one per contest. A bracket of
+     * thirty-two is thirty-one boxes, and an operator laying out a running
+     * order edits a run of them at once — a save per box turns one intention
+     * into thirty-one presses and thirty-one chances to miss one.
+     *
+     * Each box still reports its own outcome, because one of them failing must
+     * not look like all of them failing. Refusals leave the typed value alone
+     * so the operator can correct it.
+     */
+    public function saveFightNumbers(): void
+    {
+        Gate::authorize('manage-competition');
+
+        $edited = array_keys(array_filter(
+            $this->fightNumberState,
+            fn (array $state): bool => $state['status'] === 'unsaved',
+        ));
+
+        if ($edited === []) {
+            session()->flash('status', __('Nothing to save — no fight number has been changed.'));
+
+            return;
+        }
+
+        // Snapshot first. A successful write calls syncFightNumbers(), which
+        // reloads every box from the database — so saving the first contest
+        // would otherwise wipe the values still typed into the rest and the
+        // batch would silently save one box out of thirty-one.
+        $typed = [];
+
+        foreach ($edited as $boutId) {
+            $typed[(int) $boutId] = $this->fightNumbers[$boutId] ?? '';
+        }
+
+        foreach ($edited as $boutId) {
+            // Put this box's value back after the previous write reset it.
+            $this->fightNumbers[$boutId] = $typed[(int) $boutId];
+
+            $this->setFightNumber((int) $boutId);
+
+            // And keep the boxes still to come, for the same reason.
+            foreach ($typed as $pendingId => $pendingValue) {
+                if (($this->fightNumberState[$pendingId]['status'] ?? '') === 'unsaved') {
+                    $this->fightNumbers[$pendingId] = $pendingValue;
+                }
+            }
+        }
+
+        $failed = count(array_filter(
+            $this->fightNumberState,
+            fn (array $state): bool => $state['status'] === 'error',
+        ));
+
+        session()->flash($failed > 0 ? 'error' : 'status', $failed > 0
+            ? trans_choice('{1}:count fight number was not saved — see the box.|[2,*]:count fight numbers were not saved — see the boxes.', $failed, ['count' => $failed])
+            : __('Fight numbers saved.'));
+    }
+
+    /**
+     * Refuse one box, and leave what the operator typed in it.
+     *
+     * syncFightNumbers() used to run on every refusal, which threw the typed
+     * value away and made the operator retype a number they had only got
+     * slightly wrong.
+     */
+    private function rejectFightNumber(int $boutId, string $message): void
+    {
+        $this->fightNumberState[$boutId] = ['status' => 'error', 'message' => $message];
     }
 
     /**

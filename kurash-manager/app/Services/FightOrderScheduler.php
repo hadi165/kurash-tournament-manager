@@ -17,33 +17,68 @@ use Illuminate\Support\Facades\DB;
  * hand. Nothing checked that an athlete had time to recover between bouts, and
  * nothing stopped a later round being numbered before the round that feeds it.
  *
- * Two properties are guaranteed here instead:
+ * ── The order the federation numbers in ──────────────────────────────────
  *
- *  1. A bout is always numbered after both of the bouts that feed it. Without
- *     this the running order can call a semi-final before its quarter-final.
- *  2. There is a minimum number of bouts between a bout and each of its
- *     feeders, so whoever advances gets a rest. This is structural — it holds
- *     whoever wins, because it depends on bracket position, not on results.
+ * One sequence for the whole championship, starting at 1 and with no gaps:
  *
- * ── Two formats, two kinds of constraint ─────────────────────────────────
+ *   round by round     every class's first round is fought before any class's
+ *                      second, so the classes progress together rather than
+ *                      one running to its final while another has not started
+ *   lightest first     within a round the classes follow the scale — -60
+ *                      before -66 before -73, and "+100" after "-100"
+ *   as it was drawn    within a class the contests keep the order the draw
+ *                      gave them, by position_in_round
  *
- * Both of the guarantees above are about *feeders*, and a round robin has
- * none: nobody advances, every pairing is known before anybody fights, and any
- * order of the contests is a legal order. What a round robin has instead is an
- * athlete appearing in almost every round, so the rest a bracket gets for free
- * from its own shape has to be arranged here.
+ * "Lightest" is a question about kilograms, and it is asked of the class's own
+ * limit — see WeightLimit. Sorting classes by id gives the order somebody
+ * typed them in; sorting the labels as text puts "-100" ahead of "-60".
  *
- * So the rest rule is stated once, in terms of athletes rather than of
- * brackets: no athlete should fight again within the configured number of
- * bouts. In a knockout that is what the feeder chain already delivers and the
- * feeder check is kept, because it holds whoever wins and a shared-athlete
- * check could only see the athletes already known. In a round robin the
- * shared-athlete check is the whole of it.
+ * ── What a round is, in each format ──────────────────────────────────────
  *
- * Where the arithmetic cannot deliver the rest — an athlete with four contests
- * in a session of ten cannot have three bouts between each of them — that is
- * reported as unattainable rather than quietly scheduled anyway. See
- * unattainableRest().
+ * Both formats have rounds and they are not the same thing:
+ *
+ *   knockout      one stage of the bracket — the first stage, then the next,
+ *                 on through the semi-finals to the final
+ *   round robin   one complete playing round, a matchday: everybody not
+ *                 sitting out has exactly one contest in it, and every
+ *                 pairing of that matchday carries the same round number
+ *
+ * A championship running both aligns them by that number, so round 2 of a
+ * bracket and round 2 of a round robin are fought in the same part of the day.
+ * Classes are not the same depth — a field of four is done in two rounds while
+ * a field of sixteen has four — so a class with nothing to fight in a round
+ * simply does not appear in it.
+ *
+ * Nothing is lifted out of its round, a final included: a final is fed by
+ * contests in earlier rounds, so numbering by round has already placed it
+ * after all of them.
+ *
+ * ── What takes no number ─────────────────────────────────────────────────
+ *
+ * A bracket's walkover. Nobody steps onto a mat for one, so numbering it would
+ * leave a hole in the sequence that an operator has to explain.
+ *
+ * The odd athlete's rest in a round robin needs no skipping here, because it
+ * was never written down: RoundRobinGenerator pairs the odd one out against a
+ * phantom and drops the pairing rather than storing a contest nobody fights.
+ * A round robin therefore has no bye rows at all.
+ *
+ * ── Rest is reported, not arranged ───────────────────────────────────────
+ *
+ * Two things the old workflow never checked are guaranteed by that order
+ * alone: a bout is always numbered after both of the bouts that feed it, and
+ * every contest is numbered exactly once.
+ *
+ * A third — that whoever advances gets a rest — is not, and is deliberately
+ * not arranged for. The order above is fixed by the competition rules, and an
+ * official reading the printed sheet has to be able to work out the next
+ * number from it. Where it leaves somebody short of rest, and the closing
+ * rounds always do because there are too few contests left to sit between a
+ * semi-final and its final, restViolations() and unattainableRest() say so and
+ * the organisers schedule a break. Shuffling contests until the shortfall left
+ * the screen would hide it rather than fix it, and would buy that at the price
+ * of a running order nobody can predict. See unattainableRest() for the rest
+ * no order at all could have delivered.
  */
 class FightOrderScheduler
 {
@@ -64,17 +99,17 @@ class FightOrderScheduler
     /**
      * Number every contested bout in the championship.
      *
-     * Round-major: every first-round bout across all weight classes, then every
-     * second round, and so on. That is what naturally separates an athlete's
-     * bouts, and it also keeps the weight classes progressing together rather
-     * than running one class to its final while another has not started.
+     * Round by round, lightest class first within a round, and the drawn
+     * order within a class — the class docblock says why each of those is the
+     * way round it is, and what a round means in each format.
      *
-     * Within a round the classes are interleaved, so consecutive bouts are
-     * usually different categories — easier to rotate across mats, and it
-     * spreads each class's officials and coaches through the session.
+     * Rebuilt from nothing on every run, so the same draws always produce the
+     * same sequence and a class added late does not shift the numbers already
+     * on somebody's printed sheet by a different amount than a rerun would.
      *
-     * @param  int|null  $minimumRest  null takes the configured rest,
-     *                                 kurash.round_robin.minimum_rest
+     * @param  int|null  $minimumRest  the rest the report is measured against —
+     *                                 it does not move anything; null takes the
+     *                                 configured kurash.round_robin.minimum_rest
      * @return array{scheduled:int, violations:int, unattainable:int}
      */
     public function schedule(Championship $championship, ?int $minimumRest = null): array
@@ -87,7 +122,7 @@ class FightOrderScheduler
             return ['scheduled' => 0, 'violations' => 0, 'unattainable' => 0];
         }
 
-        $ordered = $this->spaceSharedAthletes($this->orderRoundMajor($bouts), $minimumRest);
+        $ordered = $this->runningOrder($bouts);
 
         DB::transaction(function () use ($championship, $ordered) {
             // Clear first: fight_number has no uniqueness constraint, but a
@@ -110,9 +145,10 @@ class FightOrderScheduler
         return [
             'scheduled' => $ordered->count(),
             'violations' => $this->restViolations($championship, $minimumRest)->count(),
-            // Told apart from the violations above on purpose: one is an order
-            // that could be better, and this is a rest that no order could
-            // have delivered. An administrator can act on the first.
+            // Told apart from the violations above on purpose: one is a rest
+            // the day's order does not leave, which an administrator can put a
+            // break into, and this is a rest that no order at all could have
+            // delivered, which only a longer session would fix.
             'unattainable' => $this->unattainableRest($championship, $minimumRest)->count(),
         ];
     }
@@ -148,140 +184,83 @@ class FightOrderScheduler
     }
 
     /**
+     * The whole championship in the order it is numbered.
+     *
+     * Every round in turn, and within a round every class in turn. Position in
+     * this collection is the fight number, less one.
+     *
      * @param  Collection<int, Bout>  $bouts
      * @return Collection<int, Bout>
      */
-    private function orderRoundMajor(Collection $bouts): Collection
+    private function runningOrder(Collection $bouts): Collection
     {
+        $weights = $this->weightOrder($bouts);
+
         $ordered = collect();
 
-        foreach ($bouts->groupBy('round')->sortKeys() as $roundBouts) {
-            $byCategory = $roundBouts
-                ->groupBy('weight_category_id')
-                ->map(fn (Collection $c) => $c->sortBy('position_in_round')->values())
-                ->values();
-
-            // Round-robin across the weight classes present in this round.
-            $depth = $byCategory->max(fn (Collection $c) => $c->count()) ?? 0;
-
-            for ($i = 0; $i < $depth; $i++) {
-                foreach ($byCategory as $categoryBouts) {
-                    if ($categoryBouts->has($i)) {
-                        $ordered->push($categoryBouts[$i]);
-                    }
-                }
-            }
+        // sortKeys() and not the order the rows arrived in: round is an integer
+        // column, and a database free to return them in any order is free to
+        // return round 2 first. A round no class has a contest in cannot
+        // appear, because the rounds come from the contests themselves.
+        foreach ($bouts->groupBy('round')->sortKeys() as $round) {
+            $ordered = $ordered->concat($this->lightestFirst($round, $weights));
         }
 
-        return $ordered;
+        return $ordered->values();
     }
 
     /**
-     * Push an athlete's contests apart, where the order is free to be changed.
+     * One round's contests: lightest class first, and within a class the order
+     * the draw gave them.
      *
-     * Only round-robin contests are moved. A knockout bout may not be
-     * reordered freely — it has to follow the bouts that feed it, and
-     * orderRoundMajor has already placed it where that holds — but a round
-     * robin has no such constraint, so any two of its contests may trade
-     * places with each other.
-     *
-     * Greedy and bounded: walk the order, and where a contest would put an
-     * athlete back on the mat too soon, look ahead for a round-robin contest
-     * that fits there instead and swap the two. A swap can create a conflict
-     * further down, which the same walk then repairs when it reaches it.
-     *
-     * This improves an order; it does not guarantee one. What cannot be
-     * achieved at all is reported by unattainableRest() rather than hidden by
-     * shuffling until the loop gives up.
-     *
-     * @param  Collection<int, Bout>  $ordered
+     * @param  Collection<int, Bout>  $bouts
+     * @param  array<int, array{float, int, int, int}>  $weights
      * @return Collection<int, Bout>
      */
-    private function spaceSharedAthletes(Collection $ordered, int $minimumRest): Collection
+    private function lightestFirst(Collection $bouts, array $weights): Collection
     {
-        $list = $ordered->values()->all();
-        $count = count($list);
+        return $bouts->sortBy(fn (Bout $bout): array => [
+            // A contest whose class has gone — an edit mid-competition — sorts
+            // last rather than crashing the numbering of the classes that are
+            // still there.
+            ...($weights[$bout->weight_category_id] ?? [INF, 1, PHP_INT_MAX, PHP_INT_MAX]),
+            $bout->position_in_round,
+        ])->values();
+    }
 
-        // Feeder links resolved in memory before the walk: a bout has feeders
-        // exactly when another bout points at it, and every candidate feeder
-        // is in this very list (a bye feeding a bout is knockout by
-        // definition, and knockout bouts are immovable on their format
-        // alone). The alternative — previousBouts()->doesntExist() per
-        // candidate — is a live query inside an O(n²) repair loop.
-        $fed = [];
+    /**
+     * Where each class sits on the scale, resolved once for the whole run.
+     *
+     * Keyed by class rather than asked per bout: a bracket of thirty-two asks
+     * the same question thirty-one times, and the answer parses a label.
+     *
+     * @param  Collection<int, Bout>  $bouts
+     * @return array<int, array{float, int, int, int}>
+     */
+    private function weightOrder(Collection $bouts): array
+    {
+        $keys = [];
 
-        foreach ($list as $bout) {
-            if ($bout->next_bout_id !== null) {
-                $fed[$bout->next_bout_id] = true;
-            }
-        }
+        foreach ($bouts as $bout) {
+            $category = $bout->weightCategory;
 
-        // Where each athlete was last placed, so the check is a lookup rather
-        // than a scan back over the whole order.
-        $lastAt = [];
-
-        for ($i = 0; $i < $count; $i++) {
-            if (! $this->tooSoon($list[$i], $i, $lastAt, $minimumRest)) {
-                $this->remember($list[$i], $i, $lastAt);
-
+            if ($category === null || isset($keys[$category->id])) {
                 continue;
             }
 
-            // Only a round robin's contests may be moved, and only into a
-            // position another round-robin contest is holding.
-            if ($this->isMovable($list[$i], $fed)) {
-                for ($j = $i + 1; $j < $count; $j++) {
-                    if (! $this->isMovable($list[$j], $fed) || $this->tooSoon($list[$j], $i, $lastAt, $minimumRest)) {
-                        continue;
-                    }
-
-                    [$list[$i], $list[$j]] = [$list[$j], $list[$i]];
-                    break;
-                }
-            }
-
-            $this->remember($list[$i], $i, $lastAt);
+            $keys[$category->id] = [
+                ...$category->weightLimit()->sortKey(),
+                // Two classes can name the same limit — a men's -63 and a
+                // women's -63 run on the same day. Settled by the order they
+                // are displayed in and then by id, so the running order comes
+                // out the same on every run instead of following whatever the
+                // database happened to return.
+                $category->sort_order,
+                $category->id,
+            ];
         }
 
-        return collect($list);
-    }
-
-    /**
-     * A contest whose place in the order is not fixed by a feeder.
-     *
-     * @param  array<int, bool>  $fed  bout ids some other bout advances into
-     */
-    private function isMovable(Bout $bout, array $fed): bool
-    {
-        return $bout->next_bout_id === null
-            && ! isset($fed[$bout->id])
-            && ($bout->weightCategory?->isRoundRobin() ?? false);
-    }
-
-    /**
-     * Would putting this contest here bring somebody back too soon?
-     *
-     * @param  array<int, int>  $lastAt
-     */
-    private function tooSoon(Bout $bout, int $at, array $lastAt, int $minimumRest): bool
-    {
-        foreach ([$bout->athlete_a_id, $bout->athlete_b_id] as $athlete) {
-            if ($athlete !== null && isset($lastAt[$athlete]) && $at - $lastAt[$athlete] <= $minimumRest) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    /** @param  array<int, int>  $lastAt */
-    private function remember(Bout $bout, int $at, array &$lastAt): void
-    {
-        foreach ([$bout->athlete_a_id, $bout->athlete_b_id] as $athlete) {
-            if ($athlete !== null) {
-                $lastAt[$athlete] = $at;
-            }
-        }
+        return $keys;
     }
 
     /**

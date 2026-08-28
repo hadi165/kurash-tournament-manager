@@ -530,3 +530,208 @@ describe('the bracket at every stage', function () {
             ->and(collect($sheet->branches())->pluck('winner')->filter())->toBeEmpty();
     });
 });
+
+/**
+ * Numbering a class on request, and saving a page of boxes at once.
+ *
+ * Numbering is offered beside publication rather than done at draw time: a
+ * draw and a running order are two decisions, and a class can be drawn days
+ * before anybody knows which mat it runs on.
+ *
+ * Saving is one button for the class. A bracket of thirty-two is thirty-one
+ * boxes, and an operator laying out an order edits a run of them at once.
+ */
+describe('numbering a whole class', function () {
+    beforeEach(function () {
+        $this->admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($this->admin);
+
+        $this->category = weighedClass(4);
+        app(BracketGenerator::class)->generate($this->category);
+
+        $this->board = fn () => Livewire::test(Bracket::class, ['weightCategory' => $this->category->refresh()]);
+    });
+
+    /** The draw itself must leave numbering alone. */
+    it('leaves a fresh draw unnumbered', function () {
+        expect($this->category->bouts()->whereNotNull('fight_number')->count())->toBe(0);
+    });
+
+    it('numbers every contest when asked', function () {
+        ($this->board)()->call('numberContests');
+
+        $contests = $this->category->bouts()->where('is_bye', false)->get();
+
+        expect($contests)->not->toBeEmpty()
+            ->and($contests->whereNull('fight_number'))->toBeEmpty();
+    });
+
+    it('leaves byes unnumbered', function () {
+        [$byes] = categoryWithAthletes(5, '-bye5');
+        app(BracketGenerator::class)->generate($byes);
+
+        Livewire::test(Bracket::class, ['weightCategory' => $byes->refresh()])->call('numberContests');
+
+        expect($byes->bouts()->where('is_bye', true)->whereNotNull('fight_number')->count())->toBe(0);
+    });
+
+    it('numbers round by round', function () {
+        ($this->board)()->call('numberContests');
+
+        $rounds = $this->category->bouts()->where('is_bye', false)
+            ->orderBy('fight_number')->pluck('round')->all();
+
+        expect($rounds)->toBe(collect($rounds)->sort()->values()->all());
+    });
+
+    /** Pressing it twice must not renumber anything. */
+    it('fills gaps and keeps numbers already given', function () {
+        $bout = $this->category->bouts()->where('is_bye', false)->firstOrFail();
+        $bout->update(['fight_number' => 500]);
+
+        ($this->board)()->call('numberContests');
+
+        expect($bout->refresh()->fight_number)->toBe(500)
+            ->and($this->category->bouts()->where('is_bye', false)->whereNull('fight_number')->count())->toBe(0);
+
+        $snapshot = $this->category->bouts()->orderBy('id')->pluck('fight_number', 'id')->all();
+
+        ($this->board)()->call('numberContests');
+
+        expect($this->category->bouts()->orderBy('id')->pluck('fight_number', 'id')->all())->toBe($snapshot);
+    });
+
+    /** It appends, so an operator's printed order never shifts under them. */
+    it('never moves a number another class already holds', function () {
+        $sibling = WeightCategory::factory()->create([
+            'age_category_id' => $this->category->age_category_id,
+            'label' => '-95',
+            'gender' => 'M',
+        ]);
+
+        foreach (range(1, 4) as $draw) {
+            Athlete::factory()->drawn($draw)->create([
+                'championship_id' => $this->category->ageCategory->championship_id,
+                'age_category_id' => $this->category->age_category_id,
+                'weight_category_id' => $sibling->id,
+                'weighin_status' => 'pass',
+            ]);
+        }
+
+        app(BracketGenerator::class)->generate($sibling->refresh());
+
+        Livewire::test(Bracket::class, ['weightCategory' => $sibling->refresh()])->call('numberContests');
+        $siblingNumbers = $sibling->bouts()->orderBy('id')->pluck('fight_number', 'id')->all();
+
+        ($this->board)()->call('numberContests');
+
+        expect($sibling->bouts()->orderBy('id')->pluck('fight_number', 'id')->all())->toBe($siblingNumbers)
+            ->and($this->category->bouts()->where('is_bye', false)->min('fight_number'))
+            ->toBeGreaterThan(max(array_filter($siblingNumbers)));
+    });
+
+    it('writes an audit row for each number it gives', function () {
+        ($this->board)()->call('numberContests');
+
+        $contests = $this->category->bouts()->where('is_bye', false)->count();
+
+        expect(BoutEvent::whereIn('bout_id', $this->category->bouts()->pluck('id'))
+            ->where('action', 'fight_number_set')->count())->toBe($contests);
+    });
+
+    it('refuses an account that may not run the competition', function () {
+        Livewire::actingAs(User::factory()->official()->create())
+            ->test(Bracket::class, ['weightCategory' => $this->category->refresh()])
+            ->call('numberContests')
+            ->assertForbidden();
+
+        expect($this->category->bouts()->whereNotNull('fight_number')->count())->toBe(0);
+    });
+
+    it('refuses an archived championship', function () {
+        $this->category->ageCategory->championship->forceFill(['archived_at' => now()])->save();
+
+        ($this->board)()->call('numberContests')->assertForbidden();
+
+        expect($this->category->bouts()->whereNotNull('fight_number')->count())->toBe(0);
+    });
+});
+
+describe('saving a page of fight numbers', function () {
+    beforeEach(function () {
+        $this->admin = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($this->admin);
+
+        $this->category = weighedClass(4);
+        app(BracketGenerator::class)->generate($this->category);
+        $this->contests = $this->category->bouts()->where('is_bye', false)->orderBy('id')->get();
+
+        $this->board = fn () => Livewire::test(Bracket::class, ['weightCategory' => $this->category->refresh()]);
+    });
+
+    it('offers one save for the class, not one per contest', function () {
+        $html = ($this->board)()->html();
+
+        expect($html)->toContain('wire:click="saveFightNumbers"')
+            ->and($html)->not->toContain('wire:click="setFightNumber')
+            ->and($html)->not->toContain('wire:blur');
+    });
+
+    it('saves every edited box in one press', function () {
+        $component = ($this->board)();
+
+        foreach ($this->contests as $i => $bout) {
+            $component->set("fightNumbers.{$bout->id}", (string) (20 + $i));
+        }
+
+        $component->call('saveFightNumbers');
+
+        foreach ($this->contests as $i => $bout) {
+            expect($bout->refresh()->fight_number)->toBe(20 + $i);
+        }
+    });
+
+    it('saves only the boxes that were edited', function () {
+        $first = $this->contests->first();
+        $others = $this->contests->skip(1)->pluck('fight_number', 'id')->all();
+
+        ($this->board)()
+            ->set("fightNumbers.{$first->id}", '31')
+            ->call('saveFightNumbers');
+
+        expect($first->refresh()->fight_number)->toBe(31)
+            ->and($this->category->bouts()->whereKeyNot($first->id)->where('is_bye', false)
+                ->pluck('fight_number', 'id')->all())->toBe($others);
+    });
+
+    it('says so when nothing has been changed', function () {
+        ($this->board)()->call('saveFightNumbers')->assertSee('Nothing to save');
+    });
+
+    /** One box failing must not look like all of them failing. */
+    it('saves the good boxes and reports only the bad one', function () {
+        [$good, $bad] = [$this->contests[0], $this->contests[1]];
+
+        $component = ($this->board)()
+            ->set("fightNumbers.{$good->id}", '61')
+            ->set("fightNumbers.{$bad->id}", 'twelve')
+            ->call('saveFightNumbers');
+
+        $state = $component->get('fightNumberState');
+
+        expect($good->refresh()->fight_number)->toBe(61)
+            ->and($bad->refresh()->fight_number)->not->toBe('twelve')
+            ->and($state[$good->id]['status'])->toBe('saved')
+            ->and($state[$bad->id]['status'])->toBe('error')
+            // And what was typed is still there to correct.
+            ->and($component->get("fightNumbers.{$bad->id}"))->toBe('twelve');
+    });
+
+    it('shows no save button to an account that may not run the competition', function () {
+        $html = Livewire::actingAs(User::factory()->official()->create())
+            ->test(Bracket::class, ['weightCategory' => $this->category->refresh()])
+            ->html();
+
+        expect($html)->not->toContain('wire:click="saveFightNumbers"');
+    });
+});

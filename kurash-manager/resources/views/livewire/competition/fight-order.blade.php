@@ -6,6 +6,11 @@
         ['label' => $championship->title, 'href' => route('championships.show', $championship)],
         ['label' => __('Fight order')],
     ]"
+    {{-- The order is read straight from bouts.fight_number on every render, so
+         there is nothing to invalidate — but a page already open when somebody
+         numbers a contest on the bracket screen has no reason to re-render on
+         its own. .visible so a screen left behind another window stops asking. --}}
+    wire:poll.10s.visible
 >
     <x-slot:aside>
         {{-- The sheet leaves the room with whoever printed it, so it is scoped
