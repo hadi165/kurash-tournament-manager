@@ -89,6 +89,7 @@ Presenter and designer: **Hadi Khani**.
 
 - [View the presentation as PDF](docs/presentation/kurash-competition-manager.pdf)
 - [Download the PowerPoint deck](docs/presentation/kurash-tournament-manager-deck.pptx)
+- [View the presentation on Canva](https://www.canva.com/d/l3klfciBz5zfYmz)
 
 ---
 
