@@ -16,14 +16,18 @@ use App\Observers\DisplayContentObserver;
 use App\Services\Scoreboard\FakeScoreboardDriver;
 use App\Services\Scoreboard\HttpScoreboardDriver;
 use App\Services\Scoreboard\NullScoreboardDriver;
+use App\Support\DatabaseGuard;
 use Carbon\CarbonImmutable;
+use Illuminate\Console\Events\CommandStarting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 use Laravel\Fortify\Contracts\LoginResponse;
+use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -34,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureGates();
+        $this->guardDestructiveCommands();
 
         // Every write to a bout invalidates the display screens for its
         // championship, whatever caused it.
@@ -53,6 +58,51 @@ class AppServiceProvider extends ServiceProvider
         foreach ([AgeCategory::class, Athlete::class, Bout::class, Court::class, WeightCategory::class] as $model) {
             $model::observe(ArchivedChampionshipGuard::class);
         }
+    }
+
+    /**
+     * Stop a destructive Artisan command before it reaches a real database.
+     *
+     * Two mechanisms, because one of them has a hole.
+     *
+     * The framework prohibition is the load-bearing one. It sets a flag each
+     * command checks inside its own handle(), so it holds on every route into
+     * the command: a terminal, a queued Artisan::call(), a test, a script.
+     *
+     * The CommandStarting listener only adds the explanation. It cannot be the
+     * enforcement, and finding out why is what this whole exercise turned on:
+     * Illuminate\Foundation\Console\Kernel reroutes the Symfony console events
+     * only `if (! $this->app->runningUnitTests())`, so a guard built on that
+     * event is missing from precisely the place an automated script runs. The
+     * third time this database was emptied, it was an automated script.
+     *
+     * Neither is conditioned on the environment being production. APP_ENV=local
+     * on this project is the machine running the competition, with the day's
+     * weigh-ins in it. Only a database whose name ends in _test may be
+     * destroyed. Plain `migrate` is never touched — an incremental migration
+     * must keep working everywhere, and it is not what loses data.
+     */
+    private function guardDestructiveCommands(): void
+    {
+        DatabaseGuard::applyCommandProhibitions();
+
+        Event::listen(function (CommandStarting $event): void {
+            if (! DatabaseGuard::isDestructiveCommand($event->command)) {
+                return;
+            }
+
+            if (DatabaseGuard::safeToDestroy()) {
+                return;
+            }
+
+            // The prohibition above has already stopped this; what is added
+            // here is a message naming the database and the way out, because
+            // "prohibited from running in this environment" does not tell an
+            // operator at an event what to do next.
+            $event->output->writeln('<error>'.DatabaseGuard::refusal("php artisan {$event->command}").'</error>');
+
+            throw new RuntimeException(DatabaseGuard::refusal("php artisan {$event->command}"));
+        });
     }
 
     /**

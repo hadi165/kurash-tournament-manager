@@ -6,8 +6,10 @@ use App\Models\Bout;
 use App\Models\BoutEvent;
 use App\Models\Court;
 use App\Services\BoutAdvancer;
+use App\Services\BoutDecisionPolicy;
 use App\Services\BoutScorer;
 use App\Services\KurashScore;
+use App\Support\BoutDecision;
 use App\Support\ScoreTally;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -379,7 +381,10 @@ class MatControl extends Component
     }
 
     /**
-     * Jazzo — half the contest gone and neither athlete has scored.
+     * Jazzo — half the contest gone with nothing on the board at all.
+     *
+     * Nothing means no score AND no penalty. An athlete carrying a tanbeh or a
+     * madichal is in a contest that has had something happen in it.
      *
      * The browser notices, because the browser holds the clock, but it does not
      * decide: the halfway mark and the empty board are both checked again here
@@ -480,7 +485,7 @@ class MatControl extends Component
 
         $bout = $this->bout();
 
-        if ($bout === null) {
+        if ($bout === null || $this->refuseToRedecide($bout)) {
             return;
         }
 
@@ -490,20 +495,30 @@ class MatControl extends Component
 
         if ($outcome === null) {
             $this->awaitingDecision = true;
-            session()->flash('error', __('Level on scores, on how they were earned and on warnings — the referees decide this one.'));
+
+            // Names what the rules could not separate, rather than reciting a
+            // tie-break. The old wording cited "how they were earned", which
+            // was the undocumented origin rule and is no longer applied.
+            $unresolved = $scorer->decisionOnTime($bout, $tally)->unresolved;
+
+            session()->flash('error', $unresolved === []
+                ? __('Nothing separates these athletes under the published rules — the referees decide this one.')
+                : __('The published rules do not settle this: :facts. The referees decide it.', [
+                    'facts' => implode('; ', $unresolved),
+                ]));
 
             return;
         }
 
-        $this->finalise($bout, $outcome['winner_athlete_id'], $outcome['win_type'], $tally);
+        $this->finalise($bout, $outcome['winner_athlete_id'], $outcome['win_type'], $tally, $outcome['decision']);
     }
 
     /** The referees' call on a contest that finished level. */
-    public function awardDecision(string $side): void
+    public function awardDecision(string $side, string $reason = ''): void
     {
         Gate::authorize('score-bout', $this->court);
 
-        $this->declare($side, 'decision');
+        $this->declare($side, 'referee_decision', $reason);
     }
 
     /**
@@ -514,14 +529,51 @@ class MatControl extends Component
      * that stood at the moment is written alongside it. A result nobody can
      * explain from the calls is worse than no result at all.
      */
-    public function declareWinner(string $side): void
+    public function declareWinner(string $side, string $reason = ''): void
     {
         Gate::authorize('score-bout', $this->court);
 
-        $this->declare($side, 'manual');
+        $this->declare($side, 'manual', $reason);
     }
 
-    private function declare(string $side, string $winType): void
+    /**
+     * Refuse to decide a contest that already has a winner.
+     *
+     * A completed bout carries a frozen decision naming the edition of the
+     * rules it was judged under. Recomputing it would silently re-judge it
+     * under whatever policy ships today — and the tie-break has already changed
+     * once, on 2026-08-26, when an undocumented criterion was removed and the
+     * caution rule was corrected. A contest fought before that must keep the
+     * winner it was awarded.
+     *
+     * Correcting a finished result is a different act with its own path:
+     * BoutAdvancer::recordResult() treats a changed winner as a correction and
+     * unwinds everything the old winner went on to do. That is deliberate, and
+     * it is not something a screen should reach by accident.
+     */
+    private function refuseToRedecide(Bout $bout): bool
+    {
+        if (! $bout->isDecided()) {
+            return false;
+        }
+
+        session()->flash('error', __(':name has already been decided. Correct the result from the bracket if it is wrong — recomputing it here would re-judge it under today\'s rules.', [
+            'name' => $bout->play_code,
+        ]));
+
+        return true;
+    }
+
+    /**
+     * A human gives the contest to a side.
+     *
+     * The verdict filed alongside it names the official, the moment, their
+     * reason and — the part that matters at a protest — the facts the rules
+     * left unresolved. Without those, a record saying "referee decision" cannot
+     * be told apart from a record saying "the software gave up", and only the
+     * first is defensible.
+     */
+    private function declare(string $side, string $winType, string $reason = ''): void
     {
         $bout = $this->bout();
 
@@ -536,8 +588,25 @@ class MatControl extends Component
         }
 
         $scorer = app(KurashScore::class);
+        $tally = $scorer->tally($bout, $bout->events);
 
-        $this->finalise($bout, $winnerId, $winType, $scorer->tally($bout, $bout->events));
+        // What the policy could not settle, captured as it stood at the moment
+        // the official was asked — not recomputed later, when the log may have
+        // moved on.
+        $unresolved = $scorer->decisionOnTime($bout, $tally)->unresolved;
+        $user = auth()->user();
+
+        $decision = BoutDecision::refereeDecided(
+            side: $side,
+            version: app(BoutDecisionPolicy::class)->versionFor($bout),
+            unresolved: $unresolved,
+            userId: $user?->id,
+            userName: $user?->name,
+            reason: trim($reason) === '' ? null : trim($reason),
+            basis: $winType,
+        );
+
+        $this->finalise($bout, $winnerId, $winType, $tally, $decision);
     }
 
     /**
@@ -548,7 +617,7 @@ class MatControl extends Component
     {
         $bout = $this->bout();
 
-        if ($bout === null) {
+        if ($bout === null || $bout->isDecided()) {
             return;
         }
 
@@ -557,14 +626,14 @@ class MatControl extends Component
         $outcome = $scorer->decisiveOutcome($bout, $tally);
 
         if ($outcome !== null) {
-            $this->finalise($bout, $outcome['winner_athlete_id'], $outcome['win_type'], $tally);
+            $this->finalise($bout, $outcome['winner_athlete_id'], $outcome['win_type'], $tally, $outcome['decision']);
         }
     }
 
     /**
      * @param  array{a: ScoreTally, b: ScoreTally}  $tally
      */
-    private function finalise(Bout $bout, int $winnerAthleteId, string $winType, array $tally): void
+    private function finalise(Bout $bout, int $winnerAthleteId, string $winType, array $tally, ?BoutDecision $decision = null): void
     {
         // Freeze the clock at the moment the arm went up, so the board shows
         // the time the contest was won rather than continuing to run down.
@@ -585,6 +654,7 @@ class MatControl extends Component
                 winType: $winType,
                 user: auth()->user(),
                 source: 'operator',
+                decision: $decision,
             );
         } catch (Throwable $e) {
             session()->flash('error', $e->getMessage());
@@ -785,7 +855,10 @@ class MatControl extends Component
             // on the server when it does.
             'jazzoAt' => $bout !== null ? $scorer->jazzoAt($bout) : 0,
             'inJazzo' => (bool) $bout?->isInJazzo(),
-            'anyScore' => $tally['a']->hasScored() || $tally['b']->hasScored(),
+            // The domain rule, minus the clock the browser holds. This used to
+            // be `anyScore`, a score-only test the view combined itself — a
+            // second, weaker copy of a rule that lives in KurashScore.
+            'jazzoBoardIsClear' => $bout !== null && $scorer->jazzoBoardIsClear($bout, $tally),
             // Read once here rather than per render pass in the view, where it
             // would be a query sitting inside the markup.
             'totalRounds' => $bout === null

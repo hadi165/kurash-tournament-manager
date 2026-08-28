@@ -92,11 +92,11 @@ class BoutScorer
         }
 
         if ($call === KurashScore::DAKKI) {
-            // Order matters. The automatic chala this dakki supersedes is taken
-            // back first, so a board watched between the two writes never shows
-            // the opponent holding both the chala and the yonbosh for the same
+            // Order matters. What this dakki supersedes is taken back first,
+            // so a board watched between the two writes never shows the
+            // opponent holding both the chala and the yonbosh for the same
             // offence.
-            $this->withdrawAutomaticChala($bout, $event, $side, $opponent, $user, $source);
+            $this->supersedeTanbeh($bout, $event, $side, $opponent, $user, $source);
 
             $this->append(
                 $bout, KurashScore::YONBOSH, $opponent, $clock, $user, $source,
@@ -106,15 +106,30 @@ class BoutScorer
     }
 
     /**
-     * Take back the chala this side's earlier tanbeh handed the opponent.
+     * A dakki replaces this side's active tanbeh outright.
+     *
+     * Both halves leave the live tally: the tanbeh itself, and the automatic
+     * chala it handed the opponent. The grade the athlete carries is the dakki,
+     * and a board still showing the superseded tanbeh beside it is reporting
+     * the same offence twice. An earlier version withdrew only the chala and
+     * left the tanbeh standing, which is exactly that double count.
      *
      * Scoped by parentage, which is the whole reason parent_event_id is
-     * recorded: only a chala that exists *because* of a tanbeh against this
-     * athlete is withdrawn. A chala the opponent threw for is left exactly
-     * where it is — the rule replaces what the penalty gave, not what was
-     * earned.
+     * recorded: only a chala that exists *because* of one of these tanbeh is
+     * withdrawn. A chala the opponent threw for is left exactly where it is —
+     * the rule replaces what the penalty gave, never what was earned. Nothing
+     * on the opponent's own penalty column is touched at all.
+     *
+     * Every tanbeh still standing against this side goes, not just the latest:
+     * the dakki is the grade now represented, and an obsolete tanbeh left in
+     * the tally would go on counting toward madichal and toward the warning
+     * comparison.
+     *
+     * Nothing is deleted. Both annulments are appended as void events naming
+     * the row they annul and the dakki that caused them, so a protest can see
+     * the tanbeh was given and then superseded rather than never given.
      */
-    private function withdrawAutomaticChala(
+    private function supersedeTanbeh(
         Bout $bout,
         BoutEvent $cause,
         string $side,
@@ -153,6 +168,22 @@ class BoutScorer
                 parent: $cause,
             );
         }
+
+        // Then the tanbeh themselves. Voided after their consequences so the
+        // log reads in the order the rule applies — the chala the tanbeh gave
+        // is withdrawn, then the tanbeh it came from is superseded.
+        $tanbeh = array_filter(
+            $scorer->liveCalls($events, $bout),
+            fn (array $c): bool => in_array($c['id'], $tanbehIds, true)
+        );
+
+        foreach ($tanbeh as $penalty) {
+            $this->void(
+                $bout, $penalty, $user, $source,
+                reason: 'superseded_by_dakki',
+                parent: $cause,
+            );
+        }
     }
 
     /**
@@ -185,9 +216,24 @@ class BoutScorer
             return;
         }
 
+        /*
+         | Deliberately parented to nothing.
+         |
+         | This dakki is caused by the accumulation, not by the single tanbeh
+         | that completed it — and the distinction is load bearing. A dakki
+         | supersedes the tanbeh against its side, so a dakki parented to one of
+         | them would annul its own cause, and the cascade in
+         | KurashScore::liveCalls() would then annul the dakki along with it.
+         | The contest would silently end up with neither the tanbeh nor the
+         | dakki on the board.
+         |
+         | The origin still records that a tanbeh count produced it, and the
+         | tanbeh rows it superseded carry void events naming this dakki, so
+         | the chain is fully readable from the log in the other direction.
+         */
         $dakki = $this->append(
             $bout, KurashScore::DAKKI, $side, $clock, $user, $source,
-            KurashScore::ORIGIN_AUTO_FROM_T, $cause
+            KurashScore::ORIGIN_AUTO_FROM_T, null
         );
 
         $this->applyConsequences($bout, $dakki, KurashScore::DAKKI, $side, $clock, $user, $source);

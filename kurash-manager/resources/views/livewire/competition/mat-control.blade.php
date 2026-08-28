@@ -53,7 +53,11 @@
              but it does not decide: the server checks the reading and the empty
              board again before it stops anything. --}}
         offerJazzo() {
-            if (@js($anyScore) || @js($inJazzo)) return
+            // The rule is the server's — jazzoBoardIsClear() is
+            // KurashScore's answer, not a score check repeated here. All this
+            // adds is the clock, which is the only thing the browser holds,
+            // and callJazzo() checks that again anyway.
+            if (! @js($jazzoBoardIsClear)) return
             if (this.left > this.jazzoAt) return
             this.stop()
             $wire.callJazzo(this.left)
@@ -304,7 +308,24 @@
                                          colour rather than for the athlete,
                                          because the colour is what is being
                                          pointed at on the mat. --}}
-                                    <flux:button size="xs" variant="primary" wire:click="declareWinner('{{ $key }}')">
+                                    {{-- Each override carries its own corner's
+                                         colour. Both used to render in the
+                                         accent, so "Win Blue" was a green
+                                         button — the one control on this screen
+                                         where the colour IS the instruction.
+
+                                         info-700 rather than the info-500 used
+                                         for the accent bar above: white on
+                                         info-500 is 3:1, and this is a small
+                                         bold label that has to be read across a
+                                         mat. info-700 is 6:1 and still plainly
+                                         blue. --}}
+                                    <flux:button
+                                        size="xs"
+                                        variant="primary"
+                                        @class(['!bg-info-700 hover:!bg-info-800' => $side['colour'] === 'blue'])
+                                        wire:click="declareWinner('{{ $key }}')"
+                                    >
                                         {{ $side['colour'] === 'blue' ? __('Win Blue') : __('Win Green') }}
                                     </flux:button>
                                 @endcan

@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Bout;
 use App\Models\BoutEvent;
+use App\Support\BoutDecision;
 use App\Support\ScoreTally;
 use Illuminate\Support\Collection;
 
@@ -305,8 +306,14 @@ class KurashScore
      *
      * Returns null while the contest is still live.
      *
+     * Delegated to BoutDecisionPolicy so a contest ended mid-round files the
+     * same kind of record as one decided at time: which edition was applied and
+     * which clause ended it. A terminal outcome is not a tie-break, but it is
+     * still a ruling, and a result sheet that can cite one and not the other is
+     * only half a record.
+     *
      * @param  array{a: ScoreTally, b: ScoreTally}  $tally
-     * @return array{winner_athlete_id:int, win_type:string}|null
+     * @return array{winner_athlete_id:int, win_type:string, decision:BoutDecision}|null
      */
     public function decisiveOutcome(Bout $bout, array $tally): ?array
     {
@@ -314,99 +321,62 @@ class KurashScore
             return null;
         }
 
-        $athleteId = ['a' => $bout->athlete_a_id, 'b' => $bout->athlete_b_id];
+        $decision = app(BoutDecisionPolicy::class)->terminalDecision($bout, $tally);
 
-        foreach (['a', 'b'] as $side) {
-            if ($tally[$side]->isDefeated()) {
-                return [
-                    'winner_athlete_id' => $athleteId[self::opposite($side)],
-                    'win_type' => $tally[$side]->defeatType() ?? self::GIRROM,
-                ];
-            }
+        if ($decision?->side === null) {
+            return null;
         }
 
-        foreach (['a', 'b'] as $side) {
-            if ($tally[$side]->isDecisive()) {
-                return [
-                    'winner_athlete_id' => $athleteId[$side],
-                    // Two yonbosh are a khalol by the rules, but the record
-                    // should say how it was actually reached.
-                    'win_type' => $tally[$side]->khalol > 0 ? self::KHALOL : self::YONBOSH,
-                ];
-            }
-        }
-
-        return null;
+        return [
+            'winner_athlete_id' => $decision->side === 'a' ? $bout->athlete_a_id : $bout->athlete_b_id,
+            'win_type' => $decision->basis,
+            'decision' => $decision,
+        ];
     }
 
     /**
      * Who wins when time runs out.
      *
-     * Null means the two are level all the way down the tie-break — level on
-     * yonbosh, on chala, on how those were earned, and on when they were last
-     * warned. The software will not break that for you: it is a referee
-     * decision, and the mat screen asks for one rather than picking a side.
+     * Delegated to BoutDecisionPolicy, which owns the order, the edition and
+     * the clause. This method only translates the verdict into the shape the
+     * completion path already speaks — and carries the verdict itself along, so
+     * BoutAdvancer can file it against the bout rather than reconstructing it.
+     *
+     * Null still means no automatic winner, and still means the mat screen must
+     * ask a referee rather than the software picking a side.
      *
      * @param  array{a: ScoreTally, b: ScoreTally}  $tally
-     * @return array{winner_athlete_id:int, win_type:string}|null
+     * @return array{winner_athlete_id:int, win_type:string, decision:BoutDecision}|null
      */
     public function outcomeOnTime(Bout $bout, array $tally): ?array
     {
-        if ($decisive = $this->decisiveOutcome($bout, $tally)) {
-            return $decisive;
-        }
-
         if ($bout->athlete_a_id === null || $bout->athlete_b_id === null) {
             return null;
         }
 
-        $comparison = $tally['a']->compareTo($tally['b']);
+        $decision = app(BoutDecisionPolicy::class)->decide($bout, $tally);
 
-        if ($comparison === 0) {
+        if ($decision->side === null) {
             return null;
         }
 
-        $side = $comparison > 0 ? 'a' : 'b';
-
         return [
-            'winner_athlete_id' => $side === 'a' ? $bout->athlete_a_id : $bout->athlete_b_id,
-            'win_type' => $this->winTypeFor($tally[$side], $tally[self::opposite($side)]),
+            'winner_athlete_id' => $decision->side === 'a' ? $bout->athlete_a_id : $bout->athlete_b_id,
+            'win_type' => $decision->basis,
+            'decision' => $decision,
         ];
     }
 
     /**
-     * How a contest decided on the clock was won.
+     * The verdict on its own, for a caller that wants the reasoning without
+     * the winner — the mat screen asking what it should show an official when
+     * the rules do not decide.
      *
-     * Named after the step of the tie-break that actually separated the two, so
-     * a result sheet reading "warnings" is a contest the latest-warning rule
-     * decided rather than one the software could not explain. The steps are
-     * walked in the same order ScoreTally::compareTo() walks them, because a
-     * result whose stated reason came from a different rule than the decision
-     * would be worse than no reason at all.
+     * @param  array{a: ScoreTally, b: ScoreTally}  $tally
      */
-    private function winTypeFor(ScoreTally $winner, ScoreTally $loser): string
+    public function decisionOnTime(Bout $bout, array $tally): BoutDecision
     {
-        if ($winner->topPriority() !== $loser->topPriority()) {
-            return $winner->topScore() ?? 'decision';
-        }
-
-        $top = $winner->topScore();
-
-        if ($top !== null && $winner->earned($top) !== $loser->earned($top)) {
-            return 'technique';
-        }
-
-        foreach ([self::KHALOL, self::YONBOSH, self::CHALA] as $call) {
-            if ($winner->count($call) !== $loser->count($call)) {
-                return $call;
-            }
-        }
-
-        if ($winner->lastScoreAt !== $loser->lastScoreAt) {
-            return 'latest_score';
-        }
-
-        return $winner->lastPenaltyAt !== $loser->lastPenaltyAt ? 'warnings' : 'decision';
+        return app(BoutDecisionPolicy::class)->decide($bout, $tally);
     }
 
     /**
@@ -425,10 +395,31 @@ class KurashScore
             self::DAKKI => 'Opponent received D',
             self::GIRROM => 'Opponent received G',
             self::MADICHAL => 'Madichal limit reached',
-            'technique' => 'Win by technique',
+
+            // The current vocabulary. Each names the rule that decided it, so a
+            // result sheet says which clause separated the two athletes.
+            'higher_appraisal' => 'Win by higher appraisal',
+            'more_chala' => 'Win by more Chala',
+            'last_appraisal' => 'Win by last appraisal',
+            'first_caution' => 'Win by first caution',
+            'referee_decision' => 'Referee decision',
+
+            /*
+             | Legacy values, kept readable and never written again.
+             |
+             | 'technique' recorded the undocumented origin tie-break removed on
+             | 2026-08-26; 'warnings' recorded the latest-caution rule that the
+             | published first-caution rule replaced; 'latest_score' is what
+             | 'last_appraisal' is now called. Bouts completed under those
+             | editions keep their stored value and keep reading as what they
+             | were decided by — re-labelling a finished result would be
+             | rewriting the record.
+             */
+            'technique' => 'Win by technique (rules edition before 2026-08-26)',
             'latest_score' => 'Win by latest score',
-            'warnings' => 'Win by penalty',
+            'warnings' => 'Win by penalty (rules edition before 2026-08-26)',
             'decision' => 'Referee decision',
+
             'manual' => 'Manual referee decision',
             'bye' => 'Bye',
             null => null,
@@ -491,6 +482,33 @@ class KurashScore
     }
 
     /**
+     * Is the board clear enough for jazzo — everything except the clock?
+     *
+     * Split from jazzoIsDue() so the mat screen can ask the same question the
+     * server will ask. The browser holds the clock and nothing else; it used to
+     * hold a second, weaker copy of this rule that looked only at scores, so
+     * the two could disagree about whether to offer the button.
+     *
+     * Nothing on the board means nothing at all: no score, and no penalty. An
+     * athlete carrying a tanbeh or a madichal is in a contest that has had
+     * something happen in it, and jazzo is for one that has not.
+     *
+     * Annulled, superseded and voided calls are already gone — the tally is
+     * folded from liveCalls(), which never yields them — so a contest whose
+     * only record was taken back is blank again and may be stopped.
+     *
+     * @param  array{a: ScoreTally, b: ScoreTally}  $tally
+     */
+    public function jazzoBoardIsClear(Bout $bout, array $tally): bool
+    {
+        if ($bout->jazzo_called_at !== null || $bout->isDecided()) {
+            return false;
+        }
+
+        return ! $tally['a']->hasAnyActiveCall() && ! $tally['b']->hasAnyActiveCall();
+    }
+
+    /**
      * Is this contest at the halfway mark with nothing on the board?
      *
      * Both halves are checked here rather than trusted from the browser: the
@@ -502,14 +520,7 @@ class KurashScore
      */
     public function jazzoIsDue(Bout $bout, array $tally, int $secondsLeft): bool
     {
-        if ($bout->jazzo_called_at !== null || $bout->isDecided()) {
-            return false;
-        }
-
-        if ($tally['a']->hasScored() || $tally['b']->hasScored()) {
-            return false;
-        }
-
-        return $secondsLeft <= $this->jazzoAt($bout);
+        return $this->jazzoBoardIsClear($bout, $tally)
+            && $secondsLeft <= $this->jazzoAt($bout);
     }
 }

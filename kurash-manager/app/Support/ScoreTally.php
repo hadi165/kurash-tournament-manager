@@ -31,9 +31,16 @@ final readonly class ScoreTally
          * The part of the above this athlete earned with a technique, rather
          * than was handed by the opponent's penalties.
          *
-         * Kept apart because a contest level at time is decided partly on it:
-         * two athletes on one yonbosh each are not level if one threw for it
-         * and the other was given it when their opponent collected a dakki.
+         * Two rules read this. The dakki rule takes back the automatic chala a
+         * superseded tanbeh gave and leaves an earned one standing; and the
+         * decision policy ranks a technique-earned appraisal above an automatic
+         * one of equal value and count.
+         *
+         * Its place in the order has been wrong in both directions: once
+         * ranked above count, where it decided contests before the count rule
+         * was reached, and once removed entirely, which let a later automatic
+         * score beat an earlier thrown one. The federation has settled it —
+         * below count, above recency. See BoutDecisionPolicy.
          */
         public int $earnedYonbosh = 0,
         public int $earnedChala = 0,
@@ -41,12 +48,26 @@ final readonly class ScoreTally
          * Sequence number of the most recent penalty against this athlete, or
          * zero for an athlete who has taken none.
          *
-         * The last tie-break in the rules is the latest warning: level on
-         * everything else, whoever was warned most recently loses. Zero sorting
-         * ahead of every real sequence number is what makes "no penalty at all"
-         * beat "a penalty, but an early one" without a special case.
+         * This is what the warning rule reads: the athlete holding the most
+         * recent active warning loses. Zero means no warning at all and is the
+         * lowest sequence there is, so an unwarned athlete beats a warned one
+         * without a special case.
+         *
+         * A reading of "cautioned first wins" shipped briefly and is gone. It
+         * agrees with this rule whenever each athlete holds one warning and
+         * disagrees from the second onward — see firstPenaltyAt below, which is
+         * kept for the audit trail and decides nothing.
          */
         public int $lastPenaltyAt = 0,
+        /**
+         * Sequence number of the EARLIEST penalty still standing against this
+         * athlete, or zero for one who has taken none.
+         *
+         * Kept for the audit trail and for screens that want to show when an
+         * athlete's trouble started. It decides nothing: the federation's rule
+         * is the LATEST warning, which is lastPenaltyAt above.
+         */
+        public int $firstPenaltyAt = 0,
         /**
          * Sequence number of the most recent score to this athlete, or zero
          * for one who has not scored.
@@ -177,8 +198,9 @@ final readonly class ScoreTally
      *
      * Yonbosh in the whole part, chala in the tenths. This is for showing only:
      * nothing compares two contests on it, because ten chala would read as one
-     * yonbosh and chala must never add up to one. Ordering goes through
-     * compareTo(), which compares the counts themselves. Chala is clamped at 9
+     * yonbosh and chala must never add up to one. Ordering is
+     * BoutDecisionPolicy's, and compares the counts themselves. Chala is
+     * clamped at 9
      * so the encoding cannot overflow into the yonbosh place.
      */
     public function points(): float
@@ -190,80 +212,52 @@ final readonly class ScoreTally
         return $this->yonbosh + min($this->chala, 9) / 10;
     }
 
-    /**
-     * Rank this tally against the other one, for a contest that reached time.
-     *
-     * The order the rules give, each step only reached when the one above it
-     * was level:
-     *
-     *   1. score priority   the more valuable score either athlete holds. A
-     *                       yonbosh beats any number of chala, however recently
-     *                       they were awarded — value comes before recency and
-     *                       before count
-     *   2. score origin     at that value, the athlete who earned it with a
-     *                       technique over one handed the same thing because
-     *                       their opponent was penalised
-     *   3. counts           how many, working down from the most valuable
-     *   4. latest score     whoever scored most recently
-     *   5. latest warning   whoever was warned most recently loses
-     *
-     * Returning zero is a genuine outcome, not a failure to decide: a contest
-     * level all the way down is a referee decision, and this method will not
-     * invent a winner to avoid asking for one.
+    /*
+     |--------------------------------------------------------------------------
+     | Facts, not order
+     |--------------------------------------------------------------------------
+     |
+     | compareTo(), beats() and isLevelWith() used to live here and decided who
+     | won a contest that reached time. They are gone, and deliberately: the
+     | order they walked was partly this project's invention rather than the
+     | federation's, and a generic tally object is the wrong place to hold
+     | competition policy — nothing about it can say which edition of the rules
+     | it is applying, or cite the clause that decided the contest.
+     |
+     | App\Services\BoutDecisionPolicy answers that now. This class supplies the
+     | facts it asks for — top score, counts, lastScoreAt, firstPenaltyAt — and
+     | states no preference between them.
+     |
+     | earned() stays, because origin is still recorded and still shown in the
+     | audit trail. It is no longer consulted by anything that ranks athletes.
      */
-    public function compareTo(self $other): int
-    {
-        // 1. The more valuable score.
-        if ($this->topPriority() !== $other->topPriority()) {
-            return $this->topPriority() <=> $other->topPriority();
-        }
 
-        $top = $this->topScore();
-
-        // 2. How that score was come by. Only meaningful when both hold one:
-        //    two athletes who have not scored are level here, not tied on nil.
-        if ($top !== null && $this->earned($top) !== $other->earned($top)) {
-            return $this->earned($top) <=> $other->earned($top);
-        }
-
-        // 3. Counts, most valuable first. Chala never accumulates into a
-        //    yonbosh, but more chala still beats fewer.
-        foreach ([KurashScore::KHALOL, KurashScore::YONBOSH, KurashScore::CHALA] as $call) {
-            if ($this->count($call) !== $other->count($call)) {
-                return $this->count($call) <=> $other->count($call);
-            }
-        }
-
-        // 4. Who scored last. Zero — never scored — loses to any real score,
-        //    which falls out of the comparison without a special case.
-        if ($this->lastScoreAt !== $other->lastScoreAt) {
-            return $this->lastScoreAt <=> $other->lastScoreAt;
-        }
-
-        // 5. Reversed on purpose: the *lower* sequence number wins, and zero —
-        //    no warning at all — beats every real one.
-        if ($this->lastPenaltyAt !== $other->lastPenaltyAt) {
-            return $other->lastPenaltyAt <=> $this->lastPenaltyAt;
-        }
-
-        return 0;
-    }
-
-    /** Does this tally beat the other one outright? */
-    public function beats(self $other): bool
-    {
-        return $this->compareTo($other) > 0;
-    }
-
-    public function isLevelWith(self $other): bool
-    {
-        return $this->compareTo($other) === 0;
-    }
-
-    /** Any score at all on the board for this athlete — what jazzo asks about. */
+    /** Any score at all on the board for this athlete. */
     public function hasScored(): bool
     {
         return $this->khalol > 0 || $this->yonbosh > 0 || $this->chala > 0;
+    }
+
+    /**
+     * Anything at all against or for this athlete — what jazzo asks about.
+     *
+     * Scores AND penalties. Jazzo stops a contest in which nothing has
+     * happened, and a tanbeh is something happening: an athlete already
+     * carrying one has a contest with a record in it, whether or not that
+     * record put a number on the board.
+     *
+     * hasScored() alone was the test until 2026-08-26, which let jazzo be
+     * offered over a board showing a madichal — a penalty that transfers
+     * nothing, so it reached the halfway mark looking like an empty contest.
+     * Girrom and dakki were only hidden from the same bug because they end the
+     * contest or hand over a score on their way.
+     *
+     * Reads the folded tally, so annulled and superseded calls are already
+     * absent: KurashScore::liveCalls() never yields them.
+     */
+    public function hasAnyActiveCall(): bool
+    {
+        return $this->hasScored() || $this->penalties() > 0;
     }
 
     /** Total penalties of every grade, for the mat screen's summary line. */
@@ -314,6 +308,13 @@ final readonly class ScoreTally
             // folding out of order cannot corrupt either tie-break.
             lastPenaltyAt: $isPenalty ? max($this->lastPenaltyAt, $sequence) : $this->lastPenaltyAt,
             lastScoreAt: $isPenalty ? $this->lastScoreAt : max($this->lastScoreAt, $sequence),
+            // min() over the penalties seen so far, with zero meaning "none
+            // yet" rather than "sequence zero" — so the first real penalty
+            // replaces it and no later one ever can. Only live calls are
+            // folded, so a voided caution never becomes somebody's first.
+            firstPenaltyAt: $isPenalty && ($this->firstPenaltyAt === 0 || $sequence < $this->firstPenaltyAt)
+                ? $sequence
+                : $this->firstPenaltyAt,
         );
     }
 }

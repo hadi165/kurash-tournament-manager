@@ -236,7 +236,8 @@ describe('time', function () {
             ->call('finishOnTime');
 
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
-            ->and($bout->win_type)->toBe('yonbosh');
+            // The more valuable appraisal, which is the published hierarchy.
+            ->and($bout->win_type)->toBe('higher_appraisal');
     });
 
     it('falls to chala when yonbosh are level', function () {
@@ -249,14 +250,14 @@ describe('time', function () {
             ->call('finishOnTime');
 
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_a_id)
-            // Level on yonbosh, so chala is what separated them and that is
-            // what the record says.
-            ->and($bout->win_type)->toBe('chala');
+            // Level on yonbosh, so the published "more Chala wins" clause is
+            // what separated them, and that is what the record says.
+            ->and($bout->win_type)->toBe('more_chala');
     });
 
     /**
-     * Level on the count, so the contest goes to whoever scored last. Both
-     * chala were thrown for, so origin does not separate them either.
+     * Level on value and on count, so the published last-appraisal clause
+     * decides it. Origin is not consulted at any point.
      */
     it('gives an equal contest to the athlete who scored last', function () {
         [$court, $bout] = boutOnMat();
@@ -267,7 +268,7 @@ describe('time', function () {
             ->call('finishOnTime');
 
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
-            ->and($bout->win_type)->toBe('latest_score');
+            ->and($bout->win_type)->toBe('last_appraisal');
     });
 
     /**
@@ -287,7 +288,10 @@ describe('time', function () {
         $component->call('awardDecision', 'b');
 
         expect($bout->refresh()->winner_athlete_id)->toBe($bout->athlete_b_id)
-            ->and($bout->win_type)->toBe('decision');
+            // Renamed from the legacy 'decision' on 2026-08-26 so the value
+            // names the rule that produced it. Historical rows keep 'decision'
+            // and still render.
+            ->and($bout->win_type)->toBe('referee_decision');
     });
 
     it('decides a scoreless contest by referee decision only', function () {

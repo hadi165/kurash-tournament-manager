@@ -249,6 +249,109 @@ return [
     | (championships.age_policy_version) when an event is run under rules
     | other than the ones current for its year.
     */
+    /*
+     | How a contest that reaches time is decided.
+     |
+     | Versioned the way age_eligibility is, and for the same reason: a
+     | championship fought under one edition of the rules must keep being read
+     | under that edition. A bout completed under an earlier edition does not
+     | become a different result because a later one reordered a tie-break.
+     |
+     | ── Authority ─────────────────────────────────────────────────────────
+     |
+     | The order below is the federation's, supplied directly and treated as
+     | authoritative for this project. It settles four questions the published
+     | page at https://kurash-ika.org/2022/08/20/kurash-rules/ leaves open, and
+     | on two of them it contradicts the reading this software briefly shipped:
+     |
+     |   * score ORIGIN does rank — a technique-earned appraisal beats an
+     |     automatic one of equal value and count. It ranks BELOW count, not
+     |     above it, which is where an earlier version of this file wrongly put
+     |     it.
+     |
+     |   * the warning rule is LATEST WARNING LOSES, not "cautioned first
+     |     wins". The two agree whenever each athlete holds one warning and
+     |     disagree from the second onward.
+     |
+     | ── Supersession ──────────────────────────────────────────────────────
+     |
+     | A DAKKI replaces an active TANBEH against the same athlete outright: the
+     | TANBEH leaves the live tally along with the automatic CHALA it gave the
+     | opponent. Both rows stay in the log and are annulled by appended void
+     | events — history is never rewritten. Only consequences linked to the
+     | superseded TANBEH through parent_event_id are withdrawn, so a CHALA the
+     | opponent threw for is untouched.
+     */
+    'bout_decision' => [
+
+        /*
+         | The edition a championship falls under when it pins none. Unlike
+         | age_eligibility this never falls back to null: a contest on a mat
+         | must be decidable, so the earliest published edition stands in.
+         */
+        'fallback_version' => (int) env('KURASH_DECISION_POLICY_FALLBACK', 2022),
+
+        'versions' => [
+
+            /*
+             | The federation's order, as supplied for this project.
+             |
+             | `order` is walked top to bottom, each step reached only when the
+             | one above it was level. Steps are listed rather than coded so a
+             | later edition can reorder them without a deploy, and so a verdict
+             | can cite the step that actually decided the contest.
+             */
+            2022 => [
+                'label' => 'IKA competition rules, 2022-08-20, as interpreted by the federation for this project',
+                'source' => 'https://kurash-ika.org/2022/08/20/kurash-rules/',
+
+                'order' => [
+                    [
+                        'step' => 'higher_appraisal',
+                        'clause' => 'Appraisal hierarchy — KHALOL > YONBOSH > CHALA',
+                        'sourced' => true,
+                        'describes' => 'The more valuable appraisal wins, and is evaluated before origin and before recency. A later CHALA can never defeat a YONBOSH. An athlete holding any appraisal also beats one holding only warnings.',
+                    ],
+                    [
+                        'step' => 'more_chala',
+                        'clause' => 'Greater applicable score count — "more CHALA wins"',
+                        'sourced' => true,
+                        'describes' => 'At an equal top appraisal, the greater count wins.',
+                    ],
+                    [
+                        'step' => 'technique_origin',
+                        'clause' => 'Technique-earned appraisal outranks an automatic one of equal value and count',
+                        'sourced' => true,
+                        'describes' => 'TECHNIQUE outranks AUTO_FROM_T and AUTO_FROM_D. Applies to CHALA and YONBOSH alike. A later automatic score never defeats an earlier technique-earned score of the same value.',
+                    ],
+                    [
+                        'step' => 'last_appraisal',
+                        'clause' => 'Latest live appraisal wins when value, count and origin priority are equal',
+                        'sourced' => true,
+                        'describes' => 'Read from the bout event sequence, never the clock: several calls can fall inside one displayed second. Voided appraisals do not take part.',
+                    ],
+                    [
+                        'step' => 'latest_warning',
+                        'clause' => 'The athlete receiving the most recent active warning loses',
+                        'sourced' => true,
+                        'describes' => 'Uses the LAST warning, not the first. Only live, non-voided penalties count. An athlete with no warning at all beats one carrying any.',
+                    ],
+                ],
+
+                /*
+                 | What remains genuinely open. The policy returns
+                 | `referee_decision` for these rather than inventing an order,
+                 | and names the entry in its verdict so the official is told
+                 | what the rules did not cover.
+                 */
+                'ambiguities' => [
+                    'score_counts_other_than_chala' => 'Only "more CHALA" is stated explicitly. A difference in YONBOSH counts at an equal top appraisal is unreachable while two YONBOSH make a KHALOL, and is left to a referee where an edition makes it reachable.',
+                    'equal_origin_mix' => 'Two athletes each holding one technique-earned and one automatic appraisal of the same value are equal on origin priority, and fall through to the last-appraisal rule.',
+                ],
+            ],
+        ],
+    ],
+
     'age_eligibility' => [
 
         /*

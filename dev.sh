@@ -3,8 +3,7 @@
 #
 #   ./dev.sh          start the database and the app
 #   ./dev.sh stop     stop both
-#   ./dev.sh reset    back up, wipe the database, refill it with demo data
-#                     (accounts are carried across — nothing else is)
+#   ./dev.sh reset    refuses — see ./scripts/reset-local-database.sh
 #
 # The database runs in Docker because it should match the MariaDB on the
 # DirectAdmin host. The app runs on the system PHP.
@@ -74,54 +73,6 @@ user_count() {
         | tail -1 | tr -d '[:space:]'
 }
 
-USERS_DUMP=""
-
-# Accounts are not demonstration data.
-#
-# Nothing regenerates them: they are typed in by hand, one per official and one
-# per mat, and the passwords behind them exist only as hashes. A reset that
-# dropped the users table along with everything else has already cost somebody
-# every login they had, so the table is carried across the rebuild instead.
-preserve_users() {
-    USERS_DUMP=$(mktemp)
-    trap 'rm -f "$USERS_DUMP"' EXIT
-
-    if ! docker exec "$DB_CONTAINER" mariadb-dump -ukurash -pdevpass \
-        --no-create-info --complete-insert --skip-extended-insert --skip-comments \
-        kurash users > "$USERS_DUMP" 2>/dev/null; then
-        info "No users table yet — no accounts to carry across"
-        : > "$USERS_DUMP"
-        return
-    fi
-
-    info "Holding on to $(grep -c '^INSERT INTO' "$USERS_DUMP" || true) account(s)"
-}
-
-# Put the accounts back into the rebuilt schema.
-#
-# The inserts run with the foreign key check off and scoreboard_championship_id
-# is cleared immediately after: it points at a championship that migrate:fresh
-# has just dropped, and NULL is the only value it can honestly hold now.
-#
-# A failure here is reported rather than fatal — the caller falls through to
-# creating an administrator, which leaves a usable database instead of an
-# empty one, and the backup taken moments earlier still holds the originals.
-restore_users() {
-    [ -s "$USERS_DUMP" ] || return 0
-
-    if ! {
-        printf 'SET FOREIGN_KEY_CHECKS=0;\n'
-        cat "$USERS_DUMP"
-        printf 'SET FOREIGN_KEY_CHECKS=1;\n'
-        printf 'UPDATE `users` SET `scoreboard_championship_id` = NULL;\n'
-    } | docker exec -i "$DB_CONTAINER" mariadb -ukurash -pdevpass kurash 2>/dev/null; then
-        printf '\033[31m✗\033[0m %s\n' "Could not restore the accounts — they are still in the backup above." >&2
-        return 0
-    fi
-
-    ok "$(user_count) account(s) restored"
-}
-
 case "${1:-start}" in
     stop)
         info "Stopping the app"
@@ -133,40 +84,17 @@ case "${1:-start}" in
         ;;
 
     reset)
-        start_database
-        cd "$APP_DIR"
-
-        # The backup comes first and a failed one stops the reset. Everything
-        # below this line is destructive, and this file is the only warning
-        # anybody gets before it runs.
-        info "Backing up the current database"
-        php artisan kurash:backup --label=before-reset \
-            || die "Backup failed — refusing to reset. Fix the backup first."
-
-        preserve_users
-
-        info "Rebuilding the schema"
-        php artisan migrate:fresh --force >/dev/null
-
-        restore_users
-
-        # Some account has to exist before the seeder runs: kurash:demo
-        # attributes every result it records to User::first(), and bout_events
-        # is append-only, so a demo built against an empty users table can
-        # never be given an operator afterwards.
-        if [ "$(user_count)" = "0" ]; then
-            info "No accounts survived — creating an administrator"
-            php artisan kurash:create-admin --name="Administrator" --email="admin@kurash.local"
-        fi
-
-        # A reset used to reload the old system's SQLite export. That export
-        # held seven placeholder athletes, no dates of birth and no bouts at
-        # all, so it demonstrated nothing; the demo seeder builds a championship
-        # that is entered, weighed, drawn and part-fought, which is what the
-        # screens need before they are worth looking at.
-        info "Seeding a demonstration championship"
-        php artisan kurash:demo --fresh-all
-        ok "Reset complete — accounts kept, competition data rebuilt"
+        # Not implemented here any more, and deliberately not implemented here.
+        #
+        # This branch ran `migrate:fresh`, and it emptied the competition
+        # database twice. Carrying the users table across the rebuild — which
+        # this script did, in the end — made the second loss survivable but did
+        # nothing about the first cause: a destructive command sitting one word
+        # away from `./dev.sh start`, with no confirmation in front of it.
+        #
+        # The replacement proves each step before taking the next one and will
+        # not run unless a person is at the keyboard.
+        die "Use ./scripts/reset-local-database.sh — it backs up, exports the accounts, verifies both, asks you to confirm, and checks the accounts came back. See CLAUDE.md, 'Database safety'."
         ;;
 
     start)
